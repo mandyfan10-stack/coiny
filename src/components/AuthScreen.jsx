@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { isSupabaseConfigured } from '../supabaseClient';
 import coinyLogo from '../assets/logo.png';
@@ -8,7 +8,6 @@ import {
   UserPlus, 
   LogIn, 
   AlertCircle, 
-  Sparkles, 
   Eye, 
   EyeOff, 
   Check, 
@@ -18,117 +17,50 @@ import {
   ChevronLeft,
   ChevronRight,
   Shield,
-  PhoneCall,
-  Video,
-  Smile,
+  HardDrive,
+  Play,
+  ThumbsUp,
+  Bookmark,
+  ArrowUp,
+  Wifi,
+  WifiOff,
+  Cpu,
   Radio
 } from 'lucide-react';
+import { DoubleCheck, PendingClock } from './chat/messageStatusIcons';
 
-const PREVIEW_SLIDES = [
+const SCENARIOS = [
   {
-    id: 'e2ee',
-    badge: 'Безопасность',
+    id: 'mls',
+    tabLabel: 'MLS / E2EE',
+    badge: 'MLS v1.0 • AES-256',
     icon: Shield,
-    title: 'Сквозное E2EE шифрование',
-    subtitle: 'Ваши сообщения и звонки защищены MLS и AES-256 GCM прямо на устройстве',
-    renderVisual: () => (
-      <div className="preview-visual-card preview-e2ee-visual">
-        <div className="preview-shield-glow">
-          <Shield size={44} className="preview-shield-icon" />
-          <div className="preview-shield-halo" />
-        </div>
-        <div className="preview-safety-badge">
-          <Lock size={12} />
-          <span>Safety Number: 89365 95677 14563</span>
-        </div>
-        <div className="preview-crypto-tags">
-          <span className="preview-tag">256-bit AES-GCM</span>
-          <span className="preview-tag highlight">E2EE Private Key</span>
-        </div>
-      </div>
-    )
+    title: 'Сквозное шифрование',
+    subtitle: 'Прямой обмен сессионными ключами между клиентами без доступа сервера к содержимому'
   },
   {
-    id: 'calls',
-    badge: 'Связь',
-    icon: PhoneCall,
-    title: 'HD Звонки и конференции',
-    subtitle: 'Чистый стерео-звук с шумоподавлением и стабильным WebRTC ICE-соединением',
-    renderVisual: () => (
-      <div className="preview-visual-card preview-calls-visual">
-        <div className="preview-call-avatar-row">
-          <div className="preview-call-avatar speaking">
-            <span className="avatar-letter">🪙</span>
-            <div className="preview-pulse-ring" />
-          </div>
-          <div className="preview-call-avatar">
-            <span className="avatar-letter">👤</span>
-          </div>
-        </div>
-        <div className="preview-audio-waveform">
-          <span className="wave-bar bar-1" />
-          <span className="wave-bar bar-2" />
-          <span className="wave-bar bar-3" />
-          <span className="wave-bar bar-4" />
-          <span className="wave-bar bar-5" />
-          <span className="wave-bar bar-6" />
-          <span className="wave-bar bar-7" />
-        </div>
-        <div className="preview-call-info-badge">
-          <Radio size={12} className="pulse-dot" />
-          <span>WebRTC HD Audio • 02:45</span>
-        </div>
-      </div>
-    )
+    id: 'offline',
+    tabLabel: 'Офлайн-кэш',
+    badge: 'IndexedDB v8',
+    icon: HardDrive,
+    title: 'Локальный офлайн-кэш',
+    subtitle: 'Мгновенная запись сообщений в локальную базу данных и синхронизация при восстановлении сети'
   },
   {
-    id: 'videonotes',
-    badge: 'Медиа',
-    icon: Video,
-    title: 'Видеосообщения и кружочки',
-    subtitle: 'Записывайте живые эмоции и отправляйте видеозаметки в один клик',
-    renderVisual: () => (
-      <div className="preview-visual-card preview-video-visual">
-        <div className="preview-circle-video-wrap">
-          <div className="preview-circle-video-inner">
-            <Video size={28} className="preview-camera-icon" />
-          </div>
-          <svg className="preview-circle-progress" viewBox="0 0 100 100">
-            <circle cx="50" cy="50" r="46" className="circle-track" />
-            <circle cx="50" cy="50" r="46" className="circle-indicator" />
-          </svg>
-        </div>
-        <div className="preview-video-label">
-          <span className="rec-dot" />
-          <span>Видеосообщение • 0:15</span>
-        </div>
-      </div>
-    )
+    id: 'media',
+    tabLabel: 'Медиа',
+    badge: 'Opus & h.264',
+    icon: Radio,
+    title: 'Потоковые медиа-сообщения',
+    subtitle: 'Аудиозаметки с осциллограммой и круглые видеосообщения с аппаратным декодированием'
   },
   {
     id: 'reactions',
-    badge: 'Общение',
-    icon: Smile,
-    title: 'Реакции и мгновенный обмен',
-    subtitle: 'Делитесь реакциями, стикерами и передавайте любые файлы без ограничений',
-    renderVisual: () => (
-      <div className="preview-visual-card preview-reactions-visual">
-        <div className="preview-floating-emojis">
-          <span className="preview-emoji e1">🪙</span>
-          <span className="preview-emoji e2">🔥</span>
-          <span className="preview-emoji e3">❤️</span>
-          <span className="preview-emoji e4">🚀</span>
-          <span className="preview-emoji e5">⚡</span>
-        </div>
-        <div className="preview-message-bubble-mock">
-          <p>Привет! Зацени новый мессенджер 🚀</p>
-          <div className="preview-bubble-reactions">
-            <span className="react-chip active">🪙 4</span>
-            <span className="react-chip">🔥 2</span>
-          </div>
-        </div>
-      </div>
-    )
+    tabLabel: 'Реакции',
+    badge: 'Realtime Broadcast',
+    icon: ThumbsUp,
+    title: 'Синхронизация реакций',
+    subtitle: 'Мгновенный обмен откликами с репликацией статусов без блокировки основного потока диалога'
   }
 ];
 
@@ -143,19 +75,38 @@ export default function AuthScreen() {
   const [rememberMe, setRememberMe] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
+  const [capsLockActive, setCapsLockActive] = useState(false);
 
   // Showcase state
-  const [activeSlide, setActiveSlide] = useState(0);
+  const [activeScenario, setActiveScenario] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
+  const [manualInteraction, setManualInteraction] = useState(0);
+  const [offlineState, setOfflineState] = useState(true);
 
-  // Auto-advance preview slides every 4.5s (paused on hover)
+  const passwordInputRef = useRef(null);
+  const lastToggleTimeRef = useRef(0);
+
+  // Toggle offline/online simulation state periodically when offline scenario is active
+  useEffect(() => {
+    if (activeScenario !== 1) {
+      setOfflineState(true);
+      return undefined;
+    }
+    const timer = setInterval(() => {
+      setOfflineState((prev) => !prev);
+    }, 2400);
+    return () => clearInterval(timer);
+  }, [activeScenario]);
+
+  // Auto-advance scenarios every 5s unless hovered or recently interacted
   useEffect(() => {
     if (isHovered) return undefined;
     const interval = setInterval(() => {
-      setActiveSlide((prev) => (prev + 1) % PREVIEW_SLIDES.length);
-    }, 4500);
+      if (Date.now() - manualInteraction < 8000) return;
+      setActiveScenario((prev) => (prev + 1) % SCENARIOS.length);
+    }, 5000);
     return () => clearInterval(interval);
-  }, [isHovered]);
+  }, [isHovered, manualInteraction]);
 
   // Real-time password requirement analysis for registration
   const passwordCriteria = useMemo(() => {
@@ -191,8 +142,65 @@ export default function AuthScreen() {
     };
   }, [password]);
 
+  // Concise unmet password requirements for registration
+  const unmetHints = useMemo(() => {
+    const hints = [];
+    if (!passwordCriteria.minLength) hints.push('от 10 символов');
+    if (!passwordCriteria.upperLower) hints.push('a-z и A-Z');
+    if (!passwordCriteria.hasDigit) hints.push('цифра');
+    if (!passwordCriteria.hasSpecial) hints.push('спецсимвол');
+    return hints;
+  }, [passwordCriteria]);
+
+  const handlePasswordKey = (e) => {
+    if (e.getModifierState) {
+      setCapsLockActive(e.getModifierState('CapsLock'));
+    }
+  };
+
+  const handleTogglePassword = (e) => {
+    // Prevent focus loss from password input
+    if (e?.preventDefault) {
+      e.preventDefault();
+    }
+    const now = Date.now();
+    if (now - lastToggleTimeRef.current < 250) {
+      return;
+    }
+    lastToggleTimeRef.current = now;
+    setShowPassword((prev) => !prev);
+    if (passwordInputRef.current) {
+      passwordInputRef.current.focus();
+      try {
+        const len = passwordInputRef.current.value.length;
+        passwordInputRef.current.setSelectionRange(len, len);
+      } catch {
+        // Ignore environments where setSelectionRange is unsupported
+      }
+    }
+  };
+
+  const handleDemoLogin = async () => {
+    if (loading) return;
+    setLoginIdentifier('alex_dev');
+    setPassword('123456');
+    setIsLogin(true);
+    setLoading(true);
+    setErrorMsg('');
+    try {
+      const { error } = await signInWithIdentifier('alex_dev', '123456');
+      if (error) setErrorMsg(error.message);
+    } catch (err) {
+      console.error(err);
+      setErrorMsg('Ошибка входа в демо-режиме.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (loading) return;
     setErrorMsg('');
 
     const identifier = (isLogin ? loginIdentifier : username).trim();
@@ -258,8 +266,7 @@ export default function AuthScreen() {
     }
   };
 
-  const currentSlideData = PREVIEW_SLIDES[activeSlide];
-  const IconComponent = currentSlideData.icon;
+  const currentScenario = SCENARIOS[activeScenario];
 
   return (
     <div className="auth-screen-container">
@@ -268,65 +275,327 @@ export default function AuthScreen() {
       <div className="auth-glow-orb auth-glow-2" aria-hidden="true" />
 
       <div className="auth-split-layout">
-        {/* Left Column: Interactive Telegram-style Showcase Preview */}
+        {/* Left Column: Coiny Mini-Dialog Real Interaction Simulator */}
         <div 
           className="auth-showcase-panel"
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >
+          {/* Showcase Panel Header */}
           <div className="auth-showcase-header">
             <div className="showcase-brand">
-              <div className="showcase-coin-icon">🪙</div>
-              <span className="showcase-brand-name">Coiny Features</span>
+              <Shield size={16} className="showcase-brand-icon" />
+              <span className="showcase-brand-name">Coiny Architecture</span>
             </div>
             <div className="showcase-badge">
-              <IconComponent size={12} />
-              <span>{currentSlideData.badge}</span>
+              <span>{currentScenario.badge}</span>
             </div>
           </div>
 
-          {/* Interactive animated stage */}
-          <div className="auth-showcase-stage" key={currentSlideData.id}>
-            {currentSlideData.renderVisual()}
-          </div>
-
-          {/* Slide Description */}
-          <div className="auth-showcase-text" key={`text-${currentSlideData.id}`}>
-            <h3>{currentSlideData.title}</h3>
-            <p>{currentSlideData.subtitle}</p>
-          </div>
-
-          {/* Controls: Navigation Arrows & Pagination Dots */}
-          <div className="auth-showcase-nav">
-            <button 
-              type="button" 
-              className="showcase-nav-arrow" 
-              onClick={() => setActiveSlide((prev) => (prev - 1 + PREVIEW_SLIDES.length) % PREVIEW_SLIDES.length)}
-              aria-label="Предыдущий слайд"
-            >
-              <ChevronLeft size={16} />
-            </button>
-
-            <div className="showcase-dots">
-              {PREVIEW_SLIDES.map((slide, index) => (
+          {/* Scenario Switcher Chips */}
+          <div className="mini-chat-scenario-chips" role="tablist" aria-label="Сценарии архитектуры Coiny">
+            {SCENARIOS.map((sc, idx) => {
+              const IconComponent = sc.icon;
+              return (
                 <button
-                  key={slide.id}
+                  key={sc.id}
                   type="button"
-                  className={`showcase-dot ${index === activeSlide ? 'active' : ''}`}
-                  onClick={() => setActiveSlide(index)}
-                  aria-label={`Перейти к слайду ${slide.title}`}
-                />
-              ))}
+                  role="tab"
+                  aria-selected={idx === activeScenario}
+                  className={`scenario-chip ${idx === activeScenario ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveScenario(idx);
+                    setManualInteraction(Date.now());
+                  }}
+                >
+                  <IconComponent size={12} />
+                  <span>{sc.tabLabel}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Mini-Chat Window Simulator */}
+          <div className="mini-chat-container">
+            {/* Topbar of Mini-Chat */}
+            <div className="mini-chat-topbar">
+              <div className="mini-chat-user">
+                <div className="mini-chat-avatar">
+                  <span>AD</span>
+                  <span className="mini-chat-status-dot" />
+                </div>
+                <div className="mini-chat-user-info">
+                  <div className="mini-chat-name-row">
+                    <span className="mini-chat-name">Alex Developer</span>
+                    <Lock size={11} className="mini-chat-verified-icon" title="MLS Verified" />
+                  </div>
+                  <span className="mini-chat-status-text">
+                    {activeScenario === 0 && 'Ключи согласованы • MLS v1.0'}
+                    {activeScenario === 1 && (offlineState ? 'Офлайн-режим • Локальный кэш' : 'Сеть подключена • Синхронизировано')}
+                    {activeScenario === 2 && 'Голосовые и видеосообщения'}
+                    {activeScenario === 3 && 'Код-ревью • Верификация'}
+                  </span>
+                </div>
+              </div>
+              <div className="mini-chat-engine-badge">
+                <Cpu size={11} />
+                <span>Client Engine</span>
+              </div>
             </div>
 
-            <button 
-              type="button" 
-              className="showcase-nav-arrow" 
-              onClick={() => setActiveSlide((prev) => (prev + 1) % PREVIEW_SLIDES.length)}
-              aria-label="Следующий слайд"
-            >
-              <ChevronRight size={16} />
-            </button>
+            {/* Messages Body */}
+            <div className="mini-chat-body" key={currentScenario.id}>
+              {/* Scenario 0: MLS / E2EE */}
+              {activeScenario === 0 && (
+                <div className="mini-dialog-stage animate-fade-in">
+                  <div className="mini-chat-system-badge">
+                    <Lock size={10} />
+                    <span>Сквозное шифрование MLS & AES-256 GCM</span>
+                  </div>
+
+                  <div className="mini-bubble incoming">
+                    <div className="mini-bubble-content">
+                      <span className="mini-bubble-text">
+                        KeyPackage для сессии сгенерирован. Отправляю проверочный хэш.
+                      </span>
+                      <span className="mini-bubble-time">14:24</span>
+                    </div>
+                  </div>
+
+                  <div className="mini-bubble outgoing">
+                    <div className="mini-bubble-content">
+                      <span className="mini-bubble-text">
+                        Хэш совпадает. Симметричный ключ сессии подтвержден без участия сервера.
+                      </span>
+                      <div className="mini-bubble-footer">
+                        <span className="mini-bubble-time">14:25</span>
+                        <DoubleCheck className="mini-status-icon" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mini-crypto-spec-card">
+                    <div className="mini-crypto-row">
+                      <span className="crypto-label">Протокол:</span>
+                      <span className="crypto-val">MLS v1.0 (RFC 9420)</span>
+                    </div>
+                    <div className="mini-crypto-row">
+                      <span className="crypto-label">Шифр:</span>
+                      <span className="crypto-val">AES-256-GCM / SHA-256</span>
+                    </div>
+                    <div className="mini-crypto-row">
+                      <span className="crypto-label">Safety:</span>
+                      <span className="crypto-val mono">7841 9302 4419 0182</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Scenario 1: Offline Cache & Instant Send */}
+              {activeScenario === 1 && (
+                <div className="mini-dialog-stage animate-fade-in">
+                  <div className={`mini-net-indicator ${offlineState ? 'offline' : 'online'}`}>
+                    {offlineState ? (
+                      <>
+                        <WifiOff size={11} />
+                        <span>Офлайн • Сохранение в локальный кэш IndexedDB</span>
+                      </>
+                    ) : (
+                      <>
+                        <Wifi size={11} />
+                        <span>Сеть восстановлена • Очередь отправлена (12 мс)</span>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="mini-bubble incoming">
+                    <div className="mini-bubble-content">
+                      <span className="mini-bubble-text">
+                        Сетевой шлюз недоступен. Проверь запись в локальный кэш.
+                      </span>
+                      <span className="mini-bubble-time">14:27</span>
+                    </div>
+                  </div>
+
+                  <div className={`mini-bubble outgoing ${offlineState ? 'pending-sync' : 'synced'}`}>
+                    <div className="mini-bubble-content">
+                      <span className="mini-bubble-text">
+                        Отправляю отчет. Запись в кэш без задержки пользовательского интерфейса.
+                      </span>
+                      <div className="mini-bubble-footer">
+                        <span className="mini-bubble-time">14:28</span>
+                        {offlineState ? (
+                          <PendingClock className="mini-status-icon pending" />
+                        ) : (
+                          <DoubleCheck className="mini-status-icon synced" />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mini-cache-metric-row">
+                    <div className="mini-metric-item">
+                      <span className="metric-num">{offlineState ? '1' : '0'}</span>
+                      <span className="metric-desc">В очереди</span>
+                    </div>
+                    <div className="mini-metric-item">
+                      <span className="metric-num">0 мс</span>
+                      <span className="metric-desc">Задержка UI</span>
+                    </div>
+                    <div className="mini-metric-item">
+                      <span className="metric-num">IndexedDB</span>
+                      <span className="metric-desc">Хранилище v8</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Scenario 2: Media Messages (Circular Video Note & Voice Waveform) */}
+              {activeScenario === 2 && (
+                <div className="mini-dialog-stage animate-fade-in">
+                  {/* Circular Video Note */}
+                  <div className="mini-bubble outgoing media-bubble">
+                    <div className="mini-video-note-wrapper">
+                      <div className="mini-video-circle">
+                        <svg className="mini-video-progress" viewBox="0 0 72 72">
+                          <circle cx="36" cy="36" r="33" className="mini-video-track" />
+                          <circle cx="36" cy="36" r="33" className="mini-video-bar" />
+                        </svg>
+                        <div className="mini-video-center">
+                          <Play size={16} className="mini-play-icon" />
+                        </div>
+                        <span className="mini-video-dur">0:14</span>
+                      </div>
+                      <div className="mini-video-meta">
+                        <span className="mini-media-title">Круглое видеосообщение</span>
+                        <span className="mini-media-spec">h.264 • 60 FPS • 720p</span>
+                      </div>
+                    </div>
+                    <div className="mini-bubble-footer">
+                      <span className="mini-bubble-time">14:30</span>
+                      <DoubleCheck className="mini-status-icon" />
+                    </div>
+                  </div>
+
+                  {/* Audio Voice Message with Waveform */}
+                  <div className="mini-bubble incoming media-bubble">
+                    <div className="mini-voice-wrapper">
+                      <div className="mini-voice-play-btn" aria-label="Воспроизвести аудио">
+                        <Play size={12} />
+                      </div>
+                      <div className="mini-voice-waveform">
+                        {[6, 14, 22, 10, 18, 26, 12, 20, 28, 16, 24, 14, 18, 10, 6].map((h, i) => (
+                          <span
+                            key={i}
+                            className="mini-wave-bar"
+                            style={{ height: `${h}px`, animationDelay: `${i * 0.08}s` }}
+                          />
+                        ))}
+                      </div>
+                      <span className="mini-voice-dur">0:42</span>
+                    </div>
+                    <div className="mini-voice-sub">
+                      <span>Opus HD • 48 kHz</span>
+                      <span className="mini-bubble-time">14:31</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Scenario 3: Reactions (Strictly SVG icons, zero emojis) */}
+              {activeScenario === 3 && (
+                <div className="mini-dialog-stage animate-fade-in">
+                  <div className="mini-bubble incoming">
+                    <div className="mini-bubble-content">
+                      <span className="mini-bubble-text">
+                        Ревизия MLS ratchet протестирована, все критерии соблюдены.
+                      </span>
+                      <span className="mini-bubble-time">14:33</span>
+                    </div>
+                  </div>
+
+                  <div className="mini-bubble outgoing">
+                    <div className="mini-bubble-content">
+                      <span className="mini-bubble-text">
+                        Все 440 тестов пройдены успешно. Запускаем сборку клиента.
+                      </span>
+                      <div className="mini-bubble-footer">
+                        <span className="mini-bubble-time">14:34</span>
+                        <DoubleCheck className="mini-status-icon" />
+                      </div>
+                    </div>
+                    <div className="mini-reactions-row">
+                      <div className="mini-react-tag active">
+                        <Check size={11} />
+                        <span>4</span>
+                      </div>
+                      <div className="mini-react-tag active">
+                        <ThumbsUp size={11} />
+                        <span>2</span>
+                      </div>
+                      <div className="mini-react-tag">
+                        <Bookmark size={11} />
+                        <span>1</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mini-sync-stat-row">
+                    <span className="mini-sync-label">Синхронизация реакций:</span>
+                    <span className="mini-sync-val">Realtime Broadcast • 8 мс</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Bottom Caption and Navigation */}
+            <div className="mini-chat-footer">
+              <div className="auth-showcase-text">
+                <h3>{currentScenario.title}</h3>
+                <p>{currentScenario.subtitle}</p>
+              </div>
+
+              <div className="auth-showcase-nav">
+                <button 
+                  type="button" 
+                  className="showcase-nav-arrow" 
+                  onClick={() => {
+                    setActiveScenario((prev) => (prev - 1 + SCENARIOS.length) % SCENARIOS.length);
+                    setManualInteraction(Date.now());
+                  }}
+                  aria-label="Предыдущий сценарий"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+
+                <div className="showcase-dots">
+                  {SCENARIOS.map((sc, index) => (
+                    <button
+                      key={sc.id}
+                      type="button"
+                      className={`showcase-dot ${index === activeScenario ? 'active' : ''}`}
+                      onClick={() => {
+                        setActiveScenario(index);
+                        setManualInteraction(Date.now());
+                      }}
+                      aria-label={`Перейти к сценарию ${sc.title}`}
+                    />
+                  ))}
+                </div>
+
+                <button 
+                  type="button" 
+                  className="showcase-nav-arrow" 
+                  onClick={() => {
+                    setActiveScenario((prev) => (prev + 1) % SCENARIOS.length);
+                    setManualInteraction(Date.now());
+                  }}
+                  aria-label="Следующий сценарий"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -340,45 +609,12 @@ export default function AuthScreen() {
                 <img src={coinyLogo} alt="Coiny" className="auth-logo-img" width="76" height="76" />
               </div>
               <h2>Coiny</h2>
-              <p className="auth-subtitle">Быстрый и защищённый мессенджер</p>
+              <p className="auth-subtitle">Защищённый клиент обмена сообщениями</p>
               <div className="auth-brand-badge">
                 <Shield size={11} />
-                <span>MLS • E2EE</span>
+                <span>MLS v1.0 • E2EE</span>
               </div>
             </div>
-
-            {/* Demo Mode Notice Banner */}
-            {!isSupabaseConfigured && (
-              <div className="auth-warning-alert">
-                <div className="auth-warning-header">
-                  <AlertCircle size={17} className="warning-icon" />
-                  <div>
-                    <strong>Демонстрационный режим</strong>
-                    <p>Supabase не настроен. Данные сохраняются локально.</p>
-                  </div>
-                </div>
-                <button 
-                  type="button" 
-                  className="auth-demo-quick-btn"
-                  onClick={async () => {
-                    setLoginIdentifier('alex_dev');
-                    setPassword('123456');
-                    setIsLogin(true);
-                    setLoading(true);
-                    setErrorMsg('');
-                    try {
-                      const { error } = await signInWithIdentifier('alex_dev', '123456');
-                      if (error) setErrorMsg(error.message);
-                    } finally {
-                      setLoading(false);
-                    }
-                  }}
-                >
-                  <Zap size={14} />
-                  <span>Быстрый вход (Demo)</span>
-                </button>
-              </div>
-            )}
 
             {/* Feedback message banner */}
             {errorMsg && (
@@ -388,33 +624,41 @@ export default function AuthScreen() {
               </div>
             )}
 
-            {/* Form Tabs Switcher */}
-            <div className="auth-tabs">
+            {/* Segmented Switcher with Sliding Pill Indicator */}
+            <div className="auth-tabs" role="tablist">
+              <div 
+                className={`auth-tabs-slider ${!isLogin ? 'is-register' : 'is-login'}`}
+                aria-hidden="true"
+              />
               <button
                 type="button"
+                role="tab"
+                aria-selected={isLogin}
                 className={`auth-tab ${isLogin ? 'active' : ''}`}
                 onClick={() => {
                   setIsLogin(true);
                   setErrorMsg('');
                 }}
               >
-                <LogIn size={16} />
+                <LogIn size={15} />
                 <span>Вход</span>
               </button>
               <button
                 type="button"
+                role="tab"
+                aria-selected={!isLogin}
                 className={`auth-tab ${!isLogin ? 'active' : ''}`}
                 onClick={() => {
                   setIsLogin(false);
                   setErrorMsg('');
                 }}
               >
-                <UserPlus size={16} />
+                <UserPlus size={15} />
                 <span>Регистрация</span>
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="auth-form">
+            <form onSubmit={handleSubmit} className="auth-form" noValidate={false}>
               {/* Identifier input (login: email/username, register: username) */}
               <div className="auth-input-group">
                 <label htmlFor={isLogin ? 'loginIdentifier' : 'username'}>
@@ -425,7 +669,7 @@ export default function AuthScreen() {
                   <input
                     id={isLogin ? 'loginIdentifier' : 'username'}
                     type="text"
-                    placeholder={isLogin ? 'alex_dev или user@mail.com' : 'alex_dev'}
+                    placeholder={isLogin ? 'alex_dev или user@domain.com' : 'alex_dev'}
                     value={isLogin ? loginIdentifier : username}
                     onChange={(e) => (isLogin ? setLoginIdentifier(e.target.value) : setUsername(e.target.value))}
                     disabled={loading}
@@ -440,11 +684,11 @@ export default function AuthScreen() {
                 <div className="auth-input-group animate-fade-in">
                   <label htmlFor="displayName">Отображаемое имя (необязательно)</label>
                   <div className="auth-input-wrapper">
-                    <Sparkles size={18} className="input-icon" />
+                    <User size={18} className="input-icon" />
                     <input
                       id="displayName"
                       type="text"
-                      placeholder="Александр ⚡"
+                      placeholder="Александр"
                       value={displayName}
                       onChange={(e) => setDisplayName(e.target.value)}
                       disabled={loading}
@@ -453,19 +697,31 @@ export default function AuthScreen() {
                 </div>
               )}
 
-              {/* Password Input with Show/Hide Eye Toggle */}
+              {/* Password Input with Caps Lock detector and focus retention toggle */}
               <div className="auth-input-group">
                 <div className="auth-label-row">
                   <label htmlFor="password">Пароль</label>
+                  {capsLockActive && (
+                    <span className="auth-capslock-indicator" role="status">
+                      <ArrowUp size={11} />
+                      <span>Caps Lock</span>
+                    </span>
+                  )}
                 </div>
                 <div className="auth-input-wrapper">
                   <Lock size={18} className="input-icon" />
                   <input
+                    ref={passwordInputRef}
                     id="password"
                     type={showPassword ? 'text' : 'password'}
                     placeholder={isLogin ? '••••••' : 'Введите надёжный пароль'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    onKeyDown={handlePasswordKey}
+                    onKeyUp={handlePasswordKey}
+                    onClick={handlePasswordKey}
+                    onFocus={handlePasswordKey}
+                    onBlur={() => setCapsLockActive(false)}
                     disabled={loading}
                     aria-describedby={!isLogin ? 'password-requirements' : undefined}
                     required
@@ -473,7 +729,8 @@ export default function AuthScreen() {
                   <button
                     type="button"
                     className="auth-password-toggle-btn"
-                    onClick={() => setShowPassword(!showPassword)}
+                    onMouseDown={handleTogglePassword}
+                    onClick={handleTogglePassword}
                     tabIndex={-1}
                     title={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
                     aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
@@ -482,42 +739,44 @@ export default function AuthScreen() {
                   </button>
                 </div>
 
-                {/* Password Strength Meter & Interactive Checklist (Registration only) */}
+                {/* 4-Segment Password Strength Progress Bar & Concise Hints (Registration only) */}
                 {!isLogin && password && (
-                  <div className="auth-password-strength-box animate-fade-in">
-                    <div className="auth-strength-bar-track">
-                      <div 
-                        className="auth-strength-bar-fill"
-                        style={{ 
-                          width: `${(passwordCriteria.score / 4) * 100}%`,
-                          backgroundColor: passwordCriteria.strengthColor
-                        }}
-                      />
-                    </div>
-                    <div className="auth-strength-meta">
-                      <span>Сложность:</span>
+                  <div className="auth-password-strength-box animate-fade-in" id="password-requirements">
+                    <div className="auth-strength-header-row">
+                      <span className="auth-strength-label-text">Надёжность пароля</span>
                       <strong style={{ color: passwordCriteria.strengthColor }}>
                         {passwordCriteria.strengthLabel}
                       </strong>
                     </div>
 
-                    <div className="auth-requirements-list" id="password-requirements">
-                      <div className={`auth-req-item ${passwordCriteria.minLength ? 'valid' : ''}`}>
-                        <Check size={12} />
-                        <span>От 10 символов</span>
-                      </div>
-                      <div className={`auth-req-item ${passwordCriteria.upperLower ? 'valid' : ''}`}>
-                        <Check size={12} />
-                        <span>Строчные и заглавные (a-z, A-Z)</span>
-                      </div>
-                      <div className={`auth-req-item ${passwordCriteria.hasDigit ? 'valid' : ''}`}>
-                        <Check size={12} />
-                        <span>Минимум одна цифра (0-9)</span>
-                      </div>
-                      <div className={`auth-req-item ${passwordCriteria.hasSpecial ? 'valid' : ''}`}>
-                        <Check size={12} />
-                        <span>Спецсимвол (!@#$%^&*)</span>
-                      </div>
+                    <div className="auth-strength-segments" aria-hidden="true">
+                      {[1, 2, 3, 4].map((level) => (
+                        <div
+                          key={level}
+                          className={`auth-strength-segment ${passwordCriteria.score >= level ? 'filled' : ''}`}
+                          style={{
+                            backgroundColor: passwordCriteria.score >= level ? passwordCriteria.strengthColor : undefined
+                          }}
+                        />
+                      ))}
+                    </div>
+
+                    <div className="auth-requirements-compact">
+                      {unmetHints.length > 0 ? (
+                        <div className="auth-req-tags-row">
+                          <span className="auth-req-label">Требуется:</span>
+                          <div className="auth-req-tags">
+                            {unmetHints.map((hint, idx) => (
+                              <span key={idx} className="auth-req-tag">{hint}</span>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="auth-req-all-valid">
+                          <Check size={12} className="auth-req-valid-icon" />
+                          <span>Все требования к паролю соблюдены</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -553,6 +812,23 @@ export default function AuthScreen() {
                   </>
                 )}
               </button>
+
+              {/* Compact Demo Mode Button positioned below main submit button */}
+              {!isSupabaseConfigured && (
+                <div className="auth-demo-compact-section">
+                  <button 
+                    type="button" 
+                    className="auth-demo-quick-btn"
+                    onClick={handleDemoLogin}
+                    disabled={loading}
+                    title="Вход в демонстрационном режиме с локальным профилем"
+                  >
+                    <Zap size={14} />
+                    <span>Быстрый вход в демо-режим (alex_dev)</span>
+                  </button>
+                  <span className="auth-demo-subtext">Локальный профиль без сетевой синхронизации</span>
+                </div>
+              )}
             </form>
 
             {/* Footer Security Badge */}
