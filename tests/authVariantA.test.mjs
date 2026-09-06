@@ -69,48 +69,25 @@ test('Variant A: Compact demo quick-login button under submit button', () => {
   assert.doesNotMatch(authScreen, /auth-warning-alert/);
 });
 
-test('Variant A: Mini-chat dialog simulator with 4 technical scenarios', () => {
-  // Scenario 0: MLS / E2EE
-  assert.match(authScreen, /MLS v1\.0/);
-  assert.match(authScreen, /AES-256 GCM/);
-  assert.match(authScreen, /KeyPackage/);
-  assert.match(authScreen, /Safety/);
+test('Variant A: Preview panel is completely removed and auth card is centered', () => {
+  // Verifies complete removal of showcase preview panel and split layout from AuthScreen
+  assert.doesNotMatch(authScreen, /auth-showcase-panel/, 'AuthScreen must not contain auth-showcase-panel');
+  assert.doesNotMatch(authScreen, /auth-split-layout/, 'AuthScreen must not contain auth-split-layout');
+  assert.doesNotMatch(authScreen, /mini-chat/, 'AuthScreen must not contain mini-chat elements');
+  assert.doesNotMatch(authScreen, /SCENARIOS/, 'AuthScreen must not contain SCENARIOS data array');
+  assert.doesNotMatch(authScreen, /activeScenario/, 'AuthScreen must not contain activeScenario state');
+  assert.doesNotMatch(authScreen, /isHovered/, 'AuthScreen must not contain isHovered state');
+  assert.doesNotMatch(authScreen, /offlineState/, 'AuthScreen must not contain offlineState state');
+  assert.doesNotMatch(authScreen, /manualInteraction/, 'AuthScreen must not contain manualInteraction state');
+  assert.doesNotMatch(authScreen, /messageStatusIcons/, 'AuthScreen must not contain messageStatusIcons import');
+  assert.doesNotMatch(authScreen, /ChevronLeft|ChevronRight|HardDrive|ThumbsUp|Bookmark|Wifi|WifiOff|Cpu|Radio/, 'AuthScreen must not contain preview icons');
 
-  // Scenario 1: Offline Cache & Instant Send
-  assert.match(authScreen, /IndexedDB/);
-  assert.match(authScreen, /PendingClock/);
-  assert.match(authScreen, /DoubleCheck/);
-  assert.match(authScreen, /offlineState/);
-
-  // Scenario 2: Media Messages
-  assert.match(authScreen, /mini-video-circle/);
-  assert.match(authScreen, /mini-voice-waveform/);
-  assert.match(authScreen, /Opus HD/);
-  assert.match(authScreen, /h\.264/);
-
-  // Scenario 3: Reactions (SVG only)
-  assert.match(authScreen, /mini-reactions-row/);
-  assert.match(authScreen, /mini-react-tag/);
-  assert.match(authScreen, /ThumbsUp/);
-
-  // Top scenario switcher tabs
-  assert.match(authScreen, /mini-chat-scenario-chips/);
-  assert.match(authScreen, /scenario-chip/);
-
-  // Mini-chat UI window
-  assert.match(authScreen, /mini-chat-container/);
-  assert.match(authScreen, /mini-chat-topbar/);
-  assert.match(authScreen, /Alex Developer/);
-
-  // Keyframe animations defined in index.css
-  assert.match(indexCss, /@keyframes\s+pulseDot/);
-  assert.match(indexCss, /@keyframes\s+rotateCircleOffset/);
-  assert.match(indexCss, /@keyframes\s+waveBarAnim/);
-
-  // Light theme contrast definitions
-  assert.match(indexCss, /html\.theme-light\s+\.mini-chat-system-badge/);
-  assert.match(indexCss, /html\.theme-light\s+\.crypto-val\.mono/);
-  assert.match(indexCss, /html\.theme-light\s+\.mini-net-indicator\.online/);
+  // Verifies centered auth card presentation across viewports
+  assert.match(authScreen, /className="auth-card-wrapper"/, 'AuthScreen must wrap card in auth-card-wrapper');
+  assert.match(authScreen, /className="auth-card"/, 'AuthScreen must render auth-card');
+  assert.match(indexCss, /\.auth-screen-container\s*\{[^}]*justify-content:\s*center/);
+  assert.match(indexCss, /\.auth-screen-container\s*\{[^}]*align-items:\s*safe center/);
+  assert.match(indexCss, /\.auth-card-wrapper\s*\{[^}]*margin:\s*auto/);
 });
 
 test('Variant A: Strictly zero emojis in AuthScreen component', () => {
@@ -128,6 +105,7 @@ test('Variant A: Mobile & low-height screen responsiveness in index.css', () => 
   assert.match(indexCss, /@media\s*\(max-height:\s*640px\)/);
   assert.match(indexCss, /\.auth-screen-container\s*\{[^}]*overflow-y:\s*auto/);
   assert.match(indexCss, /\.auth-screen-container\s*\{[^}]*align-items:\s*safe center/);
+  assert.match(indexCss, /@media\s*\(max-width:\s*768px\)[\s\S]*?\.auth-card-wrapper\s*\{[^}]*margin:\s*auto/);
 });
 
 test('Variant A: Preserves all core auth logic and contracts', () => {
