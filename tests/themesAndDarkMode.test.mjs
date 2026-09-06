@@ -28,15 +28,25 @@ const indexCss = await readFile(
   'utf8'
 );
 
-test('cyber theme/wallpaper is excluded from selectable presets', () => {
+test('preset wallpapers sunset, space, mint and cyber are excluded from selectable presets', () => {
   const wallpaperIds = SETTINGS_WALLPAPERS.map((w) => w.id);
   assert.equal(wallpaperIds.includes('cyber'), false, 'cyber must not be in SETTINGS_WALLPAPERS');
+  assert.equal(wallpaperIds.includes('sunset'), false, 'sunset must not be in SETTINGS_WALLPAPERS');
+  assert.equal(wallpaperIds.includes('space'), false, 'space must not be in SETTINGS_WALLPAPERS');
+  assert.equal(wallpaperIds.includes('mint'), false, 'mint must not be in SETTINGS_WALLPAPERS');
+  assert.deepEqual(wallpaperIds, ['classic']);
 
   const themeIds = SETTINGS_THEMES.map((t) => t.id);
   assert.equal(themeIds.includes('cyber'), false, 'cyber must not be in SETTINGS_THEMES');
 
-  // SettingsModal preset list must not include cyber
-  assert.match(settingsModalCode, /presets\s*=\s*\[\s*'classic',\s*'sunset',\s*'space',\s*'mint'\s*\]/);
+  assert.match(settingsModalCode, /deprecatedPresets/);
+});
+
+test('rainbow-pearl theme respects custom wallpaper and hides rainbow background overlay', () => {
+  assert.match(settingsCss, /html:not\(\.theme-light\)\.theme-rainbow-pearl\s+\.chat-body:not\(\.has-custom-wallpaper\)/);
+  assert.match(settingsCss, /html\.theme-light\.theme-rainbow-pearl\s+\.chat-body:not\(\.has-custom-wallpaper\)/);
+  assert.match(settingsCss, /\.chat-body\.has-custom-wallpaper::before[\s\S]*?display:\s*none\s*!important/);
+  assert.match(settingsCss, /\.chat-body\.has-custom-wallpaper[\s\S]*?background-size:\s*cover\s*!important/);
 });
 
 test('useChatUiState does not strip theme-light for rainbow-pearl or any other theme', () => {

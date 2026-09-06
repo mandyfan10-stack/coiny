@@ -24,6 +24,18 @@ const tenorServiceCode = await readFile(
   new URL('../src/services/tenorService.js', import.meta.url),
   'utf8'
 );
+const chatAreaCode = await readFile(
+  new URL('../src/components/ChatArea.jsx', import.meta.url),
+  'utf8'
+);
+const appearanceTabCode = await readFile(
+  new URL('../src/components/settings/AppearanceTab.jsx', import.meta.url),
+  'utf8'
+);
+const settingsCss = await readFile(
+  new URL('../src/components/SettingsModal.css', import.meta.url),
+  'utf8'
+);
 
 test('useChatUiState initializes wallpaper and theme from localStorage', () => {
   assert.match(useChatUiStateCode, /localStorage\.getItem\('coingram-wallpaper'\)/);
@@ -42,12 +54,13 @@ test('ChatProvider passes currentUser to useChatUiState', () => {
   assert.match(chatProviderCode, /const\s+ui\s*=\s*useChatUiState\(currentUser\);/);
 });
 
-test('SettingsModal detects custom wallpaper accurately for all presets', () => {
-  assert.match(settingsModalCode, /'classic',\s*'sunset',\s*'space',\s*'mint'/);
+test('SettingsModal detects custom wallpaper accurately and synchronizes with classic default', () => {
   assert.match(settingsModalCode, /const\s+activeWp\s*=\s*wallpaper\s*\|\|\s*currentUser\.wallpaper;/);
+  assert.match(settingsModalCode, /setCustomWallpaperUrl/);
+  assert.match(settingsModalCode, /setWallpaper\('classic'\)/);
 });
 
-test('settings wallpaper previews match the actual chat-body wallpaper CSS and cyber is excluded', async () => {
+test('settings wallpapers only has classic and preset wallpapers are removed', async () => {
   const themesData = await readFile(
     new URL('../src/components/settings/themesData.ts', import.meta.url),
     'utf8'
@@ -58,15 +71,12 @@ test('settings wallpaper previews match the actual chat-body wallpaper CSS and c
   );
 
   assert.match(themesData, /id: 'classic'[\s\S]*?#0b141a/);
-  assert.match(themesData, /id: 'sunset'[\s\S]*?#302b63/);
-  assert.match(themesData, /id: 'space'[\s\S]*?#1b2735/);
-  assert.match(themesData, /id: 'mint'[\s\S]*?#11221b/);
+  assert.doesNotMatch(themesData, /id: 'sunset'/);
+  assert.doesNotMatch(themesData, /id: 'space'/);
+  assert.doesNotMatch(themesData, /id: 'mint'/);
   assert.doesNotMatch(themesData, /id: 'cyber'/);
 
   assert.match(chatAreaCss, /\[data-wallpaper="classic"\][\s\S]*?#0b141a/);
-  assert.match(chatAreaCss, /\[data-wallpaper="sunset"\][\s\S]*?#302b63/);
-  assert.match(chatAreaCss, /\[data-wallpaper="space"\][\s\S]*?#1b2735/);
-  assert.match(chatAreaCss, /\[data-wallpaper="mint"\][\s\S]*?#11221b/);
 });
 
 test('Tenor GIF service does not hardcode Google API keys', () => {
@@ -117,3 +127,39 @@ test('searchGifs helper handles Russian and English keyword matches', () => {
 test('TRENDING_GIFS contains 50+ items across diverse categories', () => {
   assert.ok(TRENDING_GIFS.length >= 50);
 });
+
+test('custom wallpaper is correctly applied and prioritized over themes', () => {
+  assert.match(chatAreaCode, /isCustomWallpaper\s*=\s*Boolean\(wallpaper\s*&&\s*wallpaper\s*!==\s*'classic'\s*&&\s*wallpaper\s*!==\s*'default'\)/);
+  assert.match(chatAreaCode, /className=\{`chat-body\s*\$\{isCustomWallpaper\s*\?\s*'has-custom-wallpaper'\s*:\s*''\}`\}/);
+
+  assert.match(settingsCss, /\.chat-body\.has-custom-wallpaper[\s\S]*?background-size:\s*cover\s*!important/);
+  assert.match(settingsCss, /\.chat-body\.has-custom-wallpaper::before[\s\S]*?display:\s*none\s*!important/);
+  assert.match(settingsCss, /html:not\(\.theme-light\)\.theme-rainbow-pearl\s+\.chat-body:not\(\.has-custom-wallpaper\)/);
+
+  assert.doesNotMatch(appearanceTabCode, /wallpapers-grid/);
+  assert.match(appearanceTabCode, /Поддерживаемые\s*форматы:\s*PNG,\s*JPG,\s*WebP/);
+  assert.match(appearanceTabCode, /wallpaper-custom-card/);
+  assert.match(appearanceTabCode, /wallpaper-default-card/);
+});
+
+test('SettingsModal isolates profile form reset from wallpaper changes and clears file input', () => {
+  // Profile input initialization does NOT depend on wallpaper or setWallpaper
+  assert.match(settingsModalCode, /useEffect\(\(\)\s*=>\s*\{[\s\S]*?setName\(currentUser\.name\s*\|\|\s*''\);[\s\S]*?\}\s*,\s*\[currentUser,\s*isSettingsOpen\]\);/);
+
+  // Wallpaper upload clears e.target.value in finally block
+  assert.match(settingsModalCode, /handleWallpaperUpload[\s\S]*?finally\s*\{[\s\S]*?if\s*\(e\.target\)\s*e\.target\.value\s*=\s*'';/);
+});
+
+test('ChatArea does not bind wallpaper resolution to activeChat.id and safely resolves direct URLs', () => {
+  // useResolvedMedia for wallpaper passes null chatId to avoid re-downloads and flicker on chat switch
+  assert.match(chatAreaCode, /useResolvedMedia\(\s*isCustomWallpaper\s*\?\s*wallpaper\s*:\s*null,\s*null,\s*'image\/webp'\s*\)/);
+  assert.match(chatAreaCode, /isDirectWallpaper/);
+  assert.match(chatAreaCode, /url\("\$\{activeWallpaperUrl\}"\)/);
+});
+
+test('AppearanceTab guards preview image against raw storage references and clears input on delete', () => {
+  assert.match(appearanceTabCode, /isDirectUrl/);
+  assert.match(appearanceTabCode, /displayPreview\s*=\s*resolvedPreviewUrl\s*\|\|\s*\(isDirectUrl\s*\?\s*effectiveCustomUrl\s*:\s*null\)/);
+  assert.match(appearanceTabCode, /wallpaperInputRef\.current\.value\s*=\s*''/);
+});
+

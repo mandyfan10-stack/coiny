@@ -23,39 +23,19 @@
   background-image: radial-gradient(circle at 30% 20%, rgba(17, 24, 39, 0.6) 0%, rgba(10, 15, 20, 0.95) 100%);
 }
 
-[data-wallpaper="sunset"] .chat-body {
-  background: linear-gradient(135deg, #302b63 0%, #24243e 50%, #0f0c1b 100%);
-}
-
-[data-wallpaper="space"] .chat-body {
-  background: radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%);
-}
-
-[data-wallpaper="mint"] .chat-body {
-  background: linear-gradient(135deg, #11221b 0%, #050b07 100%);
-}
-
-[data-wallpaper="cyber"] .chat-body {
-  background-image: url('/neon_cyber.png');
-  background-size: cover;
-  background-position: center;
-}
-
 html.theme-light[data-wallpaper="classic"] .chat-body {
   background-color: #e8eef4;
   background-image: radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.85) 0%, rgba(232, 238, 244, 0.95) 100%);
 }
 
-html.theme-light[data-wallpaper="sunset"] .chat-body {
-  background: linear-gradient(135deg, #ede9fe 0%, #f5f3ff 50%, #faf5ff 100%);
+.chat-body.has-custom-wallpaper {
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
 }
 
-html.theme-light[data-wallpaper="space"] .chat-body {
-  background: radial-gradient(ellipse at bottom, #dbeafe 0%, #e8eef4 100%);
-}
-
-html.theme-light[data-wallpaper="mint"] .chat-body {
-  background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%);
+.chat-body.has-custom-wallpaper::before {
+  display: none !important;
 }
 
 .chat-body, .chat-list, .stories-tray, .folders-nav {

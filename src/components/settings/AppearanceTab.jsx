@@ -12,7 +12,7 @@ import {
   Sun
 } from 'lucide-react';
 import { requestNotificationPermission } from '../../services/notificationService';
-import { SETTINGS_THEMES as themes, SETTINGS_WALLPAPERS as wallpapers } from './themesData';
+import { SETTINGS_THEMES as themes } from './themesData';
 import {
   isHapticsEnabled,
   setHapticsEnabled,
@@ -23,6 +23,7 @@ import {
   getCacheStorageStats,
   clearMediaAndMessageCache
 } from '../../utils/indexedDbHelper';
+import useResolvedMedia from '../../hooks/useResolvedMedia';
 
 export default function AppearanceTab({
   theme,
@@ -46,6 +47,18 @@ export default function AppearanceTab({
   useEffect(() => {
     getCacheStorageStats().then(setCacheStats).catch(() => {});
   }, []);
+
+  const effectiveCustomUrl = (customWallpaperUrl && customWallpaperUrl.trim() && !['classic', 'default', 'sunset', 'space', 'mint', 'cyber'].includes(customWallpaperUrl.trim()) ? customWallpaperUrl.trim() : '') ||
+    (wallpaper && !['classic', 'default', 'sunset', 'space', 'mint', 'cyber'].includes(wallpaper) ? wallpaper : '');
+  const hasCustomWallpaper = Boolean(effectiveCustomUrl);
+  const { url: resolvedPreviewUrl } = useResolvedMedia(hasCustomWallpaper ? effectiveCustomUrl : null);
+  const isDirectUrl = Boolean(effectiveCustomUrl && (
+    effectiveCustomUrl.startsWith('data:') ||
+    effectiveCustomUrl.startsWith('blob:') ||
+    effectiveCustomUrl.startsWith('http://') ||
+    effectiveCustomUrl.startsWith('https://')
+  ));
+  const displayPreview = resolvedPreviewUrl || (isDirectUrl ? effectiveCustomUrl : null);
 
   return (
     <div className="settings-appearance-tab" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -105,77 +118,87 @@ export default function AppearanceTab({
           <ImageIcon size={16} />
           <span>Обои чата</span>
         </h5>
-        <div className="wallpapers-grid">
-          {wallpapers.map((w) => {
-            const isActive = wallpaper === w.id && customWallpaperUrl.trim() === '';
-            return (
-              <button
-                key={w.id}
-                className={`wallpaper-selection-btn ${isActive ? 'active' : ''}`}
-                onClick={() => {
-                  setWallpaper(w.id);
-                  setCustomWallpaperUrl('');
-                }}
-                style={{ background: w.style }}
-                type="button"
-              >
-                <span className="wallpaper-label">{w.name}</span>
-                {isActive && (
-                  <div className="wallpaper-check-badge">
-                    <Check size={12} />
-                  </div>
-                )}
-              </button>
-            );
-          })}
-        </div>
 
-        {/* Custom Wallpaper File Upload */}
-        <div className="input-group" style={{ marginTop: '14px' }}>
-          <label style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-            Или загрузите свой файл обоев
-          </label>
+        <input
+          ref={wallpaperInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/*"
+          onChange={handleWallpaperUpload}
+          style={{ display: 'none' }}
+        />
 
-          <input
-            ref={wallpaperInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleWallpaperUpload}
-            style={{ display: 'none' }}
-          />
-
-          <div className="wallpaper-upload-actions" style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
-            <button
-              type="button"
-              className="btn-primary auth-submit-btn"
-              onClick={() => wallpaperInputRef.current?.click()}
-              style={{ width: 'auto', padding: '8px 16px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}
-              disabled={isUploadingWallpaper}
-            >
-              <Upload size={14} />
-              <span>{isUploadingWallpaper ? 'Загрузка...' : 'Выбрать файл'}</span>
-            </button>
-
-            {customWallpaperUrl && (
-              <button
-                type="button"
-                className="logout-btn"
-                onClick={() => {
-                  setWallpaper('classic');
-                  setCustomWallpaperUrl('');
-                }}
-                style={{ width: 'auto', padding: '8px 16px', fontSize: '13px', margin: 0 }}
-              >
-                Сбросить
-              </button>
-            )}
-          </div>
-
-          {customWallpaperUrl && (
-            <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              Выбран кастомный фон чата
+        {hasCustomWallpaper ? (
+          <div className="wallpaper-custom-card">
+            <div className="wallpaper-preview-box">
+              {displayPreview ? (
+                <img
+                  src={displayPreview}
+                  alt="Обои чата"
+                  className="wallpaper-preview-img"
+                />
+              ) : (
+                <div className="wallpaper-preview-placeholder">
+                  <ImageIcon size={24} />
+                </div>
+              )}
             </div>
-          )}
+            <div className="wallpaper-card-details">
+              <div className="wallpaper-card-status">
+                <span className="wallpaper-card-title">Пользовательские обои</span>
+                <span className="wallpaper-card-subtitle">Установлено ваше изображение</span>
+              </div>
+              <div className="wallpaper-card-actions">
+                <button
+                  type="button"
+                  className="btn-primary auth-submit-btn wallpaper-btn-change"
+                  onClick={() => wallpaperInputRef.current?.click()}
+                  disabled={isUploadingWallpaper}
+                >
+                  <Upload size={14} />
+                  <span>{isUploadingWallpaper ? 'Загрузка...' : 'Изменить обои'}</span>
+                </button>
+                <button
+                  type="button"
+                  className="logout-btn wallpaper-btn-delete"
+                  onClick={() => {
+                    setWallpaper('classic');
+                    setCustomWallpaperUrl('');
+                    if (wallpaperInputRef?.current) {
+                      wallpaperInputRef.current.value = '';
+                    }
+                  }}
+                  disabled={isUploadingWallpaper}
+                >
+                  <Trash2 size={14} />
+                  <span>Удалить обои</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="wallpaper-default-card">
+            <div className="wallpaper-card-details">
+              <div className="wallpaper-card-status">
+                <span className="wallpaper-card-title">Стандартный фон темы</span>
+                <span className="wallpaper-card-subtitle">Используется фоновый градиент выбранной темы</span>
+              </div>
+              <div className="wallpaper-card-actions">
+                <button
+                  type="button"
+                  className="btn-primary auth-submit-btn wallpaper-btn-upload"
+                  onClick={() => wallpaperInputRef.current?.click()}
+                  disabled={isUploadingWallpaper}
+                >
+                  <Upload size={14} />
+                  <span>{isUploadingWallpaper ? 'Загрузка...' : 'Загрузить свои обои'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="wallpaper-format-hint">
+          Поддерживаемые форматы: PNG, JPG, WebP
         </div>
       </div>
 

@@ -19,7 +19,8 @@ export function useChatUiState(currentUser) {
   });
   const [wallpaper, setWallpaper] = useState(() => {
     const saved = localStorage.getItem('coingram-wallpaper');
-    return (saved && saved !== 'cyber') ? saved : 'classic';
+    const deprecatedPresets = ['cyber', 'sunset', 'space', 'mint', 'default'];
+    return (saved && !deprecatedPresets.includes(saved)) ? saved : 'classic';
   });
   const [settingsTab, setSettingsTab] = useState('profile');
   const [newChatModalTab, setNewChatModalTab] = useState('personal');
@@ -27,8 +28,10 @@ export function useChatUiState(currentUser) {
   // Synchronize wallpaper and theme when currentUser profile updates/loads
   useEffect(() => {
     if (currentUser?.wallpaper) {
-      const safeWp = currentUser.wallpaper === 'cyber' ? 'classic' : currentUser.wallpaper;
-      if (currentUser.wallpaper === 'cyber') {
+      const deprecatedPresets = ['cyber', 'sunset', 'space', 'mint', 'default'];
+      const isDeprecated = deprecatedPresets.includes(currentUser.wallpaper);
+      const safeWp = isDeprecated ? 'classic' : currentUser.wallpaper;
+      if (isDeprecated) {
         setWallpaper('classic');
       } else {
         setWallpaper(currentUser.wallpaper);

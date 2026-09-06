@@ -122,14 +122,21 @@ export default function ChatArea() {
     return requireE2EEKey(sharedKey);
   };
 
-  const isCustomWallpaper = wallpaper && !['classic', 'sunset', 'space', 'mint'].includes(wallpaper);
+  const isCustomWallpaper = Boolean(wallpaper && wallpaper !== 'classic' && wallpaper !== 'default');
   const { url: resolvedWallpaper } = useResolvedMedia(
     isCustomWallpaper ? wallpaper : null,
-    activeChat?.id,
+    null,
     'image/webp'
   );
+  const isDirectWallpaper = Boolean(isCustomWallpaper && (
+    wallpaper.startsWith('data:') ||
+    wallpaper.startsWith('blob:') ||
+    wallpaper.startsWith('http://') ||
+    wallpaper.startsWith('https://')
+  ));
+  const activeWallpaperUrl = resolvedWallpaper || (isDirectWallpaper ? wallpaper : null);
   const chatBodyStyle = isCustomWallpaper ? {
-    backgroundImage: resolvedWallpaper ? `url(${resolvedWallpaper})` : 'none',
+    backgroundImage: activeWallpaperUrl ? `url("${activeWallpaperUrl}")` : 'none',
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     backgroundRepeat: 'no-repeat'
@@ -1181,7 +1188,7 @@ function formatDateDivider(timestamp) {
 
       {/* Messages Window */}
       <div
-        className="chat-body"
+        className={`chat-body ${isCustomWallpaper ? 'has-custom-wallpaper' : ''}`}
         ref={chatBodyRef}
         onScroll={handleScroll}
         style={chatBodyStyle}

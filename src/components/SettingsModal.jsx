@@ -258,6 +258,7 @@ export default function SettingsModal() {
         alert(`Ошибка при загрузке: ${err.message || err}`);
       } finally {
         setIsUploadingWallpaper(false);
+        if (e.target) e.target.value = '';
       }
     }
   };
@@ -274,19 +275,26 @@ export default function SettingsModal() {
       setBio(currentUser.bio || '');
       setNotif(currentUser.notificationsEnabled !== false);
       setCopied(false);
-
-      const presets = ['classic', 'sunset', 'space', 'mint'];
-      const activeWp = wallpaper || currentUser.wallpaper;
-      if (activeWp && activeWp !== 'cyber' && !presets.includes(activeWp)) {
-        setCustomWallpaperUrl(activeWp);
-      } else {
-        setCustomWallpaperUrl('');
-      }
       setNewPassword('');
       setConfirmPassword('');
       setPasswordStatus({ text: '', type: null });
     }
-  }, [currentUser, isSettingsOpen, wallpaper]);
+  }, [currentUser, isSettingsOpen]);
+
+  useEffect(() => {
+    if (currentUser && isSettingsOpen) {
+      const deprecatedPresets = ['cyber', 'sunset', 'space', 'mint', 'default'];
+      const activeWp = wallpaper || currentUser.wallpaper;
+      if (activeWp && deprecatedPresets.includes(activeWp)) {
+        setWallpaper('classic');
+        setCustomWallpaperUrl('');
+      } else if (activeWp && activeWp !== 'classic' && activeWp !== 'default') {
+        setCustomWallpaperUrl(activeWp);
+      } else {
+        setCustomWallpaperUrl('');
+      }
+    }
+  }, [currentUser, isSettingsOpen, wallpaper, setWallpaper]);
 
   if (!currentUser) return null;
 
