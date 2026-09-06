@@ -11,6 +11,7 @@ const authContext = await readFile(new URL("../src/context/AuthContext.jsx", imp
 const authService = await readFile(new URL("../src/services/authService.js", import.meta.url), "utf8");
 const dataLayer = await readFile(new URL("../src/services/dataLayer.js", import.meta.url), "utf8");
 const authEmail = await readFile(new URL("../src/services/authEmail.ts", import.meta.url), "utf8");
+const settingsCss = await readFile(new URL("../src/components/SettingsModal.css", import.meta.url), "utf8");
 
 const emojiRegex = /[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}]/u;
 
@@ -114,9 +115,18 @@ test("mapSupabaseAuthError handles reset action messages and email_address_inval
   assert.match(testDomainErr.message, /К этому аккаунту не привязан действующий адрес электронной почты/);
 });
 
+test("E2EESetupModal contracts: return to password button is full-width and centered", () => {
+  assert.match(e2eeModal, /<ArrowLeft/);
+  assert.match(e2eeModal, /style=\{\{\s*width:\s*'100%'\s*\}\}/);
+  assert.match(settingsCss, /\.e2ee-submit-btn\s*\{[^}]*width:\s*100%/);
+  assert.match(settingsCss, /\.e2ee-submit-btn\s*\{[^}]*box-sizing:\s*border-box/);
+  assert.match(settingsCss, /\.e2ee-recovery-success\s*\{[^}]*width:\s*100%/);
+});
+
 test("All touched files strictly adhere to zero emojis requirement", () => {
   assert.doesNotMatch(e2eeModal, emojiRegex, "E2EESetupModal must not contain emojis");
   assert.doesNotMatch(authScreen, emojiRegex, "AuthScreen must not contain emojis");
   assert.doesNotMatch(e2eeTab, emojiRegex, "E2EETab must not contain emojis");
   assert.doesNotMatch(authEmail, emojiRegex, "authEmail must not contain emojis");
+  assert.doesNotMatch(settingsCss, emojiRegex, "SettingsModal.css must not contain emojis");
 });

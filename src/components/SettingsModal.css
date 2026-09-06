@@ -1982,6 +1982,8 @@ html.theme-light .empty-state p {
 
 /* Submit Buttons */
 .e2ee-submit-btn {
+  width: 100%;
+  box-sizing: border-box;
   background: linear-gradient(135deg, #3b82f6, #1d4ed8);
   color: #ffffff;
   border: none;
@@ -1994,8 +1996,16 @@ html.theme-light .empty-state p {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   min-height: 48px;
   box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+}
+
+.e2ee-recovery-success {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
 }
 
 .e2ee-submit-btn:hover:not(:disabled) {

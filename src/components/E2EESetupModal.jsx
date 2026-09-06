@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useE2EE } from '../context/E2EEContext';
 import { dataService } from '../services/dataLayer';
-import { LockKeyhole, ShieldAlert, Eye, EyeOff, AlertTriangle, Info, Lock, Mail, CheckCircle2 } from 'lucide-react';
+import { LockKeyhole, ShieldAlert, Eye, EyeOff, AlertTriangle, Info, Lock, Mail, CheckCircle2, ArrowLeft } from 'lucide-react';
 
 const getPasswordStrength = (pass) => {
   if (!pass) return { text: '', color: '', width: '0%' };
@@ -354,9 +354,11 @@ export default function E2EESetupModal() {
                   <button
                     type="button"
                     className="e2ee-submit-btn"
+                    style={{ width: '100%' }}
                     onClick={handleBackToPassword}
                   >
-                    Вернуться к вводу пароля
+                    <ArrowLeft size={16} />
+                    <span>Вернуться к вводу пароля</span>
                   </button>
 
                   <div className="e2ee-alt-actions" style={{ marginTop: '14px' }}>
