@@ -18,7 +18,8 @@ export function useChatUiState(currentUser) {
     return localStorage.getItem('coingram-theme') || 'telegram-blue';
   });
   const [wallpaper, setWallpaper] = useState(() => {
-    return localStorage.getItem('coingram-wallpaper') || 'classic';
+    const saved = localStorage.getItem('coingram-wallpaper');
+    return (saved && saved !== 'cyber') ? saved : 'classic';
   });
   const [settingsTab, setSettingsTab] = useState('profile');
   const [newChatModalTab, setNewChatModalTab] = useState('personal');
@@ -26,8 +27,13 @@ export function useChatUiState(currentUser) {
   // Synchronize wallpaper and theme when currentUser profile updates/loads
   useEffect(() => {
     if (currentUser?.wallpaper) {
-      setWallpaper(currentUser.wallpaper);
-      localStorage.setItem('coingram-wallpaper', currentUser.wallpaper);
+      const safeWp = currentUser.wallpaper === 'cyber' ? 'classic' : currentUser.wallpaper;
+      if (currentUser.wallpaper === 'cyber') {
+        setWallpaper('classic');
+      } else {
+        setWallpaper(currentUser.wallpaper);
+      }
+      localStorage.setItem('coingram-wallpaper', safeWp);
     }
     if (currentUser?.theme) {
       setTheme(currentUser.theme);
@@ -36,7 +42,7 @@ export function useChatUiState(currentUser) {
   }, [currentUser?.wallpaper, currentUser?.theme]);
 
   useEffect(() => {
-    if (isDarkMode || theme === 'rainbow-pearl') {
+    if (isDarkMode) {
       document.documentElement.classList.remove('theme-light');
     } else {
       document.documentElement.classList.add('theme-light');
@@ -45,7 +51,6 @@ export function useChatUiState(currentUser) {
     localStorage.setItem('coingram-theme', theme);
 
     let classes = document.documentElement.className.split(' ').filter((c) => c === 'theme-light');
-    if (theme === 'rainbow-pearl') classes = [];
     classes.push(`theme-${theme}`);
     document.documentElement.className = classes.join(' ').trim();
   }, [theme, isDarkMode]);

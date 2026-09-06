@@ -42,12 +42,12 @@ test('ChatProvider passes currentUser to useChatUiState', () => {
   assert.match(chatProviderCode, /const\s+ui\s*=\s*useChatUiState\(currentUser\);/);
 });
 
-test('SettingsModal detects custom wallpaper accurately for all presets including cyber', () => {
-  assert.match(settingsModalCode, /'classic',\s*'sunset',\s*'space',\s*'mint',\s*'cyber'/);
+test('SettingsModal detects custom wallpaper accurately for all presets', () => {
+  assert.match(settingsModalCode, /'classic',\s*'sunset',\s*'space',\s*'mint'/);
   assert.match(settingsModalCode, /const\s+activeWp\s*=\s*wallpaper\s*\|\|\s*currentUser\.wallpaper;/);
 });
 
-test('settings wallpaper previews match the actual chat-body wallpaper CSS', async () => {
+test('settings wallpaper previews match the actual chat-body wallpaper CSS and cyber is excluded', async () => {
   const themesData = await readFile(
     new URL('../src/components/settings/themesData.ts', import.meta.url),
     'utf8'
@@ -61,13 +61,12 @@ test('settings wallpaper previews match the actual chat-body wallpaper CSS', asy
   assert.match(themesData, /id: 'sunset'[\s\S]*?#302b63/);
   assert.match(themesData, /id: 'space'[\s\S]*?#1b2735/);
   assert.match(themesData, /id: 'mint'[\s\S]*?#11221b/);
-  assert.match(themesData, /id: 'cyber'[\s\S]*?neon_cyber\.png/);
+  assert.doesNotMatch(themesData, /id: 'cyber'/);
 
   assert.match(chatAreaCss, /\[data-wallpaper="classic"\][\s\S]*?#0b141a/);
   assert.match(chatAreaCss, /\[data-wallpaper="sunset"\][\s\S]*?#302b63/);
   assert.match(chatAreaCss, /\[data-wallpaper="space"\][\s\S]*?#1b2735/);
   assert.match(chatAreaCss, /\[data-wallpaper="mint"\][\s\S]*?#11221b/);
-  assert.match(chatAreaCss, /\[data-wallpaper="cyber"\][\s\S]*?neon_cyber\.png/);
 });
 
 test('Tenor GIF service does not hardcode Google API keys', () => {

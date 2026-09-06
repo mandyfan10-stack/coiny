@@ -7,7 +7,9 @@ import {
   Upload,
   Smartphone,
   Database,
-  Trash2
+  Trash2,
+  Moon,
+  Sun
 } from 'lucide-react';
 import { requestNotificationPermission } from '../../services/notificationService';
 import { SETTINGS_THEMES as themes, SETTINGS_WALLPAPERS as wallpapers } from './themesData';
@@ -25,6 +27,8 @@ import {
 export default function AppearanceTab({
   theme,
   setTheme,
+  isDarkMode,
+  setIsDarkMode,
   wallpaper,
   setWallpaper,
   customWallpaperUrl,
@@ -45,6 +49,33 @@ export default function AppearanceTab({
 
   return (
     <div className="settings-appearance-tab" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {/* Theme Mode Customizer (Night / Light Mode) */}
+      {typeof isDarkMode === 'boolean' && typeof setIsDarkMode === 'function' && (
+        <div className="settings-section">
+          <h5 className="section-title">
+            {isDarkMode ? <Moon size={16} /> : <Sun size={16} />}
+            <span>Режим оформления</span>
+          </h5>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 4px 10px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <span style={{ fontSize: '13.5px', fontWeight: 500, color: 'var(--text-primary)' }}>
+                {isDarkMode ? 'Ночной режим' : 'Обычный (светлый) режим'}
+              </span>
+              <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                {isDarkMode ? 'Тёмное оформление интерфейса' : 'Светлое оформление интерфейса'}
+              </span>
+            </div>
+            <label className="switch-wrapper">
+              <input 
+                type="checkbox" 
+                checked={isDarkMode} 
+                onChange={(e) => setIsDarkMode(e.target.checked)}
+              />
+              <span className="switch-slider"></span>
+            </label>
+          </div>
+        </div>
+      )}
       {/* Theme Customizer */}
       <div className="settings-section">
         <h5 className="section-title">

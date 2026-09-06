@@ -28,6 +28,8 @@ export default function SettingsModal() {
     setTheme,
     wallpaper,
     setWallpaper,
+    isDarkMode,
+    setIsDarkMode,
     settingsTab,
     setSettingsTab,
     renderAvatar,
@@ -273,9 +275,9 @@ export default function SettingsModal() {
       setNotif(currentUser.notificationsEnabled !== false);
       setCopied(false);
 
-      const presets = ['classic', 'sunset', 'space', 'mint', 'cyber'];
+      const presets = ['classic', 'sunset', 'space', 'mint'];
       const activeWp = wallpaper || currentUser.wallpaper;
-      if (activeWp && !presets.includes(activeWp)) {
+      if (activeWp && activeWp !== 'cyber' && !presets.includes(activeWp)) {
         setCustomWallpaperUrl(activeWp);
       } else {
         setCustomWallpaperUrl('');
@@ -471,6 +473,8 @@ export default function SettingsModal() {
               <AppearanceTab
                 theme={theme}
                 setTheme={setTheme}
+                isDarkMode={isDarkMode}
+                setIsDarkMode={setIsDarkMode}
                 wallpaper={wallpaper}
                 setWallpaper={setWallpaper}
                 customWallpaperUrl={customWallpaperUrl}

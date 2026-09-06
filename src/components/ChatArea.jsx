@@ -122,7 +122,7 @@ export default function ChatArea() {
     return requireE2EEKey(sharedKey);
   };
 
-  const isCustomWallpaper = wallpaper && !['classic', 'sunset', 'space', 'mint', 'cyber'].includes(wallpaper);
+  const isCustomWallpaper = wallpaper && !['classic', 'sunset', 'space', 'mint'].includes(wallpaper);
   const { url: resolvedWallpaper } = useResolvedMedia(
     isCustomWallpaper ? wallpaper : null,
     activeChat?.id,

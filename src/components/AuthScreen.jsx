@@ -341,6 +341,10 @@ export default function AuthScreen() {
               </div>
               <h2>Coiny</h2>
               <p className="auth-subtitle">Быстрый и защищённый мессенджер</p>
+              <div className="auth-brand-badge">
+                <Shield size={11} />
+                <span>MLS • E2EE</span>
+              </div>
             </div>
 
             {/* Demo Mode Notice Banner */}
@@ -553,8 +557,9 @@ export default function AuthScreen() {
 
             {/* Footer Security Badge */}
             <div className="auth-footer-security">
-              <ShieldCheck size={14} />
+              <ShieldCheck size={14} className="security-shield-icon" />
               <span>Сквозное E2EE шифрование</span>
+              <span className="security-live-dot" title="MLS & AES-256 GCM" />
             </div>
           </div>
         </div>
