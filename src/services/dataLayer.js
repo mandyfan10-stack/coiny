@@ -22,6 +22,8 @@ export const dataService = {
   signUp: authService.signUp,
   signIn: authService.signIn,
   signOut: authService.signOut,
+  resetPasswordForEmail: authService.resetPasswordForEmail,
+  resetPassword: authService.resetPasswordForEmail,
   fetchProfile: authService.fetchProfile,
   updateProfile: authService.updateProfile,
   saveE2EEBackup: authService.saveE2EEBackup,

@@ -137,7 +137,7 @@ export function shouldTryNextAuthEmail(error: AuthErrorLike, candidateEmail: str
 
 export function mapSupabaseAuthError(
   error: AuthErrorLike,
-  action: 'signin' | 'signup' = 'signin'
+  action: 'signin' | 'signup' | 'reset' = 'signin'
 ): Error {
   const code = authErrorCode(error);
   const message = authErrorMessage(error);
@@ -156,6 +156,9 @@ export function mapSupabaseAuthError(
     );
   }
   if (code === 'email_address_invalid' || message.includes('test domains are currently not supported')) {
+    if (action === 'reset') {
+      return new Error('К этому аккаунту не привязан действующий адрес электронной почты.');
+    }
     return new Error('Сервер авторизации отклонил внутренний email. Проверьте настройки Auth в Supabase.');
   }
   if (code === 'user_already_exists' || message.includes('user already registered') || message.includes('already been registered')) {
@@ -169,7 +172,9 @@ export function mapSupabaseAuthError(
   }
   return new Error(fallback || (action === 'signup'
     ? 'Ошибка при регистрации. Возможно, имя пользователя уже занято.'
-    : 'Ошибка при входе. Проверьте логин и пароль.'));
+    : action === 'reset'
+      ? 'Ошибка при отправке ссылки для восстановления.'
+      : 'Ошибка при входе. Проверьте логин и пароль.'));
 }
 
 /**

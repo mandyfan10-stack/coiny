@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 
 export default function AuthScreen() {
-  const { signInWithIdentifier, signUpWithUsername } = useAuth();
+  const { signInWithIdentifier, signUpWithUsername, resetPasswordForEmail } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
   const [loginIdentifier, setLoginIdentifier] = useState('');
   const [username, setUsername] = useState('');
@@ -31,8 +31,41 @@ export default function AuthScreen() {
   const [loading, setLoading] = useState(false);
   const [capsLockActive, setCapsLockActive] = useState(false);
 
+  // Email recovery mode states
+  const [isResetPassword, setIsResetPassword] = useState(false);
+  const [resetIdentifier, setResetIdentifier] = useState('');
+  const [resetSent, setResetSent] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+
   const passwordInputRef = useRef(null);
   const lastToggleTimeRef = useRef(0);
+
+  const handleResetSubmit = async (e) => {
+    e.preventDefault();
+    if (resetLoading) return;
+    setErrorMsg('');
+
+    const identifier = resetIdentifier.trim();
+    if (!identifier) {
+      setErrorMsg('Пожалуйста, укажите email или никнейм.');
+      return;
+    }
+
+    setResetLoading(true);
+    try {
+      const { error } = await resetPasswordForEmail(identifier);
+      if (error) {
+        setErrorMsg(error.message || 'Ошибка при отправке ссылки для восстановления.');
+      } else {
+        setResetSent(true);
+      }
+    } catch (err) {
+      console.error(err);
+      setErrorMsg('Произошла непредвиденная ошибка. Попробуйте еще раз.');
+    } finally {
+      setResetLoading(false);
+    }
+  };
 
   // Real-time password requirement analysis for registration
   const passwordCriteria = useMemo(() => {
@@ -223,212 +256,309 @@ export default function AuthScreen() {
               </div>
             )}
 
-            {/* Segmented Switcher with Sliding Pill Indicator */}
-            <div className="auth-tabs" role="tablist">
-              <div 
-                className={`auth-tabs-slider ${!isLogin ? 'is-register' : 'is-login'}`}
-                aria-hidden="true"
-              />
-              <button
-                type="button"
-                role="tab"
-                aria-selected={isLogin}
-                className={`auth-tab ${isLogin ? 'active' : ''}`}
-                onClick={() => {
-                  setIsLogin(true);
-                  setErrorMsg('');
-                }}
-              >
-                <LogIn size={15} />
-                <span>Вход</span>
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={!isLogin}
-                className={`auth-tab ${!isLogin ? 'active' : ''}`}
-                onClick={() => {
-                  setIsLogin(false);
-                  setErrorMsg('');
-                }}
-              >
-                <UserPlus size={15} />
-                <span>Регистрация</span>
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="auth-form" noValidate={false}>
-              {/* Identifier input (login: email/username, register: username) */}
-              <div className="auth-input-group">
-                <label htmlFor={isLogin ? 'loginIdentifier' : 'username'}>
-                  {isLogin ? 'Email или никнейм' : 'Никнейм (username)'}
-                </label>
-                <div className="auth-input-wrapper">
-                  <User size={18} className="input-icon" />
-                  <input
-                    id={isLogin ? 'loginIdentifier' : 'username'}
-                    type="text"
-                    placeholder={isLogin ? 'alex_dev или user@domain.com' : 'alex_dev'}
-                    value={isLogin ? loginIdentifier : username}
-                    onChange={(e) => (isLogin ? setLoginIdentifier(e.target.value) : setUsername(e.target.value))}
-                    disabled={loading}
-                    autoComplete={isLogin ? 'username' : 'new-username'}
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Display Name Input (Registration only) */}
-              {!isLogin && (
-                <div className="auth-input-group animate-fade-in">
-                  <label htmlFor="displayName">Отображаемое имя (необязательно)</label>
-                  <div className="auth-input-wrapper">
-                    <User size={18} className="input-icon" />
-                    <input
-                      id="displayName"
-                      type="text"
-                      placeholder="Александр"
-                      value={displayName}
-                      onChange={(e) => setDisplayName(e.target.value)}
-                      disabled={loading}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Password Input with Caps Lock detector and focus retention toggle */}
-              <div className="auth-input-group">
-                <div className="auth-label-row">
-                  <label htmlFor="password">Пароль</label>
-                  {capsLockActive && (
-                    <span className="auth-capslock-indicator" role="status">
-                      <ArrowUp size={11} />
-                      <span>Caps Lock</span>
-                    </span>
-                  )}
-                </div>
-                <div className="auth-input-wrapper">
-                  <Lock size={18} className="input-icon" />
-                  <input
-                    ref={passwordInputRef}
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder={isLogin ? '••••••' : 'Введите надёжный пароль'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    onKeyDown={handlePasswordKey}
-                    onKeyUp={handlePasswordKey}
-                    onClick={handlePasswordKey}
-                    onFocus={handlePasswordKey}
-                    onBlur={() => setCapsLockActive(false)}
-                    disabled={loading}
-                    aria-describedby={!isLogin ? 'password-requirements' : undefined}
-                    required
+            {!isResetPassword ? (
+              <>
+                {/* Segmented Switcher with Sliding Pill Indicator */}
+                <div className="auth-tabs" role="tablist">
+                  <div 
+                    className={`auth-tabs-slider ${!isLogin ? 'is-register' : 'is-login'}`}
+                    aria-hidden="true"
                   />
                   <button
                     type="button"
-                    className="auth-password-toggle-btn"
-                    onMouseDown={handleTogglePassword}
-                    onClick={handleTogglePassword}
-                    tabIndex={-1}
-                    title={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
-                    aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
+                    role="tab"
+                    aria-selected={isLogin}
+                    className={`auth-tab ${isLogin ? 'active' : ''}`}
+                    onClick={() => {
+                      setIsLogin(true);
+                      setErrorMsg('');
+                    }}
                   >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    <LogIn size={15} />
+                    <span>Вход</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={!isLogin}
+                    className={`auth-tab ${!isLogin ? 'active' : ''}`}
+                    onClick={() => {
+                      setIsLogin(false);
+                      setErrorMsg('');
+                    }}
+                  >
+                    <UserPlus size={15} />
+                    <span>Регистрация</span>
                   </button>
                 </div>
 
-                {/* 4-Segment Password Strength Progress Bar & Concise Hints (Registration only) */}
-                {!isLogin && password && (
-                  <div className="auth-password-strength-box animate-fade-in" id="password-requirements">
-                    <div className="auth-strength-header-row">
-                      <span className="auth-strength-label-text">Надёжность пароля</span>
-                      <strong style={{ color: passwordCriteria.strengthColor }}>
-                        {passwordCriteria.strengthLabel}
-                      </strong>
-                    </div>
-
-                    <div className="auth-strength-segments" aria-hidden="true">
-                      {[1, 2, 3, 4].map((level) => (
-                        <div
-                          key={level}
-                          className={`auth-strength-segment ${passwordCriteria.score >= level ? 'filled' : ''}`}
-                          style={{
-                            backgroundColor: passwordCriteria.score >= level ? passwordCriteria.strengthColor : undefined
-                          }}
-                        />
-                      ))}
-                    </div>
-
-                    <div className="auth-requirements-compact">
-                      {unmetHints.length > 0 ? (
-                        <div className="auth-req-tags-row">
-                          <span className="auth-req-label">Требуется:</span>
-                          <div className="auth-req-tags">
-                            {unmetHints.map((hint, idx) => (
-                              <span key={idx} className="auth-req-tag">{hint}</span>
-                            ))}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="auth-req-all-valid">
-                          <Check size={12} className="auth-req-valid-icon" />
-                          <span>Все требования к паролю соблюдены</span>
-                        </div>
-                      )}
+                <form onSubmit={handleSubmit} className="auth-form" noValidate={false}>
+                  {/* Identifier input (login: email/username, register: username) */}
+                  <div className="auth-input-group">
+                    <label htmlFor={isLogin ? 'loginIdentifier' : 'username'}>
+                      {isLogin ? 'Email или никнейм' : 'Никнейм (username)'}
+                    </label>
+                    <div className="auth-input-wrapper">
+                      <User size={18} className="input-icon" />
+                      <input
+                        id={isLogin ? 'loginIdentifier' : 'username'}
+                        type="text"
+                        placeholder={isLogin ? 'alex_dev или user@domain.com' : 'alex_dev'}
+                        value={isLogin ? loginIdentifier : username}
+                        onChange={(e) => (isLogin ? setLoginIdentifier(e.target.value) : setUsername(e.target.value))}
+                        disabled={loading}
+                        autoComplete={isLogin ? 'username' : 'new-username'}
+                        required
+                      />
                     </div>
                   </div>
+
+                  {/* Display Name Input (Registration only) */}
+                  {!isLogin && (
+                    <div className="auth-input-group animate-fade-in">
+                      <label htmlFor="displayName">Отображаемое имя (необязательно)</label>
+                      <div className="auth-input-wrapper">
+                        <User size={18} className="input-icon" />
+                        <input
+                          id="displayName"
+                          type="text"
+                          placeholder="Александр"
+                          value={displayName}
+                          onChange={(e) => setDisplayName(e.target.value)}
+                          disabled={loading}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Password Input with Caps Lock detector and focus retention toggle */}
+                  <div className="auth-input-group">
+                    <div className="auth-label-row">
+                      <label htmlFor="password">Пароль</label>
+                      {capsLockActive && (
+                        <span className="auth-capslock-indicator" role="status">
+                          <ArrowUp size={11} />
+                          <span>Caps Lock</span>
+                        </span>
+                      )}
+                    </div>
+                    <div className="auth-input-wrapper">
+                      <Lock size={18} className="input-icon" />
+                      <input
+                        ref={passwordInputRef}
+                        id="password"
+                        type={showPassword ? 'text' : 'password'}
+                        placeholder={isLogin ? '••••••' : 'Введите надёжный пароль'}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        onKeyDown={handlePasswordKey}
+                        onKeyUp={handlePasswordKey}
+                        onClick={handlePasswordKey}
+                        onFocus={handlePasswordKey}
+                        onBlur={() => setCapsLockActive(false)}
+                        disabled={loading}
+                        aria-describedby={!isLogin ? 'password-requirements' : undefined}
+                        required
+                      />
+                      <button
+                        type="button"
+                        className="auth-password-toggle-btn"
+                        onMouseDown={handleTogglePassword}
+                        onClick={handleTogglePassword}
+                        tabIndex={-1}
+                        title={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
+                        aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
+                      >
+                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+
+                    {/* 4-Segment Password Strength Progress Bar & Concise Hints (Registration only) */}
+                    {!isLogin && password && (
+                      <div className="auth-password-strength-box animate-fade-in" id="password-requirements">
+                        <div className="auth-strength-header-row">
+                          <span className="auth-strength-label-text">Надёжность пароля</span>
+                          <strong style={{ color: passwordCriteria.strengthColor }}>
+                            {passwordCriteria.strengthLabel}
+                          </strong>
+                        </div>
+
+                        <div className="auth-strength-segments" aria-hidden="true">
+                          {[1, 2, 3, 4].map((level) => (
+                            <div
+                              key={level}
+                              className={`auth-strength-segment ${passwordCriteria.score >= level ? 'filled' : ''}`}
+                              style={{
+                                backgroundColor: passwordCriteria.score >= level ? passwordCriteria.strengthColor : undefined
+                              }}
+                            />
+                          ))}
+                        </div>
+
+                        <div className="auth-requirements-compact">
+                          {unmetHints.length > 0 ? (
+                            <div className="auth-req-tags-row">
+                              <span className="auth-req-label">Требуется:</span>
+                              <div className="auth-req-tags">
+                                {unmetHints.map((hint, idx) => (
+                                  <span key={idx} className="auth-req-tag">{hint}</span>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="auth-req-all-valid">
+                              <Check size={12} className="auth-req-valid-icon" />
+                              <span>Все требования к паролю соблюдены</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Remember Me Toggle and Forgot Password Link */}
+                  {isLogin && (
+                    <div className="auth-extra-row">
+                      <label className="auth-remember-label">
+                        <input
+                          type="checkbox"
+                          checked={rememberMe}
+                          onChange={(e) => setRememberMe(e.target.checked)}
+                        />
+                        <span>Запомнить меня</span>
+                      </label>
+                      <button
+                        type="button"
+                        className="auth-forgot-password-link"
+                        onClick={() => {
+                          setIsResetPassword(true);
+                          setErrorMsg('');
+                          setResetSent(false);
+                          setResetIdentifier(loginIdentifier || '');
+                        }}
+                      >
+                        Забыли пароль?
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Submit Button */}
+                  <button type="submit" className="auth-submit-btn" disabled={loading}>
+                    {loading ? (
+                      <span className="spinner"></span>
+                    ) : isLogin ? (
+                      <>
+                        <LogIn size={18} />
+                        <span>Войти в аккаунт</span>
+                      </>
+                    ) : (
+                      <>
+                        <UserPlus size={18} />
+                        <span>Создать аккаунт</span>
+                      </>
+                    )}
+                  </button>
+
+                  {/* Compact Demo Mode Button positioned below main submit button */}
+                  {!isSupabaseConfigured && (
+                    <div className="auth-demo-compact-section">
+                      <button 
+                        type="button" 
+                        className="auth-demo-quick-btn"
+                        onClick={handleDemoLogin}
+                        disabled={loading}
+                        title="Вход в демонстрационном режиме с локальным профилем"
+                      >
+                        <Zap size={14} />
+                        <span>Быстрый вход в демо-режим (alex_dev)</span>
+                      </button>
+                      <span className="auth-demo-subtext">Локальный профиль без сетевой синхронизации</span>
+                    </div>
+                  )}
+                </form>
+              </>
+            ) : (
+              <div className="auth-reset-flow animate-fade-in">
+                <div className="auth-reset-header">
+                  <h3 className="auth-reset-title">Восстановление пароля</h3>
+                  <p className="auth-reset-subtitle">
+                    Введите ваш email или никнейм для получения ссылки на сброс пароля.
+                  </p>
+                </div>
+
+                {resetSent ? (
+                  <div className="auth-reset-success-box">
+                    <div className="auth-reset-success-banner">
+                      <CheckCircle2 size={16} />
+                      <span>Инструкции по сбросу пароля отправлены на ваш email. Проверьте входящие сообщения.</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="auth-submit-btn"
+                      style={{ marginTop: '16px' }}
+                      onClick={() => {
+                        setIsResetPassword(false);
+                        setResetSent(false);
+                        setErrorMsg('');
+                      }}
+                    >
+                      <LogIn size={18} />
+                      <span>Вернуться ко входу</span>
+                    </button>
+                    <div className="auth-reset-actions" style={{ marginTop: '4px' }}>
+                      <button
+                        type="button"
+                        className="auth-link-btn"
+                        onClick={() => {
+                          setIsResetPassword(false);
+                          setResetSent(false);
+                          setErrorMsg('');
+                        }}
+                      >
+                        Вернуться ко входу
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <form onSubmit={handleResetSubmit} className="auth-form">
+                    <div className="auth-input-group">
+                      <label htmlFor="resetIdentifier">Email или никнейм</label>
+                      <div className="auth-input-wrapper">
+                        <User size={18} className="input-icon" />
+                        <input
+                          id="resetIdentifier"
+                          type="text"
+                          placeholder="alex_dev или user@domain.com"
+                          value={resetIdentifier}
+                          onChange={(e) => setResetIdentifier(e.target.value)}
+                          disabled={resetLoading}
+                          autoComplete="username"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <button type="submit" className="auth-submit-btn" disabled={resetLoading}>
+                      {resetLoading ? <span className="spinner"></span> : <span>Отправить инструкции</span>}
+                    </button>
+
+                    <div className="auth-reset-actions">
+                      <button
+                        type="button"
+                        className="auth-link-btn"
+                        onClick={() => {
+                          setIsResetPassword(false);
+                          setErrorMsg('');
+                        }}
+                        disabled={resetLoading}
+                      >
+                        Вернуться ко входу
+                      </button>
+                    </div>
+                  </form>
                 )}
               </div>
-
-              {/* Remember Me Toggle */}
-              {isLogin && (
-                <div className="auth-extra-row">
-                  <label className="auth-remember-label">
-                    <input
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={(e) => setRememberMe(e.target.checked)}
-                    />
-                    <span>Запомнить меня</span>
-                  </label>
-                </div>
-              )}
-
-              {/* Submit Button */}
-              <button type="submit" className="auth-submit-btn" disabled={loading}>
-                {loading ? (
-                  <span className="spinner"></span>
-                ) : isLogin ? (
-                  <>
-                    <LogIn size={18} />
-                    <span>Войти в аккаунт</span>
-                  </>
-                ) : (
-                  <>
-                    <UserPlus size={18} />
-                    <span>Создать аккаунт</span>
-                  </>
-                )}
-              </button>
-
-              {/* Compact Demo Mode Button positioned below main submit button */}
-              {!isSupabaseConfigured && (
-                <div className="auth-demo-compact-section">
-                  <button 
-                    type="button" 
-                    className="auth-demo-quick-btn"
-                    onClick={handleDemoLogin}
-                    disabled={loading}
-                    title="Вход в демонстрационном режиме с локальным профилем"
-                  >
-                    <Zap size={14} />
-                    <span>Быстрый вход в демо-режим (alex_dev)</span>
-                  </button>
-                  <span className="auth-demo-subtext">Локальный профиль без сетевой синхронизации</span>
-                </div>
-              )}
-            </form>
+            )}
 
             {/* Footer Security Badge */}
             <div className="auth-footer-security">

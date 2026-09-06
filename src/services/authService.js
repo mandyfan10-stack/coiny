@@ -177,6 +177,66 @@ export const authService = {
     return { data: cleanUser };
   },
 
+  resetPasswordForEmail: async (emailOrUsername) => {
+    const rawIdentifier = String(emailOrUsername || '').trim();
+    if (!rawIdentifier) {
+      return { error: new Error('Пожалуйста, укажите email или никнейм.') };
+    }
+
+    const isEmailIdentifier = rawIdentifier.includes('@');
+    if (isEmailIdentifier) {
+      const validated = validateAuthEmail(rawIdentifier);
+      if (!validated.ok) return { error: new Error(validated.error) };
+
+      if (isSupabaseConfigured) {
+        const { data, error } = await supabase.auth.resetPasswordForEmail(validated.email, {
+          redirectTo: typeof window !== 'undefined' ? `${window.location.origin}/#reset-password` : undefined
+        });
+        if (error) return { error: mapSupabaseAuthError(error, 'reset') };
+        return { data: data || { ok: true, email: validated.email } };
+      }
+
+      // Mock / offline demo
+      return { data: { ok: true, email: validated.email } };
+    }
+
+    const validated = validateAuthUsername(rawIdentifier);
+    if (!validated.ok) return { error: new Error(validated.error) };
+    const cleanUsername = validated.username;
+
+    if (isSupabaseConfigured) {
+      let targetEmail = null;
+      try {
+        const { data: resolvedEmail, error: resolveError } = await supabase.rpc(
+          'resolve_username_auth_email',
+          { p_username: cleanUsername }
+        );
+        if (!resolveError && typeof resolvedEmail === 'string' && resolvedEmail.includes('@')) {
+          targetEmail = resolvedEmail;
+        }
+      } catch {
+        // Fallback if RPC is missing
+      }
+
+      if (!targetEmail) {
+        targetEmail = buildSignupAuthEmail(cleanUsername);
+      }
+
+      const { data, error } = await supabase.auth.resetPasswordForEmail(targetEmail, {
+        redirectTo: typeof window !== 'undefined' ? `${window.location.origin}/#reset-password` : undefined
+      });
+      if (error) return { error: mapSupabaseAuthError(error, 'reset') };
+      return { data: data || { ok: true, email: targetEmail } };
+    }
+
+    // Mock / offline demo
+    return { data: { ok: true, email: `${cleanUsername}@demo.local` } };
+  },
+
+  resetPassword: async (emailOrUsername) => {
+    return await authService.resetPasswordForEmail(emailOrUsername);
+  },
+
   signOut: async () => {
     if (isSupabaseConfigured) {
       await supabase.auth.signOut();

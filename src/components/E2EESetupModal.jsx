@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useE2EE } from '../context/E2EEContext';
-import { LockKeyhole, ShieldAlert, Eye, EyeOff, Copy, Check, AlertTriangle, KeyRound, Info, Lock } from 'lucide-react';
+import { dataService } from '../services/dataLayer';
+import { LockKeyhole, ShieldAlert, Eye, EyeOff, AlertTriangle, Info, Lock, Mail, CheckCircle2 } from 'lucide-react';
 
 const getPasswordStrength = (pass) => {
   if (!pass) return { text: '', color: '', width: '0%' };
@@ -24,19 +25,13 @@ export default function E2EESetupModal() {
     e2eePrivateKey, 
     setupE2EE, 
     unlockE2EE,
-    changePasswordAfterRecovery,
     resetE2EE
   } = useE2EE();
 
-  // Setup states
-  const [setupStep, setSetupStep] = useState(1); // 1: Enter password, 2: Show recovery code
-  const [generatedCode, setGeneratedCode] = useState('');
-  const [copied, setCopied] = useState(false);
-  const [confirmCheckbox, setConfirmCheckbox] = useState(false);
-
   // Unlock/Recover states
-  const [viewMode, setViewMode] = useState('password'); // 'password', 'recovery_code', 'new_password'
-  const [recoveryCodeInput, setRecoveryCodeInput] = useState('');
+  const [viewMode, setViewMode] = useState('password'); // 'password', 'email_recovery'
+  const [recoveryEmail, setRecoveryEmail] = useState('');
+  const [emailSent, setEmailSent] = useState(false);
 
   // Common inputs
   const [password, setPassword] = useState('');
@@ -48,20 +43,10 @@ export default function E2EESetupModal() {
 
   if (authLoading || !currentUser) return null;
 
-  // After setupE2EE succeeds the profile flips has_e2ee=true, which clears
-  // isE2EESetupRequired via context useEffect. Keep the recovery-code step
-  // mounted with local wizard state so the user can save the code.
-  const showingRecoveryStep = setupStep === 2 && Boolean(generatedCode);
-  const needsSetup = isE2EESetupRequired || showingRecoveryStep;
-  const needsUnlock = currentUser.has_e2ee && !e2eePrivateKey && !showingRecoveryStep;
+  const needsSetup = isE2EESetupRequired;
+  const needsUnlock = currentUser.has_e2ee && !e2eePrivateKey;
 
   if (!needsSetup && !needsUnlock) return null;
-
-  const handleCopyCode = () => {
-    navigator.clipboard.writeText(generatedCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
 
   const handleSetupPasswordSubmit = async (e) => {
     e.preventDefault();
@@ -85,20 +70,11 @@ export default function E2EESetupModal() {
     setLoading(false);
 
     if (result && result.success) {
-      setGeneratedCode(result.recoveryCode);
-      setSetupStep(2);
       setPassword('');
       setConfirmPassword('');
     } else {
       setError('Не удалось настроить шифрование. Попробуйте еще раз.');
     }
-  };
-
-  const handleFinishSetup = () => {
-    // Reset local wizard states
-    setSetupStep(1);
-    setGeneratedCode('');
-    setConfirmCheckbox(false);
   };
 
   const handleUnlockPasswordSubmit = async (e) => {
@@ -121,56 +97,46 @@ export default function E2EESetupModal() {
     }
   };
 
-  const handleRecoverCodeSubmit = async (e) => {
-    e.preventDefault();
+  const handleOpenEmailRecovery = () => {
+    setViewMode('email_recovery');
     setError('');
-
-    const formattedCode = recoveryCodeInput.trim().toUpperCase();
-    if (formattedCode.replace(/-/g, '').length !== 24) {
-      setError('Код восстановления должен состоять из 24 символов.');
-      return;
-    }
-
-    setLoading(true);
-    const success = await unlockE2EE(formattedCode, true);
-    setLoading(false);
-
-    if (success) {
-      setViewMode('new_password');
-    } else {
-      setError('Неверный код восстановления. Пожалуйста, проверьте правильность ввода.');
-    }
+    setEmailSent(false);
+    const emailCandidate = String(currentUser?.email || '').trim();
+    const isSynthetic = emailCandidate.endsWith('@coiny.users.local') || 
+                        emailCandidate.endsWith('@tg-clone.com') || 
+                        emailCandidate.endsWith('@demo.local');
+    setRecoveryEmail(isSynthetic ? '' : emailCandidate);
   };
 
-  const handleNewPasswordSubmit = async (e) => {
+  const handleBackToPassword = () => {
+    setViewMode('password');
+    setEmailSent(false);
+    setError('');
+  };
+
+  const handleEmailRecoverySubmit = async (e) => {
     e.preventDefault();
     setError('');
 
-    if (!password) {
-      setError('Пожалуйста, введите новый пароль.');
-      return;
-    }
-    if (password.length < 12) {
-      setError('Пароль должен содержать не менее 12 символов.');
-      return;
-    }
-    if (password !== confirmPassword) {
-      setError('Пароли не совпадают.');
+    const targetEmail = recoveryEmail.trim();
+    if (!targetEmail) {
+      setError('Пожалуйста, введите адрес электронной почты.');
       return;
     }
 
     setLoading(true);
-    const codeToUse = recoveryCodeInput.trim().toUpperCase();
-    const success = await changePasswordAfterRecovery(codeToUse, password);
-    setLoading(false);
-
-    if (success) {
-      setPassword('');
-      setConfirmPassword('');
-      setRecoveryCodeInput('');
-      setViewMode('password'); // Reset to default view
-    } else {
-      setError('Не удалось обновить пароль. Пожалуйста, попробуйте еще раз.');
+    try {
+      const result = await dataService.resetPasswordForEmail(targetEmail);
+      if (result?.error) {
+        setError(result.error.message || 'Не удалось отправить ссылку для восстановления.');
+      } else {
+        setEmailSent(true);
+      }
+    } catch (err) {
+      console.error(err);
+      setError(err?.message || 'Произошла ошибка при отправке инструкций.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -182,7 +148,8 @@ export default function E2EESetupModal() {
     setViewMode('password');
     setPassword('');
     setConfirmPassword('');
-    setRecoveryCodeInput('');
+    setRecoveryEmail('');
+    setEmailSent(false);
     setError('');
   };
 
@@ -223,134 +190,82 @@ export default function E2EESetupModal() {
           </div>
         ) : needsSetup ? (
           /* ========================================================
-             1. SETUP FLOW
+             1. SETUP FLOW (Single step - activates immediately)
              ======================================================== */
-          setupStep === 1 ? (
-            <div className="e2ee-setup-step-1 animate-scale-up">
-              <div className="e2ee-modal-header">
-                <div className="e2ee-icon-container setup-glow">
-                  <ShieldAlert className="e2ee-header-icon setup-icon" />
-                </div>
-                <h2>Активация сквозного шифрования</h2>
-                <p className="e2ee-subtitle">
-                  Coiny защищает ваши личные переписки с помощью надежного E2EE-шифрования. Задайте секретный пароль для создания ключей безопасности.
-                </p>
+          <div className="e2ee-setup-step-1 animate-scale-up">
+            <div className="e2ee-modal-header">
+              <div className="e2ee-icon-container setup-glow">
+                <ShieldAlert className="e2ee-header-icon setup-icon" />
               </div>
+              <h2>Активация сквозного шифрования</h2>
+              <p className="e2ee-subtitle">
+                Coiny защищает ваши личные переписки с помощью надежного E2EE-шифрования. Задайте секретный пароль для создания ключей безопасности.
+              </p>
+            </div>
 
-              <form onSubmit={handleSetupPasswordSubmit} className="e2ee-form">
-                {error && <div className="e2ee-error-banner">{error}</div>}
+            <form onSubmit={handleSetupPasswordSubmit} className="e2ee-form">
+              {error && <div className="e2ee-error-banner">{error}</div>}
 
-                <div className="e2ee-input-group">
-                  <label htmlFor="setup-password">Пароль шифрования</label>
-                  <div className="password-input-wrapper">
-                    <input
-                      id="setup-password"
-                      type={showPassword ? 'text' : 'password'}
-                      placeholder="Придумайте надежный пароль"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      disabled={loading}
-                      autoComplete="new-password"
-                    />
-                    <button
-                      type="button"
-                      className="password-toggle-btn"
-                      onClick={() => setShowPassword(!showPassword)}
-                      disabled={loading}
-                    >
-                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                    </button>
-                  </div>
-                  {password && (
-                    <div className="password-strength-meter" style={{ marginTop: '8px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px', color: 'var(--text-secondary)' }}>
-                        <span>Стойкость: <strong style={{ color: getPasswordStrength(password).color }}>{getPasswordStrength(password).text}</strong></span>
-                      </div>
-                      <div style={{ height: '4px', width: '100%', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '2px', overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: getPasswordStrength(password).width, backgroundColor: getPasswordStrength(password).color, transition: 'width 0.3s' }}></div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="e2ee-input-group">
-                  <label htmlFor="setup-confirm-password">Подтвердите пароль</label>
+              <div className="e2ee-input-group">
+                <label htmlFor="setup-password">Пароль шифрования</label>
+                <div className="password-input-wrapper">
                   <input
-                    id="setup-confirm-password"
+                    id="setup-password"
                     type={showPassword ? 'text' : 'password'}
-                    placeholder="Повторите ваш пароль"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Придумайте надежный пароль"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
                     disabled={loading}
                     autoComplete="new-password"
-                    style={{ width: '100%', boxSizing: 'border-box' }}
-                    className="styled-input"
                   />
-                </div>
-
-                <div className="e2ee-warning-notice">
-                  <Info size={16} style={{ flexShrink: 0 }} />
-                  <span>
-                    Этот пароль никогда не отправляется на сервер. Он используется исключительно локально на ваших устройствах.
-                  </span>
-                </div>
-
-                <button type="submit" className="e2ee-submit-btn" disabled={loading}>
-                  {loading ? <span className="spinner"></span> : 'Создать ключи шифрования'}
-                </button>
-              </form>
-            </div>
-          ) : (
-            <div className="e2ee-setup-step-2 animate-scale-up">
-              <div className="e2ee-modal-header">
-                <div className="e2ee-icon-container success-glow">
-                  <KeyRound className="e2ee-header-icon success-icon" />
-                </div>
-                <h2>Код восстановления</h2>
-                <p className="e2ee-subtitle">
-                  Этот код понадобится вам для восстановления переписки, если вы забудете пароль или захотите войти на другом устройстве.
-                </p>
-              </div>
-
-              <div className="e2ee-code-box-container">
-                <div className="e2ee-code-label">Ваш код восстановления (24 символа):</div>
-                <div className="e2ee-recovery-code-card">
-                  <span className="recovery-code-text">{generatedCode}</span>
-                  <button type="button" className="e2ee-copy-icon-btn" onClick={handleCopyCode}>
-                    {copied ? <Check size={18} className="success-icon" /> : <Copy size={18} />}
+                  <button
+                    type="button"
+                    className="password-toggle-btn"
+                    onClick={() => setShowPassword(!showPassword)}
+                    disabled={loading}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
+                {password && (
+                  <div className="password-strength-meter" style={{ marginTop: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px', color: 'var(--text-secondary)' }}>
+                      <span>Стойкость: <strong style={{ color: getPasswordStrength(password).color }}>{getPasswordStrength(password).text}</strong></span>
+                    </div>
+                    <div style={{ height: '4px', width: '100%', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '2px', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: getPasswordStrength(password).width, backgroundColor: getPasswordStrength(password).color, transition: 'width 0.3s' }}></div>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="e2ee-warning-notice critical">
-                <AlertTriangle size={18} style={{ flexShrink: 0 }} />
+              <div className="e2ee-input-group">
+                <label htmlFor="setup-confirm-password">Подтвердите пароль</label>
+                <input
+                  id="setup-confirm-password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Повторите ваш пароль"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  disabled={loading}
+                  autoComplete="new-password"
+                  style={{ width: '100%', boxSizing: 'border-box' }}
+                  className="styled-input"
+                />
+              </div>
+
+              <div className="e2ee-warning-notice">
+                <Info size={16} style={{ flexShrink: 0 }} />
                 <span>
-                  Запишите этот код или сохраните его в менеджере паролей. **Если вы потеряете и пароль, и код восстановления, вы потеряете доступ к старым чатам навсегда!**
+                  Этот пароль никогда не отправляется на сервер. Он используется исключительно локально на ваших устройствах.
                 </span>
               </div>
 
-              <div className="e2ee-checkbox-group">
-                <label className="checkbox-container">
-                  <input
-                    type="checkbox"
-                    checked={confirmCheckbox}
-                    onChange={(e) => setConfirmCheckbox(e.target.checked)}
-                  />
-                  <span className="checkbox-checkmark"></span>
-                  <span className="checkbox-label">Я сохранил код восстановления в надежном месте</span>
-                </label>
-              </div>
-
-              <button 
-                type="button" 
-                className="e2ee-submit-btn" 
-                disabled={!confirmCheckbox} 
-                onClick={handleFinishSetup}
-              >
-                Активировать шифрование
+              <button type="submit" className="e2ee-submit-btn" disabled={loading}>
+                {loading ? <span className="spinner"></span> : 'Создать ключи шифрования'}
               </button>
-            </div>
-          )
+            </form>
+          </div>
         ) : (
           /* ========================================================
              2. UNLOCK & RECOVERY FLOW
@@ -401,9 +316,9 @@ export default function E2EESetupModal() {
                   <button 
                     type="button" 
                     className="e2ee-link-btn" 
-                    onClick={() => { setViewMode('recovery_code'); setError(''); }}
+                    onClick={handleOpenEmailRecovery}
                   >
-                    Забыли пароль? Восстановить по коду
+                    Забыли пароль? Восстановить через Email
                   </button>
                   
                   <button 
@@ -416,119 +331,88 @@ export default function E2EESetupModal() {
                 </div>
               </form>
             </div>
-          ) : viewMode === 'recovery_code' ? (
+          ) : (
+            /* viewMode === 'email_recovery' */
             <div className="e2ee-unlock-recovery animate-scale-up">
               <div className="e2ee-modal-header">
                 <div className="e2ee-icon-container recovery-glow">
-                  <KeyRound className="e2ee-header-icon recovery-icon" />
+                  <Mail className="e2ee-header-icon recovery-icon" />
                 </div>
-                <h2>Восстановление доступа</h2>
+                <h2>Восстановление через Email</h2>
                 <p className="e2ee-subtitle">
-                  Введите ваш 24-значный код восстановления для расшифровки приватного ключа.
+                  Введите адрес электронной почты для получения ссылки и инструкций по восстановлению доступа.
                 </p>
               </div>
 
-              <form onSubmit={handleRecoverCodeSubmit} className="e2ee-form">
-                {error && <div className="e2ee-error-banner">{error}</div>}
+              {emailSent ? (
+                <div className="e2ee-recovery-success animate-fade-in">
+                  <div className="e2ee-notice-box" style={{ background: 'rgba(46, 204, 113, 0.1)', borderColor: 'rgba(46, 204, 113, 0.3)', color: '#2ecc71', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <CheckCircle2 size={18} style={{ flexShrink: 0 }} />
+                    <span>Инструкции по восстановлению успешно отправлены на ваш email. Проверьте почтовый ящик.</span>
+                  </div>
 
-                <div className="e2ee-input-group">
-                  <label htmlFor="recovery-code">Код восстановления</label>
-                  <input
-                    id="recovery-code"
-                    type="text"
-                    placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"
-                    value={recoveryCodeInput}
-                    onChange={(e) => setRecoveryCodeInput(e.target.value)}
-                    disabled={loading}
-                    className="recovery-code-input-fieldstyled"
-                    autoComplete="off"
-                    maxLength={29} // 24 chars + 5 dashes
-                  />
-                </div>
-
-                <button type="submit" className="e2ee-submit-btn" disabled={loading}>
-                  {loading ? <span className="spinner"></span> : 'Проверить код'}
-                </button>
-
-                <div className="e2ee-alt-actions">
-                  <button 
-                    type="button" 
-                    className="e2ee-link-btn" 
-                    onClick={() => { setViewMode('password'); setError(''); }}
+                  <button
+                    type="button"
+                    className="e2ee-submit-btn"
+                    onClick={handleBackToPassword}
                   >
                     Вернуться к вводу пароля
                   </button>
-                </div>
-              </form>
-            </div>
-          ) : (
-            /* viewMode === 'new_password' */
-            <div className="e2ee-unlock-new-password animate-scale-up">
-              <div className="e2ee-modal-header">
-                <div className="e2ee-icon-container success-glow">
-                  <Check className="e2ee-header-icon success-icon" />
-                </div>
-                <h2>Установка нового пароля</h2>
-                <p className="e2ee-subtitle">
-                  Код принят! Приватный ключ успешно расшифрован. Пожалуйста, задайте новый пароль шифрования для будущих входов.
-                </p>
-              </div>
 
-              <form onSubmit={handleNewPasswordSubmit} className="e2ee-form">
-                {error && <div className="e2ee-error-banner">{error}</div>}
-
-                <div className="e2ee-input-group">
-                  <label htmlFor="new-password">Новый пароль</label>
-                  <div className="password-input-wrapper">
-                    <input
-                      id="new-password"
-                      type={showPassword ? 'text' : 'password'}
-                      placeholder="Введите новый пароль"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      disabled={loading}
-                      autoComplete="new-password"
-                    />
-                    <button
-                      type="button"
-                      className="password-toggle-btn"
-                      onClick={() => setShowPassword(!showPassword)}
-                      disabled={loading}
+                  <div className="e2ee-alt-actions" style={{ marginTop: '14px' }}>
+                    <button 
+                      type="button" 
+                      className="e2ee-link-btn danger" 
+                      onClick={() => setShowResetConfirm(true)}
                     >
-                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      Сбросить шифрование аккаунта
                     </button>
                   </div>
-                  {password && (
-                    <div className="password-strength-meter" style={{ marginTop: '8px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px', color: 'var(--text-secondary)' }}>
-                        <span>Стойкость: <strong style={{ color: getPasswordStrength(password).color }}>{getPasswordStrength(password).text}</strong></span>
-                      </div>
-                      <div style={{ height: '4px', width: '100%', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '2px', overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: getPasswordStrength(password).width, backgroundColor: getPasswordStrength(password).color, transition: 'width 0.3s' }}></div>
-                      </div>
-                    </div>
-                  )}
                 </div>
+              ) : (
+                <form onSubmit={handleEmailRecoverySubmit} className="e2ee-form">
+                  {error && <div className="e2ee-error-banner">{error}</div>}
 
-                <div className="e2ee-input-group">
-                  <label htmlFor="new-confirm-password">Подтвердите пароль</label>
-                  <input
-                    id="new-confirm-password"
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Повторите новый пароль"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    disabled={loading}
-                    autoComplete="new-password"
-                    style={{ width: '100%', boxSizing: 'border-box' }}
-                    className="styled-input"
-                  />
-                </div>
+                  <div className="e2ee-input-group">
+                    <label htmlFor="recovery-email">Адрес электронной почты</label>
+                    <input
+                      id="recovery-email"
+                      type="email"
+                      placeholder="your.email@example.com"
+                      value={recoveryEmail}
+                      onChange={(e) => setRecoveryEmail(e.target.value)}
+                      disabled={loading}
+                      className="styled-input"
+                      autoComplete="email"
+                      required
+                    />
+                  </div>
 
-                <button type="submit" className="e2ee-submit-btn" disabled={loading}>
-                  {loading ? <span className="spinner"></span> : 'Сохранить пароль и войти'}
-                </button>
-              </form>
+                  <button type="submit" className="e2ee-submit-btn" disabled={loading}>
+                    {loading ? <span className="spinner"></span> : 'Отправить инструкции'}
+                  </button>
+
+                  <div className="e2ee-alt-actions">
+                    <button 
+                      type="button" 
+                      className="e2ee-link-btn" 
+                      onClick={handleBackToPassword}
+                      disabled={loading}
+                    >
+                      Вернуться к вводу пароля
+                    </button>
+
+                    <button 
+                      type="button" 
+                      className="e2ee-link-btn danger" 
+                      onClick={() => setShowResetConfirm(true)}
+                      disabled={loading}
+                    >
+                      Сбросить шифрование аккаунта
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           )
         )}

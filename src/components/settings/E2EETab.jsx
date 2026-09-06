@@ -182,7 +182,7 @@ export default function E2EETab({
           <span>Безопасность ключей</span>
         </h6>
         <p className="info-desc" style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '6px 0 0 0', lineHeight: '1.4' }}>
-          Приватный ключ защищён вашим паролем и кодом восстановления. Сервер не имеет доступа к незашифрованной переписке.
+          Приватный ключ защищён вашим паролем. Сервер не имеет доступа к незашифрованной переписке.
         </p>
       </div>
 
@@ -217,7 +217,7 @@ export default function E2EETab({
           <div className="session-info-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ color: 'var(--text-secondary)' }}>Режим подключения:</span>
             <span className="session-info-value" style={{ fontWeight: '600', color: isSupabaseConfigured ? '#0f9d58' : '#d97706' }}>
-              {isSupabaseConfigured ? '🟢 Supabase (Live)' : '🟡 Локальный демо-режим'}
+              {isSupabaseConfigured ? 'Supabase (Live)' : 'Локальный демо-режим'}
             </span>
           </div>
         </div>

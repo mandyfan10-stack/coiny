@@ -168,6 +168,10 @@ export const AuthProvider = ({ children }) => {
     return { data };
   };
 
+  const resetPasswordForEmail = async (emailOrUsername) => {
+    return await dataService.resetPasswordForEmail(emailOrUsername);
+  };
+
   const logOut = async () => {
     await dataService.signOut();
     try {
@@ -195,6 +199,8 @@ export const AuthProvider = ({ children }) => {
       signUpWithUsername,
       signInWithIdentifier,
       signInWithUsername,
+      resetPasswordForEmail,
+      resetPassword: resetPasswordForEmail,
       updateEmail,
       logOut,
       updateProfile
