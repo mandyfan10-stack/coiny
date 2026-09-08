@@ -53,7 +53,7 @@ export function useChatActions({
             }
             return m;
           });
-          return { ...c, messages: updatedMessages };
+          return { ...c, messages: updatedMessages, unread_count: 0 };
         }
         return c;
       }));
@@ -333,6 +333,9 @@ export function useChatActions({
         }
 
         await dataService.sendMessage(activeChatId, currentUser.id, textToSend, replyToId, mediaToSend, messageId);
+        // Persist confirmed status to IndexedDB cache
+        updateCachedMessageFields(messageId, { isOptimistic: false, isPending: false });
+
         // Confirm delivery locally even if the INSERT realtime event is coalesced
         // with an existing optimistic bubble.
         setChats((prevChats) => prevChats.map((c) => {

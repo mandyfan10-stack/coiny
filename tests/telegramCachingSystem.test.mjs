@@ -34,6 +34,22 @@ const appearanceTabCode = await readFile(
   new URL('../src/components/settings/AppearanceTab.jsx', import.meta.url),
   'utf8'
 );
+const useResolvedMediaCode = await readFile(
+  new URL('../src/hooks/useResolvedMedia.js', import.meta.url),
+  'utf8'
+);
+const useOfflineSyncCode = await readFile(
+  new URL('../src/context/chat/useOfflineSync.js', import.meta.url),
+  'utf8'
+);
+const chatAreaCode = await readFile(
+  new URL('../src/components/ChatArea.jsx', import.meta.url),
+  'utf8'
+);
+const sidebarCode = await readFile(
+  new URL('../src/components/Sidebar.jsx', import.meta.url),
+  'utf8'
+);
 
 test('normalizeCachedMessage and denormalizeCachedMessage convert timestamps and preserve message fields', () => {
   const original = {
@@ -129,3 +145,35 @@ test('AppearanceTab renders Storage and Data section with cache size and clear c
   assert.match(appearanceTabCode, /clearMediaAndMessageCache/);
   assert.match(appearanceTabCode, /Очистить кэш/);
 });
+
+test('useResolvedMedia integrates persistent IndexedDB media caching for instant offline playback', () => {
+  assert.match(useResolvedMediaCode, /getCachedMedia\(cacheKey\)/);
+  assert.match(useResolvedMediaCode, /saveCachedMedia\(cacheKey,\s*finalBlob/);
+  assert.match(useResolvedMediaCode, /!navigator\.onLine/);
+});
+
+test('indexedDbHelper provides getCachedMessagesBeforeTimestamp and non-blocking readonly getCachedMedia', () => {
+  assert.match(indexedDbHelperCode, /export async function getCachedMessagesBeforeTimestamp\(/);
+  assert.match(indexedDbHelperCode, /db\.transaction\(MEDIA_CACHE_STORE_NAME,\s*'readonly'\)/);
+  assert.match(indexedDbHelperCode, /queueTouchMediaAccess/);
+});
+
+test('useChatLoader preserves older history on SWR merge and supports local pagination', () => {
+  assert.match(useChatLoaderCode, /olderHistory/);
+  assert.match(useChatLoaderCode, /getCachedMessagesBeforeTimestamp\(chatId,\s*oldestTimestamp/);
+  // Must not have the 5-message trap
+  assert.ok(!useChatLoaderCode.includes('(currentChat?.messages?.length || 0) > 1'));
+});
+
+test('message confirmation updates isOptimistic status in IndexedDB across actions, realtime, and offline sync', () => {
+  assert.match(useChatActionsCode, /updateCachedMessageFields\(messageId,\s*\{\s*isOptimistic:\s*false,\s*isPending:\s*false\s*\}\)/);
+  assert.match(useChatRealtimeCode, /updateCachedMessageFields\(newMsg\.id,\s*\{\s*isOptimistic:\s*false/);
+  assert.match(useOfflineSyncCode, /saveCachedMessage\(\{[\s\S]*?id:\s*data\.id[\s\S]*?isOptimistic:\s*false/);
+});
+
+test('ChatArea and Sidebar calculate unread status and divider accurately', () => {
+  assert.match(chatAreaCode, /firstUnreadIndex/);
+  assert.match(chatAreaCode, /findIndex\(\(m\)\s*=>\s*m\.senderId\s*!==\s*currentUser\?\.id/);
+  assert.match(sidebarCode, /typeof chat\.unread_count === 'number'/);
+});
+

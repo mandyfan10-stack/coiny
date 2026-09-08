@@ -136,7 +136,13 @@ export function useChatRealtime({
               const existingIndex = chat.messages.findIndex((m) => m.id === newMsg.id);
               if (existingIndex !== -1) {
                 // Own optimistic bubble (same client id) or a race with message_reads:
-                // merge instead of ignoring the INSERT event.
+                // update local IndexedDB cache with confirmed status and merge into state
+                updateCachedMessageFields(newMsg.id, {
+                  isOptimistic: false,
+                  isPending: false,
+                  read: formattedMsg.read,
+                  reads: formattedMsg.reads
+                });
                 const nextMessages = chat.messages.map((m, index) => (
                   index === existingIndex
                     ? {

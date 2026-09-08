@@ -1203,8 +1203,9 @@ function formatDateDivider(timestamp) {
                 new Date(msg.timestamp).toDateString() !== new Date(prevMsg.timestamp).toDateString()
               );
               const dateDividerText = showDateDivider ? formatDateDivider(msg.timestamp) : null;
-              const unreadCount = activeChat.unread_count || 0;
-              const firstUnreadIndex = unreadCount > 0 ? activeChat.messages.length - unreadCount : -1;
+              const firstUnreadIndex = (activeChat.unread_count > 0)
+                ? activeChat.messages.length - activeChat.unread_count
+                : activeChat.messages.findIndex((m) => m.senderId !== currentUser?.id && m.senderId !== 'current' && !m.read);
               const showUnreadDivider = index === firstUnreadIndex && firstUnreadIndex > 0;
 
               return (

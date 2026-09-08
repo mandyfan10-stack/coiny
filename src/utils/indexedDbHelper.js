@@ -439,6 +439,45 @@ export async function getCachedMessagesForChat(chatId, userId, limit = 200) {
 }
 
 /**
+ * Retrieve messages for a chat from messages-cache-v2 that occurred before a given timestamp, sorted chronologically
+ */
+export async function getCachedMessagesBeforeTimestamp(chatId, beforeTimestamp, limit = 30) {
+  if (!chatId || !beforeTimestamp || typeof indexedDB === 'undefined') return [];
+  try {
+    const beforeDate = new Date(beforeTimestamp);
+    if (isNaN(beforeDate.getTime())) return [];
+    const beforeIso = beforeDate.toISOString();
+
+    const db = await initOfflineDB();
+    const tx = db.transaction(MESSAGES_CACHE_V2_STORE_NAME, 'readonly');
+    const store = tx.objectStore(MESSAGES_CACHE_V2_STORE_NAME);
+    const index = store.index('by-chat-timestamp');
+
+    const lowerBound = [String(chatId), ''];
+    const upperBound = [String(chatId), beforeIso];
+    const range = IDBKeyRange.bound(lowerBound, upperBound, false, true);
+
+    return new Promise((resolve) => {
+      const results = [];
+      const req = index.openCursor(range, 'prev'); // Most recent before timestamp
+      req.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor && results.length < limit) {
+          results.push(denormalizeCachedMessage(cursor.value));
+          cursor.continue();
+        } else {
+          resolve(results.reverse()); // Chronological order
+        }
+      };
+      req.onerror = () => resolve([]);
+    });
+  } catch (err) {
+    console.warn('Failed to read messages before timestamp:', err);
+    return [];
+  }
+}
+
+/**
  * Delete a single cached message by message ID
  */
 export async function deleteCachedMessage(messageId) {
@@ -572,22 +611,51 @@ export async function saveCachedMedia(key, blob, mimeType) {
   }
 }
 
+let pendingTouchMediaKeys = new Set();
+let touchMediaTimeout = null;
+
+function queueTouchMediaAccess(key) {
+  if (typeof indexedDB === 'undefined' || !key) return;
+  pendingTouchMediaKeys.add(String(key).trim());
+  if (touchMediaTimeout) return;
+  touchMediaTimeout = setTimeout(async () => {
+    touchMediaTimeout = null;
+    const keys = Array.from(pendingTouchMediaKeys);
+    pendingTouchMediaKeys.clear();
+    if (keys.length === 0) return;
+    try {
+      const db = await initOfflineDB();
+      const tx = db.transaction(MEDIA_CACHE_STORE_NAME, 'readwrite');
+      const store = tx.objectStore(MEDIA_CACHE_STORE_NAME);
+      const now = Date.now();
+      for (const k of keys) {
+        const record = await requestResult(store.get(k));
+        if (record) {
+          record.lastAccessedAt = now;
+          store.put(record);
+        }
+      }
+      await transactionComplete(tx);
+    } catch {
+      // background touch error can safely be ignored
+    }
+  }, 1000);
+}
+
 /**
- * Retrieve a cached media Blob by key and touch its lastAccessedAt timestamp
+ * Retrieve a cached media Blob by key with non-blocking readonly transaction
  */
 export async function getCachedMedia(key) {
   if (!key || typeof indexedDB === 'undefined') return null;
   const cleanKey = String(key).trim();
   try {
     const db = await initOfflineDB();
-    const tx = db.transaction(MEDIA_CACHE_STORE_NAME, 'readwrite');
+    const tx = db.transaction(MEDIA_CACHE_STORE_NAME, 'readonly');
     const store = tx.objectStore(MEDIA_CACHE_STORE_NAME);
     const record = await requestResult(store.get(cleanKey));
 
     if (record && record.blob instanceof Blob) {
-      record.lastAccessedAt = Date.now();
-      store.put(record);
-      await transactionComplete(tx);
+      queueTouchMediaAccess(cleanKey);
       return record.blob;
     }
     return null;

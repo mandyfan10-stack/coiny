@@ -6,6 +6,7 @@ import {
   saveCachedMessages,
   saveCachedMessagesBatch,
   getCachedMessagesForChat,
+  getCachedMessagesBeforeTimestamp,
   saveCachedChatList,
   getCachedChatList
 } from '../../utils/indexedDbHelper';
@@ -272,12 +273,21 @@ export function useChatLoader({
           };
         });
 
-        // Retain optimistic / pending messages not yet reflected on server
         const incomingIds = new Set(decryptedMsgs.map((m) => m.id));
+
+        // Seamless Merge: preserve older history already in memory so SWR doesn't truncate chat
+        const oldestIncomingTime = decryptedMsgs.length > 0
+          ? new Date(decryptedMsgs[0].timestamp).getTime()
+          : Infinity;
+        const olderHistory = existingMessages.filter(
+          (m) => !incomingIds.has(m.id) && !m.isPending && !m.isOptimistic && new Date(m.timestamp).getTime() < oldestIncomingTime
+        );
+
+        // Retain optimistic / pending messages not yet reflected on server
         const pending = existingMessages.filter(
           (m) => (m.isPending || m.isOptimistic) && !incomingIds.has(m.id)
         );
-        const finalMessages = [...merged, ...pending].sort(
+        const finalMessages = [...olderHistory, ...merged, ...pending].sort(
           (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
         );
 
@@ -302,6 +312,27 @@ export function useChatLoader({
     setMessagePagination((prev) => ({ ...prev, [chatId]: { ...prev[chatId], loading: true } }));
     try {
       const oldestTimestamp = chat.messages[0]?.timestamp;
+
+      // 1. Instant 0ms pagination from local IndexedDB cache
+      const cachedOlder = await getCachedMessagesBeforeTimestamp(chatId, oldestTimestamp, 30);
+      if (Array.isArray(cachedOlder) && cachedOlder.length > 0) {
+        setChats((prev) => (Array.isArray(prev) ? prev : []).map((c) => {
+          if (c.id !== chatId) return c;
+          const currentMessages = Array.isArray(c.messages) ? c.messages : [];
+          const known = new Set(currentMessages.map((message) => message.id));
+          const finalMessages = [...cachedOlder.filter((message) => !known.has(message.id)), ...currentMessages];
+          return { ...c, messages: finalMessages };
+        }));
+        setMessagePagination((prev) => ({ ...prev, [chatId]: { loading: false, hasMore: true } }));
+        return cachedOlder.length;
+      }
+
+      // 2. If local cache is exhausted or offline, handle network
+      if (!navigator.onLine) {
+        setMessagePagination((prev) => ({ ...prev, [chatId]: { loading: false, hasMore: false } }));
+        return 0;
+      }
+
       const olderRaw = await dataService.loadChatMessages(chatId, 30, oldestTimestamp);
       const older = Array.isArray(olderRaw) ? olderRaw : [];
 
@@ -335,33 +366,53 @@ export function useChatLoader({
     }
   }, [currentUser, currentUserId, messagePagination, setSharedKeysCache, setChats, chatsRef, e2eePrivateKeyRef, sharedKeysCacheRef]);
 
-  // Stale-While-Revalidate: hydrate instantly from cache on chat selection
+  // Stale-While-Revalidate: Telegram-style instant 0ms history hydration on chat selection
   useEffect(() => {
     if (!activeChatId) return;
 
     let isMounted = true;
     const currentChat = chatsRef.current.find((c) => c.id === activeChatId);
-    const hasLoadedHistory = (currentChat?.messages?.length || 0) > 1;
+    const inMemoryCount = currentChat?.messages?.length || 0;
 
-    if (!hasLoadedHistory) {
-      getCachedMessagesForChat(activeChatId, currentUserId).then((cached) => {
-        if (!isMounted) return;
-        if (Array.isArray(cached) && cached.length > 0) {
-          setChats((prev) => (Array.isArray(prev) ? prev : []).map((c) => {
-            if (c.id !== activeChatId) return c;
-            const pending = (c.messages || []).filter((m) => m.isPending || m.isOptimistic);
-            const cachedIds = new Set(cached.map((m) => m.id));
-            const uniquePending = pending.filter((m) => !cachedIds.has(m.id));
-            return { ...c, messages: [...cached, ...uniquePending] };
-          }));
-          setIsChatLoading((prev) => ({ ...prev, [activeChatId]: false }));
-        } else {
-          setIsChatLoading((prev) => ({ ...prev, [activeChatId]: true }));
-        }
-      });
-    } else {
+    // Do not show full-page loading spinner if we already have some messages in memory
+    if (inMemoryCount > 0) {
       setIsChatLoading((prev) => ({ ...prev, [activeChatId]: false }));
     }
+
+    // Always hydrate from IndexedDB to show full cached history (not just preview messages)
+    getCachedMessagesForChat(activeChatId, currentUserId).then((cached) => {
+      if (!isMounted) return;
+      if (Array.isArray(cached) && cached.length > 0) {
+        setChats((prev) => (Array.isArray(prev) ? prev : []).map((c) => {
+          if (c.id !== activeChatId) return c;
+          const currentMsgs = Array.isArray(c.messages) ? c.messages : [];
+
+          // If current chat already has more messages loaded (e.g. user paginated 100+ items), preserve them
+          if (currentMsgs.length > cached.length) {
+            const cachedById = new Map(cached.map((m) => [m.id, m]));
+            return {
+              ...c,
+              messages: currentMsgs.map((m) => {
+                const cm = cachedById.get(m.id);
+                return cm ? { ...cm, ...m } : m;
+              })
+            };
+          }
+
+          const pending = currentMsgs.filter((m) => m.isPending || m.isOptimistic);
+          const cachedIds = new Set(cached.map((m) => m.id));
+          const uniquePending = pending.filter((m) => !cachedIds.has(m.id));
+          return { ...c, messages: [...cached, ...uniquePending] };
+        }));
+        setIsChatLoading((prev) => ({ ...prev, [activeChatId]: false }));
+      } else {
+        setIsChatLoading((prev) => ({ ...prev, [activeChatId]: inMemoryCount === 0 }));
+      }
+    }).catch(() => {
+      if (isMounted) {
+        setIsChatLoading((prev) => ({ ...prev, [activeChatId]: false }));
+      }
+    });
 
     return () => {
       isMounted = false;

@@ -5,6 +5,7 @@ import { supabase } from '../supabaseClient';
 import { decryptFile } from '../utils/e2eeHelper';
 import { getAttachmentMimeType, getPrivateMediaReference } from '../utils/storageMedia';
 import { createManagedObjectUrl, revokeManagedObjectUrl } from '../utils/objectUrlRegistry';
+import { getCachedMedia, saveCachedMedia } from '../utils/indexedDbHelper';
 
 export default function useResolvedMedia(mediaUrl, chatId, fallbackMimeType, reloadKey = 0) {
   const [media, setMedia] = useState({ source: null, url: null, loading: false, error: null });
@@ -27,12 +28,31 @@ export default function useResolvedMedia(mediaUrl, chatId, fallbackMimeType, rel
       return;
     }
 
+    const cacheKey = `media:${storageReference.bucket}:${storageReference.path}`;
     let active = true;
     let objectUrl = null;
     setMedia({ source: mediaUrl, url: null, loading: true, error: null });
 
     const load = async () => {
       try {
+        // 1. Instant 0ms read from persistent IndexedDB media cache
+        const cachedBlob = await getCachedMedia(cacheKey);
+        if (cachedBlob instanceof Blob) {
+          objectUrl = createManagedObjectUrl(currentObjectUrlKey, cachedBlob);
+          if (active) {
+            setMedia({ source: mediaUrl, url: objectUrl, loading: false, error: null });
+          } else {
+            revokeManagedObjectUrl(currentObjectUrlKey);
+            objectUrl = null;
+          }
+          return;
+        }
+
+        if (!navigator.onLine) {
+          throw new Error('Офлайн-режим: медиа отсутствует в локальном кэше');
+        }
+
+        // 2. Fetch from remote storage if not cached
         const { data: downloadedBlob, error } = await supabase.storage
           .from(storageReference.bucket)
           .download(storageReference.path);
@@ -47,6 +67,9 @@ export default function useResolvedMedia(mediaUrl, chatId, fallbackMimeType, rel
             getAttachmentMimeType(mediaUrl, fallbackMimeType)
           );
         }
+
+        // 3. Save decrypted/ready blob to media-cache for instant offline & future renders
+        saveCachedMedia(cacheKey, finalBlob, finalBlob.type).catch(() => {});
 
         objectUrl = createManagedObjectUrl(currentObjectUrlKey, finalBlob);
         if (active) {

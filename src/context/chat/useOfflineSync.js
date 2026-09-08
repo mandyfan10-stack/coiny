@@ -6,7 +6,11 @@ import {
   processOfflineQueueItem,
   isNetworkError
 } from '../../services/offlineQueue';
-import { deleteOfflineAttachment } from '../../utils/indexedDbHelper';
+import {
+  deleteOfflineAttachment,
+  saveCachedMessage,
+  deleteCachedMessage
+} from '../../utils/indexedDbHelper';
 import { revokeManagedObjectUrl } from '../../utils/objectUrlRegistry';
 
 /**
@@ -155,6 +159,18 @@ export function useOfflineSync({
 
           if (!isCurrentSession()) break;
           if (data) {
+            deleteCachedMessage(item.optimisticId);
+            saveCachedMessage({
+              id: data.id,
+              senderId: currentUser?.id,
+              text: item.text,
+              media: finalMediaUrl,
+              replyTo: item.replyToId,
+              timestamp: new Date(),
+              isPending: false,
+              isOptimistic: false
+            }, item.chatId, currentUser?.id);
+
             setChats((prevChats) => prevChats.map((c) => {
               if (c.id === item.chatId) {
                 return {

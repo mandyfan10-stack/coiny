@@ -307,9 +307,11 @@ export default function Sidebar() {
           sortedChats.map(chat => {
             const lastMsg = chat.messages[chat.messages.length - 1];
             const isActive = chat.id === activeChatId;
-            const unreadCount = chat.messages.filter(
-              m => m.senderId !== currentUser?.id && m.senderId !== 'current' && !m.read
-            ).length;
+            const unreadCount = typeof chat.unread_count === 'number'
+              ? chat.unread_count
+              : (Array.isArray(chat.messages) ? chat.messages : []).filter(
+                  m => m.senderId !== currentUser?.id && m.senderId !== 'current' && !m.read
+                ).length;
 
             const otherMember = chat.type === 'personal'
               ? chat.members?.find(m => m.id !== currentUser?.id)
