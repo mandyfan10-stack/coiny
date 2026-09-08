@@ -9,7 +9,6 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { isSupabaseConfigured } from '../../supabaseClient';
-import { clearLocalAppData } from '../../utils/localDataCleanup';
 
 export default function E2EETab({
   currentUser,
@@ -223,11 +222,11 @@ export default function E2EETab({
         </div>
       </div>
 
-      {/* Reset Keys & Clear Cache */}
+      {/* Reset E2EE Keys */}
       <div className="settings-section e2ee-reset-section">
         <h5 className="section-title danger-title">
           <Trash2 size={16} />
-          <span>Сброс данных и ключей</span>
+          <span>Сброс ключей шифрования</span>
         </h5>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           <button
@@ -247,32 +246,8 @@ export default function E2EETab({
               }
             }}
           >
-            <Trash2 size={14} />
+            <Trash2 size={15} />
             <span>Сбросить ключи E2EE</span>
-          </button>
-
-          <button
-            type="button"
-            className="logout-btn"
-            onClick={async () => {
-              if (
-                window.confirm(
-                  'Вы уверены, что хотите сбросить локальный кэш и данные приложения? Это действие выполнит выход.'
-                )
-              ) {
-                try {
-                  await clearLocalAppData();
-                  window.location.reload();
-                } catch (error) {
-                  console.error('Failed to clear local application data:', error);
-                  alert('Не удалось полностью очистить локальные данные.');
-                }
-              }
-            }}
-            style={{ borderColor: '#ff4d4f', color: '#ff4d4f', background: 'none' }}
-          >
-            <Trash2 size={14} />
-            <span>Очистить кэш приложения</span>
           </button>
         </div>
       </div>

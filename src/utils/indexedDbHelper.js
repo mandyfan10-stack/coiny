@@ -734,45 +734,91 @@ export async function getCacheStorageStats() {
   }
   try {
     const db = await initOfflineDB();
-    const tx = db.transaction(
-      [MESSAGES_CACHE_V2_STORE_NAME, MEDIA_CACHE_STORE_NAME, CHATS_CACHE_STORE_NAME],
-      'readonly'
-    );
+    const storeNames = [
+      MESSAGES_CACHE_V2_STORE_NAME,
+      CHATS_CACHE_STORE_NAME,
+      MEDIA_CACHE_STORE_NAME
+    ].filter((name) => db.objectStoreNames.contains(name));
 
-    const msgCountReq = tx.objectStore(MESSAGES_CACHE_V2_STORE_NAME).count();
-    const chatCountReq = tx.objectStore(CHATS_CACHE_STORE_NAME).count();
+    if (storeNames.length === 0) {
+      return { messageCount: 0, chatCount: 0, mediaCount: 0, mediaBytes: 0 };
+    }
 
-    const mediaStore = tx.objectStore(MEDIA_CACHE_STORE_NAME);
+    const tx = db.transaction(storeNames, 'readonly');
+
+    // 1. Attach listeners immediately so onsuccess handlers fire synchronously
+    const msgCountPromise = storeNames.includes(MESSAGES_CACHE_V2_STORE_NAME)
+      ? requestResult(tx.objectStore(MESSAGES_CACHE_V2_STORE_NAME).count()).catch(() => 0)
+      : Promise.resolve(0);
+
+    const chatCountPromise = storeNames.includes(CHATS_CACHE_STORE_NAME)
+      ? requestResult(tx.objectStore(CHATS_CACHE_STORE_NAME).count()).catch(() => 0)
+      : Promise.resolve(0);
+
+    // Also inspect chats cache to count preview messages if messages-cache-v2 is empty
+    let previewMsgCount = 0;
+    let chatsCursorPromise = Promise.resolve();
+    if (storeNames.includes(CHATS_CACHE_STORE_NAME)) {
+      chatsCursorPromise = new Promise((resolve) => {
+        const req = tx.objectStore(CHATS_CACHE_STORE_NAME).openCursor();
+        req.onsuccess = (e) => {
+          const cursor = e.target.result;
+          if (cursor) {
+            const val = cursor.value;
+            if (Array.isArray(val?.chats)) {
+              for (const c of val.chats) {
+                if (Array.isArray(c?.messages)) {
+                  previewMsgCount += c.messages.length;
+                }
+              }
+            }
+            cursor.continue();
+          } else {
+            resolve();
+          }
+        };
+        req.onerror = () => resolve();
+      });
+    }
+
+    // 2. Iterate mediaStore
     let mediaBytes = 0;
     let mediaCount = 0;
+    let mediaPromise = Promise.resolve();
+    if (storeNames.includes(MEDIA_CACHE_STORE_NAME)) {
+      mediaPromise = new Promise((resolve) => {
+        const cursorReq = tx.objectStore(MEDIA_CACHE_STORE_NAME).openCursor();
+        cursorReq.onsuccess = (e) => {
+          const cursor = e.target.result;
+          if (cursor) {
+            mediaCount++;
+            mediaBytes += cursor.value.size || 0;
+            cursor.continue();
+          } else {
+            resolve();
+          }
+        };
+        cursorReq.onerror = () => resolve();
+      });
+    }
 
-    await new Promise((resolve) => {
-      const cursorReq = mediaStore.openCursor();
-      cursorReq.onsuccess = (e) => {
-        const cursor = e.target.result;
-        if (cursor) {
-          mediaCount++;
-          mediaBytes += cursor.value.size || 0;
-          cursor.continue();
-        } else {
-          resolve();
-        }
-      };
-      cursorReq.onerror = () => resolve();
-    });
-
-    const [messageCount, chatCount] = await Promise.all([
-      requestResult(msgCountReq).catch(() => 0),
-      requestResult(chatCountReq).catch(() => 0)
+    const [v2Count, chatCount] = await Promise.all([
+      msgCountPromise,
+      chatCountPromise,
+      chatsCursorPromise,
+      mediaPromise
     ]);
 
+    const totalMessages = (v2Count && v2Count > 0) ? v2Count : previewMsgCount;
+
     return {
-      messageCount: messageCount || 0,
+      messageCount: totalMessages || 0,
       chatCount: chatCount || 0,
       mediaCount,
       mediaBytes
     };
-  } catch {
+  } catch (err) {
+    console.warn('Failed to get cache storage stats:', err);
     return { messageCount: 0, chatCount: 0, mediaCount: 0, mediaBytes: 0 };
   }
 }

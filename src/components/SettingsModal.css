@@ -2331,10 +2331,10 @@ html.theme-light .e2ee-info-card .info-desc {
 
 .e2ee-reset-action-btn {
   background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.25);
   color: #ff4d4f;
   border-radius: 8px;
-  padding: 10px 16px;
+  padding: 12px 20px;
   font-size: 13.5px;
   font-weight: 500;
   cursor: pointer;
@@ -2343,7 +2343,8 @@ html.theme-light .e2ee-info-card .info-desc {
   justify-content: center;
   gap: 8px;
   transition: all 0.2s ease;
-  align-self: flex-start;
+  width: 100%;
+  box-sizing: border-box;
   margin-top: 4px;
 }
 
