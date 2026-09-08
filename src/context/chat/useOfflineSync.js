@@ -221,7 +221,7 @@ export function useOfflineSync({
     };
     void syncPromise.then(finishSync, finishSync);
     return syncPromise;
-  }, [markMessageAsFailed, setSharedKeysCache, setChats, e2eePrivateKeyRef, sharedKeysCacheRef, updateOfflineQueue]);
+  }, [currentUser?.id, markMessageAsFailed, setSharedKeysCache, setChats, e2eePrivateKeyRef, sharedKeysCacheRef, updateOfflineQueue]);
 
   const retrySendMessage = useCallback(async (optimisticId) => {
     const item = offlineQueueRef.current.find((q) => q.optimisticId === optimisticId);
