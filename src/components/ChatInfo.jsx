@@ -31,6 +31,8 @@ import { chatAvatarFallback, personAvatarFallback } from '../context/chat/avatar
 import { normalizeExternalHttpsUrl } from '../utils/urlSecurity';
 import ImageViewer from './chat/ImageViewer';
 import { DecryptedVoicePlayer } from './chat/mediaPlayers';
+import { buildInviteLink } from '../utils/inviteLink';
+import { copyTextToClipboard } from '../utils/mobileActionSheetUtils';
 
 import './ChatInfo.css';
 
@@ -219,23 +221,23 @@ export default function ChatInfo() {
     }
   };
 
-  const handleCopyShareLink = () => {
-    const inviteLink = `https://mandyfan10-stack.github.io/coingram-chat/?invite=${activeChat.username || activeChat.id}`;
-    navigator.clipboard.writeText(inviteLink);
+  const handleCopyShareLink = async () => {
+    const inviteLink = buildInviteLink(activeChat.username || activeChat.id);
+    await copyTextToClipboard(inviteLink);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
-  const handleCopyUsername = () => {
+  const handleCopyUsername = async () => {
     if (!activeChat?.username) return;
-    navigator.clipboard.writeText(`@${activeChat.username}`);
+    await copyTextToClipboard(`@${activeChat.username}`);
     setCopiedUsername(true);
     setTimeout(() => setCopiedUsername(false), 2000);
   };
 
-  const handleCopySafety = () => {
+  const handleCopySafety = async () => {
     if (!safetyNumber) return;
-    navigator.clipboard.writeText(safetyNumber);
+    await copyTextToClipboard(safetyNumber);
     setCopiedSafety(true);
     setTimeout(() => setCopiedSafety(false), 2000);
   };

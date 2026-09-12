@@ -385,6 +385,7 @@ export const chatService = {
         if (!personalChatId) throw new Error('Сервер не вернул идентификатор личного чата.');
         return {
           id: personalChatId,
+          targetUserId: profile.id,
           name: profile.display_name || profile.username,
           type: 'personal',
           avatar: profile.avatar || '👤',
@@ -421,6 +422,52 @@ export const chatService = {
       } finally {
         clearTimeout(timeoutId);
       }
+    }
+
+    if (type === 'personal') {
+      const cleanTarget = String(typeof target === 'object' ? (target?.username || target?.id || '') : target).trim().replace(/^@+/, '').toLowerCase();
+      const mockUsers = JSON.parse(localStorage.getItem('tg-mock-users') || '[]');
+      const targetUser = typeof target === 'object' && target?.id
+        ? target
+        : (mockUsers.find(u => (u.username && u.username.toLowerCase() === cleanTarget) || u.id === cleanTarget) || {
+            id: `mock-user-${cleanTarget || Date.now()}`,
+            username: cleanTarget,
+            name: cleanTarget,
+            display_name: cleanTarget,
+            avatar: '👤'
+          });
+
+      const memberObjects = [
+        { id: userId, name: 'Вы', avatar: '🪙' },
+        {
+          id: targetUser.id,
+          name: targetUser.display_name || targetUser.name || targetUser.username || cleanTarget,
+          username: targetUser.username || cleanTarget,
+          avatar: targetUser.avatar || '👤'
+        }
+      ];
+
+      return {
+        id: `chat-mock-${Date.now()}`,
+        targetUserId: targetUser.id,
+        name: targetUser.display_name || targetUser.name || targetUser.username || cleanTarget,
+        username: targetUser.username || cleanTarget,
+        type: 'personal',
+        avatar: targetUser.avatar || '👤',
+        avatarColor: targetUser.avatar_color || targetUser.avatarColor || 'linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%)',
+        pinned: false,
+        notifications: true,
+        bio: targetUser.bio || 'Новый контакт',
+        createdBy: userId,
+        settings: {
+          only_admins_can_post: false,
+          allow_media: true,
+          allow_add_members: false,
+          allow_pin_messages: true
+        },
+        members: memberObjects,
+        messages: []
+      };
     }
 
     const isGroup = type === 'group';

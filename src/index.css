@@ -3277,6 +3277,28 @@ body.light-mode .auth-brand-badge {
   color: #a7f3d0;
 }
 
+.auth-invite-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 8px;
+  background: rgba(36, 129, 204, 0.12);
+  border: 1px solid rgba(36, 129, 204, 0.3);
+  color: var(--accent-primary, #3390ec);
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  animation: fadeIn 0.2s ease;
+}
+
+body.light-mode .auth-invite-banner {
+  background: rgba(36, 129, 204, 0.08);
+  border-color: rgba(36, 129, 204, 0.25);
+  color: #1e6fae;
+}
+
 /* Tabs Pill Switcher with Sliding Indicator */
 .auth-tabs {
   position: relative;

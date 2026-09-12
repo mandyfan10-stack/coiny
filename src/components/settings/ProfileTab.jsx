@@ -2,6 +2,7 @@ import React from 'react';
 import { UserCircle, Copy, Upload } from 'lucide-react';
 import ProfilePreview from './ProfilePreview';
 import { personAvatarFallback } from '../../context/chat/avatarFallback';
+import { buildInviteLink } from '../../utils/inviteLink';
 import styles from './ProfileTab.module.css';
 
 export default function ProfileTab({
@@ -83,7 +84,7 @@ export default function ProfileTab({
               <div className="invite-link-wrapper">
                 <input
                   type="text"
-                  value={`https://mandyfan10-stack.github.io/coingram-chat/?invite=${currentUser.username}`}
+                  value={buildInviteLink(currentUser?.username)}
                   readOnly
                   className="invite-link-input"
                 />

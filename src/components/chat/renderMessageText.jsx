@@ -1,5 +1,6 @@
 import React from 'react';
 import { normalizeExternalHttpsUrl } from '../../utils/urlSecurity';
+import { parseInviteParam } from '../../utils/inviteLink';
 
 function renderMessageTextWithLinks(text) {
   if (!text) return null;
@@ -21,6 +22,25 @@ function renderMessageTextWithLinks(text) {
 
       const safeHref = normalizeExternalHttpsUrl(href);
       if (!safeHref) return part;
+
+      const handleLinkClick = (e) => {
+        e.stopPropagation();
+        try {
+          const parsed = new URL(safeHref);
+          const invite = parseInviteParam(parsed);
+          if (invite && typeof window !== 'undefined') {
+            const isCoinyHost = parsed.origin === window.location.origin
+              || parsed.hostname === 'mandyfan10-stack.github.io'
+              || parsed.hostname === 'localhost';
+            if (isCoinyHost) {
+              e.preventDefault();
+              window.dispatchEvent(new CustomEvent('coiny:open-invite', { detail: { invite } }));
+            }
+          }
+        } catch {
+          // Ignore parse errors, proceed with standard link opening
+        }
+      };
       
       return (
         <React.Fragment key={i}>
@@ -28,7 +48,7 @@ function renderMessageTextWithLinks(text) {
             href={safeHref}
             target="_blank"
             rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
+            onClick={handleLinkClick}
           >
             {display}
           </a>

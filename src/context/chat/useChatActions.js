@@ -21,7 +21,7 @@ import {
 } from '../../utils/reactionUtils';
 import { playSound } from '../../utils/sounds';
 import { createOfflineQueueItem } from '../../services/offlineQueueCore.js';
-import { requiresPersonalE2EE } from '../../utils/savedMessages';
+import { isSavedMessagesChat, requiresPersonalE2EE } from '../../utils/savedMessages';
 
 /**
  * Chat mutations: create/delete, send, reactions, members, settings.
@@ -71,7 +71,17 @@ export function useChatActions({
         if (!dataService.isLive()) {
           setChats((prev) => [newChat, ...prev]);
         } else if (type === 'personal') {
-          const targetProfile = typeof target === 'object' ? target : {};
+          const targetProfile = (typeof target === 'object' && target?.id)
+            ? target
+            : {
+                id: newChat.targetUserId || newChat.target_profile_id,
+                name: newChat.name,
+                username: newChat.username,
+                avatar: newChat.avatar,
+                avatarColor: newChat.avatarColor,
+                bio: newChat.bio,
+                banner: newChat.banner
+              };
           createdChat = {
             ...newChat,
             name: newChat.name || targetProfile.display_name || targetProfile.username || targetProfile.name || String(target),
@@ -519,9 +529,50 @@ export function useChatActions({
     }
   }, [currentUser, setChats]);
 
+  const openSavedMessages = useCallback(async () => {
+    if (!currentUser) return null;
+    const existing = chats.find((c) => isSavedMessagesChat(c));
+    if (existing) {
+      setActiveChatId(existing.id);
+      return existing;
+    }
+
+    if (dataService.isLive()) {
+      try {
+        const { supabase } = await import('../../supabaseClient');
+        const { data: savedChatId, error: savedErr } = await supabase
+          .rpc('ensure_saved_messages_chat');
+        if (savedErr) throw savedErr;
+        if (fetchChats) await fetchChats();
+        if (savedChatId) {
+          setActiveChatId(savedChatId);
+        }
+        return savedChatId ? { id: savedChatId, name: 'Избранное' } : null;
+      } catch (err) {
+        console.error('Failed to open saved messages:', err);
+        return null;
+      }
+    } else {
+      const savedMock = {
+        id: `chat-saved-${currentUser.id}`,
+        name: 'Избранное',
+        type: 'personal',
+        avatar: '🔖',
+        pinned: true,
+        createdBy: currentUser.id,
+        members: [{ id: currentUser.id, name: currentUser.name || 'Вы' }],
+        messages: []
+      };
+      setChats((prev) => [savedMock, ...prev.filter((c) => c.id !== savedMock.id)]);
+      setActiveChatId(savedMock.id);
+      return savedMock;
+    }
+  }, [currentUser, chats, fetchChats, setActiveChatId, setChats]);
+
   return {
     markMessagesAsRead,
     createChat,
+    openSavedMessages,
     deleteChat,
     clearChatMessages,
     sendMessage,

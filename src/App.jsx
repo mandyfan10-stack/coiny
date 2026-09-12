@@ -16,6 +16,8 @@ import E2EESetupModal from './components/E2EESetupModal';
 import { isMisconfigured } from './supabaseClient';
 import { normalizeExternalHttpsUrl } from './utils/urlSecurity';
 import { initNotificationService } from './services/notificationService';
+import { parseInviteParam, savePendingInvite, clearInviteParamFromUrl } from './utils/inviteLink';
+import { useInviteHandler } from './hooks/useInviteHandler';
 import { X } from 'lucide-react';
 // Shared by SettingsModal, NewChatModal, CreateStoryModal — must load with shell
 // so closed overlays never participate in app flex layout.
@@ -179,9 +181,25 @@ const isNewerVersion = (latest, current) => {
 
 function MainLayout() {
   const { currentUser, authLoading } = useAuth();
-  const { activeChatId, isDrawerOpen, setIsDrawerOpen } = useChat();
+  const {
+    activeChatId,
+    setActiveChatId,
+    chats,
+    createChat,
+    openSavedMessages,
+    isDrawerOpen,
+    setIsDrawerOpen
+  } = useChat();
   const [showUpdate, setShowUpdate] = useState(false);
   const [releaseInfo, setReleaseInfo] = useState(null);
+
+  useInviteHandler({
+    currentUser,
+    chats,
+    createChat,
+    setActiveChatId,
+    openSavedMessages
+  });
 
   const touchStartRef = React.useRef({ x: 0, y: 0 });
   const touchMoveRef = React.useRef({ x: 0, y: 0 });
@@ -329,6 +347,14 @@ function MisconfiguredScreen() {
 }
 
 function App() {
+  useEffect(() => {
+    const invite = parseInviteParam();
+    if (invite) {
+      savePendingInvite(invite);
+      clearInviteParamFromUrl();
+    }
+  }, []);
+
   if (isMisconfigured) {
     return <MisconfiguredScreen />;
   }

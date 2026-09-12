@@ -10,6 +10,8 @@ import AppearanceTab from './settings/AppearanceTab';
 import E2EETab from './settings/E2EETab';
 import { uploadSanitizedPublicImage } from '../services/publicMediaService';
 import { personAvatarFallback } from '../context/chat/avatarFallback';
+import { buildInviteLink } from '../utils/inviteLink';
+import { copyTextToClipboard } from '../utils/mobileActionSheetUtils';
 
 const StickersTab = lazy(() => import('./settings/StickersTab'));
 
@@ -327,9 +329,9 @@ export default function SettingsModal() {
     }
   };
 
-  const handleCopyInviteLink = () => {
-    const inviteLink = `https://mandyfan10-stack.github.io/coingram-chat/?invite=${currentUser.username}`;
-    navigator.clipboard.writeText(inviteLink);
+  const handleCopyInviteLink = async () => {
+    const inviteLink = buildInviteLink(currentUser?.username);
+    await copyTextToClipboard(inviteLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };

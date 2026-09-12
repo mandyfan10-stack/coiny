@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { isSupabaseConfigured } from '../supabaseClient';
+import { getPendingInvite } from '../utils/inviteLink';
 import coinyLogo from '../assets/logo.png';
 import { 
   Lock, 
@@ -36,6 +37,7 @@ export default function AuthScreen() {
   const [resetIdentifier, setResetIdentifier] = useState('');
   const [resetSent, setResetSent] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
+  const pendingInvite = useMemo(() => getPendingInvite(), []);
 
   const passwordInputRef = useRef(null);
   const lastToggleTimeRef = useRef(0);
@@ -247,6 +249,13 @@ export default function AuthScreen() {
                 <span>MLS v1.0 • E2EE</span>
               </div>
             </div>
+
+            {/* Pending invite banner */}
+            {pendingInvite && (
+              <div className="auth-invite-banner" role="status">
+                <span>Приглашение в диалог с <strong>@{pendingInvite}</strong></span>
+              </div>
+            )}
 
             {/* Feedback message banner */}
             {errorMsg && (

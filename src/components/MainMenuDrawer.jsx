@@ -11,7 +11,6 @@ import {
   Moon, 
   X
 } from 'lucide-react';
-import { isSavedMessagesChat, SAVED_MESSAGES_DISPLAY_NAME } from '../utils/savedMessages';
 import { uploadSanitizedPublicImage } from '../services/publicMediaService';
 import { personAvatarFallback } from '../context/chat/avatarFallback';
 
@@ -23,13 +22,10 @@ export default function MainMenuDrawer() {
     setIsNewChatOpen,
     isDarkMode,
     setIsDarkMode,
-    chats,
-    setChats,
-    setActiveChatId,
-    fetchChats,
     setSettingsTab,
     setNewChatModalTab,
-    renderAvatar
+    renderAvatar,
+    openSavedMessages
   } = useChat();
   const { currentUser, updateProfile } = useAuth();
 
@@ -122,41 +118,14 @@ export default function MainMenuDrawer() {
     setIsOpeningSaved(true);
 
     try {
-      // Find if we already have a chat with name "Избранное"
-      const existing = chats.find((c) => isSavedMessagesChat(c));
-      if (existing) {
-        setActiveChatId(existing.id);
-        setIsDrawerOpen(false);
-        setIsOpeningSaved(false);
-        return;
-      }
-
-      if (isSupabaseConfigured) {
-        const { data: savedChatId, error: savedErr } = await supabase
+      if (openSavedMessages) {
+        await openSavedMessages();
+      } else if (isSupabaseConfigured) {
+        const { error: savedErr } = await supabase
           .rpc('ensure_saved_messages_chat');
         if (savedErr) throw savedErr;
-
-        if (fetchChats) await fetchChats();
-        setActiveChatId(savedChatId);
-        setIsDrawerOpen(false);      } else {
-        // Mock mode
-        const newChat = {
-          id: `chat-saved-${Date.now()}`,
-          name: SAVED_MESSAGES_DISPLAY_NAME,
-          type: 'personal',
-          avatar: '🔖',
-          avatarColor: 'linear-gradient(135deg, #3a7bd5 0%, #3a6073 100%)',
-          pinned: false,
-          notifications: true,
-          bio: 'Ваше личное хранилище для заметок и файлов',
-          username: currentUser.username,
-          members: [{ id: 'current', name: currentUser.name, avatar: currentUser.avatar || '👤' }],
-          messages: []
-        };
-        if (setChats) setChats(prev => [newChat, ...prev]);
-        setActiveChatId(newChat.id);
-        setIsDrawerOpen(false);
       }
+      setIsDrawerOpen(false);
     } catch (e) {
       console.error("Failed to open/create Saved Messages chat", e);
       alert("Не удалось открыть Избранное");
