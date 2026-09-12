@@ -253,7 +253,11 @@ export default function AuthScreen() {
             {/* Pending invite banner */}
             {pendingInvite && (
               <div className="auth-invite-banner" role="status">
-                <span>Приглашение в диалог с <strong>@{pendingInvite}</strong></span>
+                {/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pendingInvite) ? (
+                  <span>Приглашение в чат</span>
+                ) : (
+                  <span>Приглашение в диалог с <strong>@{pendingInvite}</strong></span>
+                )}
               </div>
             )}
 

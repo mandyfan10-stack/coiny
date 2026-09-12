@@ -529,6 +529,26 @@ export default function ChatInfo() {
               </div>
             )}
 
+            {/* Invite Link for Group / Channel */}
+            {isGroupOrChannel && (
+              <div className="info-item-row">
+                <div className="info-item-content">
+                  <span className="info-item-value" style={{ wordBreak: 'break-all', fontSize: '13px' }}>
+                    {buildInviteLink(activeChat.username || activeChat.id)}
+                  </span>
+                  <span className="info-item-label">Ссылка-приглашение</span>
+                </div>
+                <button
+                  type="button"
+                  className={`info-copy-pill-btn ${copiedLink ? 'copied' : ''}`}
+                  onClick={handleCopyShareLink}
+                  title="Скопировать ссылку"
+                >
+                  {copiedLink ? <Check size={14} /> : <Copy size={14} />}
+                </button>
+              </div>
+            )}
+
             {/* E2EE Safety Number for Personal Chat */}
             {isPersonal && safetyNumber && (
               <div className="info-safety-box">

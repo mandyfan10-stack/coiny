@@ -39,6 +39,7 @@ export const dataService = {
   toggleMemberRole: chatService.toggleMemberRole,
   updateChatAvatar: chatService.updateChatAvatar,
   updateChatSettings: chatService.updateChatSettings,
+  joinChatByInvite: chatService.joinChatByInvite,
 
   // Messages
   loadChatMessages: messageService.loadChatMessages,

@@ -569,9 +569,27 @@ export function useChatActions({
     }
   }, [currentUser, chats, fetchChats, setActiveChatId, setChats]);
 
+  const joinChatByInvite = useCallback(async (invite) => {
+    if (!currentUser) return null;
+    try {
+      const res = await dataService.joinChatByInvite(currentUser.id, invite);
+      if (res && res.id) {
+        if (fetchChats) {
+          await fetchChats();
+        }
+        return res;
+      }
+      return null;
+    } catch (err) {
+      console.error('Failed to join chat by invite:', err);
+      throw err;
+    }
+  }, [currentUser, fetchChats]);
+
   return {
     markMessagesAsRead,
     createChat,
+    joinChatByInvite,
     openSavedMessages,
     deleteChat,
     clearChatMessages,

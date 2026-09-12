@@ -20,6 +20,9 @@ const authScreenSource = readFileSync(new URL('../src/components/AuthScreen.jsx'
 const useInviteHandlerSource = readFileSync(new URL('../src/hooks/useInviteHandler.js', import.meta.url), 'utf8');
 const chatActionsSource = readFileSync(new URL('../src/context/chat/useChatActions.js', import.meta.url), 'utf8');
 const chatServiceSource = readFileSync(new URL('../src/services/chatService.js', import.meta.url), 'utf8');
+const dataLayerSource = readFileSync(new URL('../src/services/dataLayer.js', import.meta.url), 'utf8');
+const chatProviderSource = readFileSync(new URL('../src/context/chat/ChatProvider.jsx', import.meta.url), 'utf8');
+const migrationSource = readFileSync(new URL('../supabase/migrations/20260912120000_join_chat_by_invite.sql', import.meta.url), 'utf8');
 
 test('cleanInviteIdentifier strips @, whitespace, and handles edge cases', () => {
   assert.equal(cleanInviteIdentifier('@monetka'), 'monetka');
@@ -176,6 +179,48 @@ test('useChatActions populates targetProfile fallback and exports openSavedMessa
 test('useInviteHandler resolves self-invite, existing chat, and new chat creation', () => {
   assert.match(useInviteHandlerSource, /openSavedMessages/);
   assert.match(useInviteHandlerSource, /setActiveChatId\(existing\.id\)/);
+  assert.match(useInviteHandlerSource, /joinChatByInvite\(target\)/);
   assert.match(useInviteHandlerSource, /createChat\(target,\s*'personal'\)/);
   assert.match(useInviteHandlerSource, /window\.addEventListener\('coiny:open-invite'/);
 });
+
+test('joinChatByInvite is wired through chatService, dataLayer, useChatActions, ChatProvider, and App.jsx', () => {
+  assert.match(chatServiceSource, /joinChatByInvite:\s*async/);
+  assert.match(dataLayerSource, /joinChatByInvite:\s*chatService\.joinChatByInvite/);
+  assert.match(chatActionsSource, /const joinChatByInvite = useCallback/);
+  assert.match(chatActionsSource, /joinChatByInvite,/);
+  assert.match(chatProviderSource, /joinChatByInvite:\s*actions\.joinChatByInvite/);
+  assert.match(appSource, /joinChatByInvite,/);
+});
+
+test('AuthScreen renders "Приглашение в чат" for UUID and "Приглашение в диалог с" for usernames', () => {
+  assert.match(authScreenSource, /Приглашение в чат/);
+  assert.match(authScreenSource, /Приглашение в диалог с/);
+});
+
+test('ChatInfo displays invite link row for groups and channels with copy button', () => {
+  assert.match(chatInfoSource, /\{isGroupOrChannel\s*&&/);
+  assert.match(chatInfoSource, /Ссылка-приглашение/);
+  assert.match(chatInfoSource, /buildInviteLink\(activeChat\.username\s*\|\|\s*activeChat\.id\)/);
+});
+
+test('Migration 20260912120000_join_chat_by_invite.sql implements security definer function in private schema', () => {
+  assert.match(migrationSource, /create or replace function private\.join_chat_by_invite/);
+  assert.match(migrationSource, /security definer/);
+  assert.match(migrationSource, /create or replace function public\.join_chat_by_invite/);
+  assert.match(migrationSource, /security invoker/);
+  assert.match(migrationSource, /target_chat\.type = 'channel'/);
+  assert.match(migrationSource, /target_chat\.type = 'group'/);
+  assert.match(migrationSource, /allow_add_members/);
+  assert.match(migrationSource, /grant execute on function public\.join_chat_by_invite/);
+});
+
+test('chatService implements joinChatByInvite with live RPC and mock fallback branches', () => {
+  assert.match(chatServiceSource, /joinChatByInvite:\s*async\s*\(userId,\s*rawInvite\)/);
+  assert.match(chatServiceSource, /supabase\.rpc\('join_chat_by_invite',\s*\{\s*p_invite:\s*cleanInvite\s*\}\)/);
+  assert.match(chatServiceSource, /localStorage\.getItem\('tg-chats-mock'\)/);
+  assert.match(chatServiceSource, /existingChat\.members/);
+  assert.match(chatServiceSource, /status:\s*'joined'/);
+  assert.match(chatServiceSource, /createChat\(userId,\s*cleanInvite,\s*'personal'\)/);
+});
+

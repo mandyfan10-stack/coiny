@@ -604,5 +604,81 @@ export const chatService = {
         .eq('id', chatId);
       if (error) throw error;
     }
+  },
+
+  joinChatByInvite: async (userId, rawInvite) => {
+    const cleanInvite = String(rawInvite || '').trim().replace(/^@+/, '');
+    if (!cleanInvite) {
+      throw new Error('Некорректный идентификатор приглашения.');
+    }
+
+    if (isSupabaseConfigured) {
+      const { data, error } = await supabase.rpc('join_chat_by_invite', { p_invite: cleanInvite });
+      if (error) throw error;
+      if (!data || !data.chat_id) {
+        throw new Error('Сервер не вернул идентификатор чата.');
+      }
+      return {
+        id: data.chat_id,
+        type: data.type,
+        name: data.name,
+        username: data.username,
+        status: data.status
+      };
+    }
+
+    // Mock / Demo mode
+    const cleanLower = cleanInvite.toLowerCase();
+    const mockChats = JSON.parse(localStorage.getItem('tg-chats-mock') || 'null') || buildDefaultMockChats();
+    const existingChat = mockChats.find((c) => {
+      if (c.id === cleanInvite) return true;
+      if (c.username && c.username.toLowerCase() === cleanLower) return true;
+      return false;
+    });
+
+    if (existingChat) {
+      const members = Array.isArray(existingChat.members) ? existingChat.members : [];
+      if (!members.some((m) => m.id === userId)) {
+        members.push({ id: userId, name: 'Вы', avatar: 'C', role: 'member' });
+        existingChat.members = members;
+        localStorage.setItem('tg-chats-mock', JSON.stringify(mockChats));
+      }
+      return {
+        id: existingChat.id,
+        type: existingChat.type,
+        name: existingChat.name,
+        username: existingChat.username,
+        status: 'joined'
+      };
+    }
+
+    // Check if target is a mock user
+    const mockUsers = JSON.parse(localStorage.getItem('tg-mock-users') || '[]');
+    const targetUser = mockUsers.find((u) => {
+      if (u.id === cleanInvite) return true;
+      if (u.username && u.username.toLowerCase() === cleanLower) return true;
+      return false;
+    });
+
+    if (targetUser) {
+      const personalChat = await chatService.createChat(userId, targetUser, 'personal');
+      return {
+        id: personalChat.id,
+        type: 'personal',
+        name: targetUser.display_name || targetUser.name || targetUser.username,
+        username: targetUser.username,
+        status: 'personal_created'
+      };
+    }
+
+    // Default fallback: create personal chat
+    const personalChat = await chatService.createChat(userId, cleanInvite, 'personal');
+    return {
+      id: personalChat.id,
+      type: 'personal',
+      name: cleanInvite,
+      status: 'personal_created'
+    };
   }
 };
+

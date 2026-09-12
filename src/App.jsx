@@ -186,6 +186,7 @@ function MainLayout() {
     setActiveChatId,
     chats,
     createChat,
+    joinChatByInvite,
     openSavedMessages,
     isDrawerOpen,
     setIsDrawerOpen
@@ -197,6 +198,7 @@ function MainLayout() {
     currentUser,
     chats,
     createChat,
+    joinChatByInvite,
     setActiveChatId,
     openSavedMessages
   });

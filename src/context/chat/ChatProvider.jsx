@@ -140,6 +140,7 @@ export const ChatProvider = ({ children }) => {
       activeChat,
       sendMessage: actions.sendMessage,
       createChat: actions.createChat,
+      joinChatByInvite: actions.joinChatByInvite,
       openSavedMessages: actions.openSavedMessages,
       openUserProfile,
       deleteMessage: actions.deleteMessage,

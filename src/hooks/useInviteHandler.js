@@ -17,6 +17,7 @@ export function useInviteHandler({
   currentUser,
   chats = [],
   createChat,
+  joinChatByInvite,
   setActiveChatId,
   openSavedMessages
 }) {
@@ -60,12 +61,18 @@ export function useInviteHandler({
       return;
     }
 
-    // If chat does not exist, create personal chat with target user
+    // If chat does not exist, resolve and join via invite (group, channel, or personal)
     isResolvingRef.current = true;
     try {
-      const newChat = await createChat(target, 'personal');
-      if (newChat) {
-        setActiveChatId(newChat.id);
+      let resolvedChat = null;
+      if (joinChatByInvite) {
+        resolvedChat = await joinChatByInvite(target);
+      } else if (createChat) {
+        resolvedChat = await createChat(target, 'personal');
+      }
+
+      if (resolvedChat && resolvedChat.id) {
+        setActiveChatId(resolvedChat.id);
       }
     } catch (err) {
       console.warn('Could not resolve invite link for target:', target, err);
@@ -74,7 +81,7 @@ export function useInviteHandler({
       clearPendingInvite();
       isResolvingRef.current = false;
     }
-  }, [currentUser, chats, createChat, setActiveChatId, openSavedMessages]);
+  }, [currentUser, chats, createChat, joinChatByInvite, setActiveChatId, openSavedMessages]);
 
   useEffect(() => {
     // 1. If invite param is present in URL, extract and persist to sessionStorage, then clean URL.
