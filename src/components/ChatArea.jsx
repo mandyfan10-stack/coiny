@@ -308,15 +308,14 @@ function formatDateDivider(timestamp) {
 }
 
   // Auto-scroll to bottom on chat switch or new message
-  const scrollToBottom = (behavior = 'smooth') => {
-    if (chatBodyRef.current) {
-      if (behavior === 'auto') {
-        chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
-      } else {
-        messagesEndRef.current?.scrollIntoView({ behavior });
-      }
-    }
-  };
+  const isInitialChatLoadRef = useRef(true);
+  const currentChatIdRef = useRef(activeChat?.id);
+  const userScrolledManuallyRef = useRef(false);
+  const anchorMessageIdRef = useRef(null);
+  const anchorOffsetRef = useRef(0);
+  const chatScrollPositionsRef = useRef(new Map());
+  const isPointerDownRef = useRef(false);
+  const initialMountTickRef = useRef(true);
 
   const SCROLL_STORAGE_KEY_PREFIX = 'coingram_chat_scroll_';
 
@@ -337,23 +336,24 @@ function formatDateDivider(timestamp) {
     } catch {}
   };
 
-  const isInitialChatLoadRef = useRef(true);
-  const currentChatIdRef = useRef(activeChat?.id);
-  const chatScrollPositionsRef = useRef(new Map());
-
-  const saveCurrentScrollPosition = useCallback(() => {
+  const persistSettledScroll = useCallback((targetChatId = activeChat?.id) => {
     const element = chatBodyRef.current;
-    if (!element || !activeChat?.id) return;
+    if (!element || !targetChatId) return;
     const { scrollTop, scrollHeight, clientHeight } = element;
-    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    if (scrollHeight <= 0) return;
+
+    const distanceFromBottom = Math.max(0, scrollHeight - scrollTop - clientHeight);
+    const isAtBottom = distanceFromBottom < 60;
 
     const messageRows = element.querySelectorAll('.message-row[data-message-id]');
     let topMessageId = null;
+    let topMessageOffset = 0;
     const containerTop = element.getBoundingClientRect().top;
     for (const row of messageRows) {
       const rect = row.getBoundingClientRect();
-      if (rect.bottom > containerTop + 15) {
+      if (rect.bottom > containerTop + 5) {
         topMessageId = row.getAttribute('data-message-id');
+        topMessageOffset = rect.top - containerTop;
         break;
       }
     }
@@ -362,22 +362,66 @@ function formatDateDivider(timestamp) {
       scrollTop,
       scrollHeight,
       distanceFromBottom,
+      isAtBottom,
       topMessageId,
+      topMessageOffset,
       timestamp: Date.now()
     };
 
-    chatScrollPositionsRef.current.set(activeChat.id, scrollData);
-    saveChatScroll(activeChat.id, scrollData);
+    chatScrollPositionsRef.current.set(targetChatId, scrollData);
+    saveChatScroll(targetChatId, scrollData);
+  }, [activeChat?.id]);
+
+  const saveCurrentScrollPosition = useCallback(() => {
+    if (isInitialChatLoadRef.current) return;
+    persistSettledScroll(activeChat?.id);
+  }, [activeChat?.id, persistSettledScroll]);
+
+  // Auto-scroll to bottom on chat switch or new message
+  const scrollToBottom = useCallback((behavior = 'smooth') => {
+    if (chatBodyRef.current) {
+      if (behavior === 'auto') {
+        chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
+      } else {
+        messagesEndRef.current?.scrollIntoView({ behavior });
+      }
+      shouldAutoScrollRef.current = true;
+      anchorMessageIdRef.current = null;
+      anchorOffsetRef.current = 0;
+      if (activeChat?.id) {
+        const scrollData = {
+          scrollTop: chatBodyRef.current.scrollHeight,
+          scrollHeight: chatBodyRef.current.scrollHeight,
+          distanceFromBottom: 0,
+          isAtBottom: true,
+          topMessageId: null,
+          topMessageOffset: 0,
+          timestamp: Date.now()
+        };
+        chatScrollPositionsRef.current.set(activeChat.id, scrollData);
+        saveChatScroll(activeChat.id, scrollData);
+      }
+    }
   }, [activeChat?.id]);
 
   useEffect(() => {
-    const handleBeforeUnload = () => {
+    const handleSave = () => {
       saveCurrentScrollPosition();
     };
-    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('beforeunload', handleSave);
+    window.addEventListener('pagehide', handleSave);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        handleSave();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('resize', handleSave);
     return () => {
-      saveCurrentScrollPosition();
-      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('beforeunload', handleSave);
+      window.removeEventListener('pagehide', handleSave);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('resize', handleSave);
     };
   }, [saveCurrentScrollPosition]);
 
@@ -385,64 +429,123 @@ function formatDateDivider(timestamp) {
     if (currentChatIdRef.current !== activeChat?.id) {
       currentChatIdRef.current = activeChat?.id;
       isInitialChatLoadRef.current = true;
+      userScrolledManuallyRef.current = false;
+      anchorMessageIdRef.current = null;
+      anchorOffsetRef.current = 0;
+      initialMountTickRef.current = true;
     }
-    if (isInitialLoading) return;
-    if (isInitialChatLoadRef.current && chatBodyRef.current && (activeChat?.messages?.length || 0) > 0) {
-      const unreadCount = activeChat?.unread_count || 0;
-      if (unreadCount > 0) {
-        const unreadEl = chatBodyRef.current.querySelector('.unread-messages-divider');
-        if (unreadEl) {
-          unreadEl.scrollIntoView({ block: 'center', behavior: 'auto' });
-          isInitialChatLoadRef.current = false;
-          return;
-        }
-      }
 
-      const saved = chatScrollPositionsRef.current.get(activeChat?.id) || getSavedChatScroll(activeChat?.id);
-      if (saved) {
-        if (saved.distanceFromBottom < 60) {
-          chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
-          isInitialChatLoadRef.current = false;
-          return;
-        }
-        if (saved.topMessageId) {
-          const targetMsg = chatBodyRef.current.querySelector(`.message-row[data-message-id="${saved.topMessageId}"]`);
-          if (targetMsg) {
-            targetMsg.scrollIntoView({ block: 'start', behavior: 'auto' });
-            isInitialChatLoadRef.current = false;
-            return;
+    if (isInitialLoading) return;
+    const element = chatBodyRef.current;
+    if (!element || !activeChat?.id) return;
+    const messageCount = activeChat?.messages?.length || 0;
+    if (messageCount === 0) return;
+
+    if (!isInitialChatLoadRef.current) return;
+
+    const saved = chatScrollPositionsRef.current.get(activeChat?.id) || getSavedChatScroll(activeChat?.id);
+
+    // 1. Unread Messages Divider
+    const unreadCount = typeof activeChat?.unread_count === 'number'
+      ? activeChat.unread_count
+      : (Array.isArray(activeChat?.messages) ? activeChat.messages : []).filter(
+          (m) => m.senderId !== currentUser?.id && m.senderId !== 'current' && !m.read
+        ).length;
+
+    if (unreadCount > 0) {
+      const unreadEl = element.querySelector('.unread-messages-divider');
+      if (unreadEl) {
+        unreadEl.scrollIntoView({ block: 'center', behavior: 'auto' });
+        shouldAutoScrollRef.current = false;
+        const containerTop = element.getBoundingClientRect().top;
+        const messageRows = element.querySelectorAll('.message-row[data-message-id]');
+        for (const row of messageRows) {
+          const rect = row.getBoundingClientRect();
+          if (rect.bottom > containerTop + 5) {
+            anchorMessageIdRef.current = row.getAttribute('data-message-id');
+            anchorOffsetRef.current = rect.top - containerTop;
+            break;
           }
         }
+        isInitialChatLoadRef.current = false;
+        initialMountTickRef.current = false;
+        persistSettledScroll(activeChat.id);
+        return;
+      }
+      if (messageCount <= 1 || isSyncing?.[activeChat?.id] || isChatLoading?.[activeChat?.id]) {
+        return;
+      }
+    }
+
+    // 2. Saved Anchor Message (when user was reading a specific message)
+    if (saved && !saved.isAtBottom && saved.topMessageId) {
+      const targetMsg = element.querySelector(`.message-row[data-message-id="${saved.topMessageId}"]`);
+      if (targetMsg) {
+        const offset = typeof saved.topMessageOffset === 'number' ? saved.topMessageOffset : 0;
+        element.scrollTop = targetMsg.offsetTop - offset;
+        shouldAutoScrollRef.current = false;
+        anchorMessageIdRef.current = saved.topMessageId;
+        anchorOffsetRef.current = offset;
+        isInitialChatLoadRef.current = false;
+        initialMountTickRef.current = false;
+        persistSettledScroll(activeChat.id);
+        return;
+      }
+      if (messageCount <= 1 || isSyncing?.[activeChat?.id] || isChatLoading?.[activeChat?.id]) {
         if (typeof saved.scrollTop === 'number') {
-          chatBodyRef.current.scrollTop = saved.scrollTop;
-          isInitialChatLoadRef.current = false;
-          return;
+          element.scrollTop = saved.scrollTop;
+        }
+        return;
+      }
+      if (typeof saved.scrollTop === 'number') {
+        element.scrollTop = saved.scrollTop;
+        shouldAutoScrollRef.current = Boolean(saved.distanceFromBottom < 120);
+        isInitialChatLoadRef.current = false;
+        initialMountTickRef.current = false;
+        persistSettledScroll(activeChat.id);
+        return;
+      }
+    }
+
+    // 3. Saved Bottom OR Default to Bottom
+    element.scrollTop = element.scrollHeight;
+    shouldAutoScrollRef.current = true;
+    anchorMessageIdRef.current = null;
+    anchorOffsetRef.current = 0;
+
+    if (messageCount > 1 || (!initialMountTickRef.current && !isSyncing?.[activeChat?.id] && !isChatLoading?.[activeChat?.id])) {
+      isInitialChatLoadRef.current = false;
+      initialMountTickRef.current = false;
+      persistSettledScroll(activeChat.id);
+    } else {
+      initialMountTickRef.current = false;
+    }
+  }, [activeChat?.id, activeChat?.messages, activeChat?.unread_count, isInitialLoading, isChatLoading, isSyncing, currentUser?.id, persistSettledScroll]);
+
+  useEffect(() => {
+    const element = chatBodyRef.current;
+    if (!element || typeof ResizeObserver === 'undefined') return;
+
+    const listElement = element.querySelector('.messages-list') || element;
+
+    const observer = new ResizeObserver(() => {
+      if (!chatBodyRef.current || isLoadingOlderRef.current || isPointerDownRef.current) return;
+      if (shouldAutoScrollRef.current) {
+        chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
+      } else if (anchorMessageIdRef.current) {
+        const targetMsg = chatBodyRef.current.querySelector(`.message-row[data-message-id="${anchorMessageIdRef.current}"]`);
+        if (targetMsg) {
+          chatBodyRef.current.scrollTop = targetMsg.offsetTop - anchorOffsetRef.current;
         }
       }
+    });
 
-      chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
-      isInitialChatLoadRef.current = false;
-    }
-  }, [activeChat?.id, activeChat?.messages, activeChat?.unread_count, isInitialLoading]);
+    observer.observe(listElement);
+    return () => observer.disconnect();
+  }, [activeChat?.id]);
 
   useEffect(() => {
     const saved = chatScrollPositionsRef.current.get(activeChat?.id) || getSavedChatScroll(activeChat?.id);
-    if (saved) {
-      if (saved.distanceFromBottom < 60) {
-        scrollToBottom('auto');
-      } else if (saved.topMessageId) {
-        const targetMsg = chatBodyRef.current?.querySelector(`.message-row[data-message-id="${saved.topMessageId}"]`);
-        if (targetMsg) {
-          targetMsg.scrollIntoView({ block: 'start', behavior: 'auto' });
-        } else if (typeof saved.scrollTop === 'number' && chatBodyRef.current) {
-          chatBodyRef.current.scrollTop = saved.scrollTop;
-        }
-      } else if (typeof saved.scrollTop === 'number' && chatBodyRef.current) {
-        chatBodyRef.current.scrollTop = saved.scrollTop;
-      }
-    } else {
-      scrollToBottom('auto');
-    }
     shouldAutoScrollRef.current = saved ? (saved.distanceFromBottom < 120) : true;
     setReplyingTo(null);
     setOpenedImageUrl(null);
@@ -912,8 +1015,18 @@ function formatDateDivider(timestamp) {
   const messageCount = activeChat?.messages?.length || 0;
   const prevMessageCountRef = useRef(messageCount);
   const prevLatestMessageIdRef = useRef(latestMessageId);
+  const prevChatIdRef = useRef(activeChat?.id);
 
   useEffect(() => {
+    const isChatChanged = prevChatIdRef.current !== activeChat?.id;
+    prevChatIdRef.current = activeChat?.id;
+
+    if (isChatChanged) {
+      prevMessageCountRef.current = messageCount;
+      prevLatestMessageIdRef.current = latestMessageId;
+      return;
+    }
+
     const isNewMessage = (
       messageCount > prevMessageCountRef.current &&
       latestMessageId !== prevLatestMessageIdRef.current
@@ -930,7 +1043,7 @@ function formatDateDivider(timestamp) {
 
     prevMessageCountRef.current = messageCount;
     prevLatestMessageIdRef.current = latestMessageId;
-  }, [activeChat?.id, latestMessageId, latestMessageSenderId, messageCount, currentUser?.id]);
+  }, [activeChat?.id, latestMessageId, latestMessageSenderId, messageCount, currentUser?.id, scrollToBottom]);
 
   // Monitor scroll, virtualize off-screen rows, and page backwards near the top.
   const handleScroll = async () => {
@@ -939,12 +1052,30 @@ function formatDateDivider(timestamp) {
     const { scrollTop, scrollHeight, clientHeight } = element;
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
     shouldAutoScrollRef.current = distanceFromBottom < 120;
-    if (distanceFromBottom > 120) {
-      isInitialChatLoadRef.current = false;
-    }
     setShowScrollBottom(distanceFromBottom > 300);
 
-    saveCurrentScrollPosition();
+    if (userScrolledManuallyRef.current) {
+      isInitialChatLoadRef.current = false;
+    }
+
+    if (!isInitialChatLoadRef.current) {
+      const containerTop = element.getBoundingClientRect().top;
+      const messageRows = element.querySelectorAll('.message-row[data-message-id]');
+      let topId = null;
+      let topOffset = 0;
+      for (const row of messageRows) {
+        const rect = row.getBoundingClientRect();
+        if (rect.bottom > containerTop + 5) {
+          topId = row.getAttribute('data-message-id');
+          topOffset = rect.top - containerTop;
+          break;
+        }
+      }
+      anchorMessageIdRef.current = topId;
+      anchorOffsetRef.current = topOffset;
+
+      saveCurrentScrollPosition();
+    }
 
     const page = messagePagination?.[activeChat?.id];
     // Opening a long chat starts at scrollTop 0 until layout restores the
@@ -1191,6 +1322,12 @@ function formatDateDivider(timestamp) {
         className={`chat-body ${isCustomWallpaper ? 'has-custom-wallpaper' : ''}`}
         ref={chatBodyRef}
         onScroll={handleScroll}
+        onWheel={() => { userScrolledManuallyRef.current = true; }}
+        onTouchStart={() => { userScrolledManuallyRef.current = true; isPointerDownRef.current = true; }}
+        onTouchEnd={() => { isPointerDownRef.current = false; }}
+        onPointerDown={() => { userScrolledManuallyRef.current = true; isPointerDownRef.current = true; }}
+        onPointerUp={() => { isPointerDownRef.current = false; }}
+        onPointerCancel={() => { isPointerDownRef.current = false; }}
         style={chatBodyStyle}
       >
         {isInitialLoading ? (
