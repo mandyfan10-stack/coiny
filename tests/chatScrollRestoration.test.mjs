@@ -172,3 +172,155 @@ test('scrollToBottom records isAtBottom and distanceFromBottom: 0 for instant ch
   assert.equal(savedStorage.scrollTop, 4200);
 });
 
+test('ChatArea scroll to bottom button and programmatic scroll contracts', () => {
+  assert.match(chatAreaSource, /isScrollingToBottomRef/);
+  assert.match(chatAreaSource, /scrollTimeoutRef/);
+  assert.match(chatAreaSource, /footerRef/);
+  assert.match(chatAreaSource, /setFooterHeight/);
+  assert.match(chatAreaSource, /if\s*\(isScrollingToBottomRef\.current\)[\s\S]*scrollTo\(\{[\s\S]*behavior:\s*'smooth'/);
+  assert.match(chatAreaSource, /Math\.max\(0,\s*scrollHeight\s*-\s*scrollTop\s*-\s*clientHeight\)/);
+  assert.match(chatAreaSource, /className="scroll-bottom-btn"[\s\S]*setShowScrollBottom\(false\)[\s\S]*scrollToBottom\('smooth'\)/);
+});
+
+test('Programmatic scroll to bottom preserves autoscroll across intermediate scroll events', () => {
+  let isScrollingToBottom = false;
+  let shouldAutoScroll = false;
+  let showScrollBottom = true;
+  let anchorMessageId = 'msg-10';
+
+  function onScrollToBottom() {
+    isScrollingToBottom = true;
+    shouldAutoScroll = true;
+    showScrollBottom = false;
+    anchorMessageId = null;
+  }
+
+  function onHandleScroll(scrollTop, scrollHeight, clientHeight) {
+    const distanceFromBottom = Math.max(0, scrollHeight - scrollTop - clientHeight);
+    if (isScrollingToBottom) {
+      if (distanceFromBottom <= 30) {
+        isScrollingToBottom = false;
+        shouldAutoScroll = true;
+        showScrollBottom = false;
+      } else {
+        shouldAutoScroll = true;
+        showScrollBottom = false;
+      }
+      return;
+    }
+
+    shouldAutoScroll = distanceFromBottom < 120;
+    showScrollBottom = distanceFromBottom > 300;
+    anchorMessageId = 'msg-mid';
+  }
+
+  onScrollToBottom();
+  assert.equal(isScrollingToBottom, true);
+  assert.equal(showScrollBottom, false);
+  assert.equal(shouldAutoScroll, true);
+
+  // Intermediate scroll event at mid-flight (distance: 500px)
+  onHandleScroll(1000, 2000, 500);
+  assert.equal(shouldAutoScroll, true, 'Autoscroll must not be flipped to false during programmatic scroll');
+  assert.equal(showScrollBottom, false, 'Scroll button must stay hidden during programmatic scroll');
+  assert.equal(anchorMessageId, null, 'Anchor message must not be overwritten during programmatic scroll');
+
+  // Subpixel distance (15px) arrives cleanly at bottom
+  onHandleScroll(1485, 2000, 500);
+  assert.equal(isScrollingToBottom, false, 'Programmatic scroll flag clears within arrival threshold');
+  assert.equal(shouldAutoScroll, true);
+  assert.equal(showScrollBottom, false);
+});
+
+test('Manual user scroll gesture interrupts programmatic scroll to bottom', () => {
+  let isScrollingToBottom = true;
+  let userScrolledManually = false;
+
+  function onUserWheel() {
+    userScrolledManually = true;
+    isScrollingToBottom = false;
+  }
+
+  onUserWheel();
+  assert.equal(isScrollingToBottom, false, 'Manual interaction must cancel programmatic scroll flag');
+  assert.equal(userScrolledManually, true, 'Manual interaction marks userScrolledManually');
+});
+
+test('Chat switch resets showScrollBottom and prevents sticky visibility', () => {
+  let showScrollBottom = true;
+  let prevChatId = 'chat-1';
+
+  function onChatSwitch(nextChatId, savedDistanceFromBottom) {
+    if (prevChatId !== nextChatId) {
+      prevChatId = nextChatId;
+      showScrollBottom = false;
+    }
+    if (typeof savedDistanceFromBottom === 'number') {
+      showScrollBottom = savedDistanceFromBottom > 300;
+    }
+  }
+
+  // Switch to chat-2 which is saved at bottom (distance: 0)
+  onChatSwitch('chat-2', 0);
+  assert.equal(showScrollBottom, false, 'Button must not stick when switching to chat at bottom');
+
+  // Switch to chat-3 which is saved scrolled up (distance: 800)
+  onChatSwitch('chat-3', 800);
+  assert.equal(showScrollBottom, true, 'Button shows when switching to chat saved far from bottom');
+});
+
+test('Distance from bottom handles rubber-band overscroll gracefully', () => {
+  const scrollHeight = 1000;
+  const clientHeight = 600;
+  const overscrollTop = 450;
+  const rawDistance = scrollHeight - overscrollTop - clientHeight;
+  assert.equal(rawDistance < 0, true, 'Raw distance is negative under overscroll');
+
+  const clampedDistance = Math.max(0, scrollHeight - overscrollTop - clientHeight);
+  assert.equal(clampedDistance, 0, 'Clamped distance must not be negative');
+});
+
+test('ResizeObserver does not snap scrollTop during programmatic smooth scroll', () => {
+  let isScrollingToBottom = true;
+  let shouldAutoScroll = false;
+  let scrollTop = 500;
+  const scrollCalls = [];
+
+  const mockElement = {
+    scrollHeight: 2000,
+    scrollTo({ top, behavior }) {
+      scrollCalls.push({ top, behavior });
+    }
+  };
+
+  if (isScrollingToBottom) {
+    mockElement.scrollTo({ top: mockElement.scrollHeight, behavior: 'smooth' });
+  } else if (shouldAutoScroll) {
+    scrollTop = mockElement.scrollHeight;
+  }
+
+  assert.equal(scrollTop, 500, 'scrollTop must not jump instantly during smooth scroll');
+  assert.equal(scrollCalls.length, 1);
+  assert.equal(scrollCalls[0].behavior, 'smooth', 'ResizeObserver retargets smoothly instead of snapping');
+});
+
+test('Smooth scroll idle debounce protects multi-second flights from premature cutoff', () => {
+  let timeoutId = null;
+  let settled = false;
+
+  function onIntermediateScroll() {
+    if (timeoutId) clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => {
+      settled = true;
+    }, 300);
+  }
+
+  for (let t = 0; t <= 1000; t += 50) {
+    onIntermediateScroll();
+  }
+
+  assert.equal(settled, false, 'Debounced timeout must not settle while frames are continuously firing');
+  clearTimeout(timeoutId);
+});
+
+

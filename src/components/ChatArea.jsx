@@ -311,11 +311,15 @@ function formatDateDivider(timestamp) {
   const isInitialChatLoadRef = useRef(true);
   const currentChatIdRef = useRef(activeChat?.id);
   const userScrolledManuallyRef = useRef(false);
+  const isScrollingToBottomRef = useRef(false);
+  const scrollTimeoutRef = useRef(null);
   const anchorMessageIdRef = useRef(null);
   const anchorOffsetRef = useRef(0);
   const chatScrollPositionsRef = useRef(new Map());
   const isPointerDownRef = useRef(false);
   const initialMountTickRef = useRef(true);
+  const footerRef = useRef(null);
+  const [footerHeight, setFooterHeight] = useState(0);
 
   const SCROLL_STORAGE_KEY_PREFIX = 'coingram_chat_scroll_';
 
@@ -379,34 +383,66 @@ function formatDateDivider(timestamp) {
 
   // Auto-scroll to bottom on chat switch or new message
   const scrollToBottom = useCallback((behavior = 'smooth') => {
-    if (chatBodyRef.current) {
-      if (behavior === 'auto') {
-        chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
-      } else {
-        messagesEndRef.current?.scrollIntoView({ behavior });
-      }
-      shouldAutoScrollRef.current = true;
-      anchorMessageIdRef.current = null;
-      anchorOffsetRef.current = 0;
-      if (activeChat?.id) {
-        const scrollData = {
-          scrollTop: chatBodyRef.current.scrollHeight,
-          scrollHeight: chatBodyRef.current.scrollHeight,
-          distanceFromBottom: 0,
-          isAtBottom: true,
-          topMessageId: null,
-          topMessageOffset: 0,
-          timestamp: Date.now()
-        };
-        chatScrollPositionsRef.current.set(activeChat.id, scrollData);
-        saveChatScroll(activeChat.id, scrollData);
-      }
+    const element = chatBodyRef.current;
+    if (!element) return;
+
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
+      scrollTimeoutRef.current = null;
     }
-  }, [activeChat?.id]);
+
+    userScrolledManuallyRef.current = false;
+    isPointerDownRef.current = false;
+    shouldAutoScrollRef.current = true;
+    anchorMessageIdRef.current = null;
+    anchorOffsetRef.current = 0;
+    setShowScrollBottom(false);
+
+    if (behavior === 'auto') {
+      isScrollingToBottomRef.current = false;
+      element.scrollTop = element.scrollHeight;
+    } else {
+      isScrollingToBottomRef.current = true;
+      if (typeof element.scrollTo === 'function') {
+        element.scrollTo({ top: element.scrollHeight, behavior: 'smooth' });
+      } else if (messagesEndRef.current?.scrollIntoView) {
+        messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      } else {
+        element.scrollTop = element.scrollHeight;
+      }
+
+      scrollTimeoutRef.current = setTimeout(() => {
+        if (isScrollingToBottomRef.current && chatBodyRef.current) {
+          chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
+          isScrollingToBottomRef.current = false;
+          shouldAutoScrollRef.current = true;
+          setShowScrollBottom(false);
+          persistSettledScroll(activeChat?.id);
+        }
+      }, 2000);
+    }
+
+    if (activeChat?.id) {
+      const scrollData = {
+        scrollTop: element.scrollHeight,
+        scrollHeight: element.scrollHeight,
+        distanceFromBottom: 0,
+        isAtBottom: true,
+        topMessageId: null,
+        topMessageOffset: 0,
+        timestamp: Date.now()
+      };
+      chatScrollPositionsRef.current.set(activeChat.id, scrollData);
+      saveChatScroll(activeChat.id, scrollData);
+    }
+  }, [activeChat?.id, persistSettledScroll]);
 
   useEffect(() => {
     const handleSave = () => {
       saveCurrentScrollPosition();
+    };
+    const handlePointerRelease = () => {
+      isPointerDownRef.current = false;
     };
     window.addEventListener('beforeunload', handleSave);
     window.addEventListener('pagehide', handleSave);
@@ -417,11 +453,20 @@ function formatDateDivider(timestamp) {
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('resize', handleSave);
+    window.addEventListener('pointerup', handlePointerRelease);
+    window.addEventListener('touchend', handlePointerRelease);
+    window.addEventListener('pointercancel', handlePointerRelease);
     return () => {
       window.removeEventListener('beforeunload', handleSave);
       window.removeEventListener('pagehide', handleSave);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('resize', handleSave);
+      window.removeEventListener('pointerup', handlePointerRelease);
+      window.removeEventListener('touchend', handlePointerRelease);
+      window.removeEventListener('pointercancel', handlePointerRelease);
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
     };
   }, [saveCurrentScrollPosition]);
 
@@ -430,9 +475,11 @@ function formatDateDivider(timestamp) {
       currentChatIdRef.current = activeChat?.id;
       isInitialChatLoadRef.current = true;
       userScrolledManuallyRef.current = false;
+      isScrollingToBottomRef.current = false;
       anchorMessageIdRef.current = null;
       anchorOffsetRef.current = 0;
       initialMountTickRef.current = true;
+      setShowScrollBottom(false);
     }
 
     if (isInitialLoading) return;
@@ -470,6 +517,8 @@ function formatDateDivider(timestamp) {
         isInitialChatLoadRef.current = false;
         initialMountTickRef.current = false;
         persistSettledScroll(activeChat.id);
+        const dist = Math.max(0, element.scrollHeight - element.scrollTop - element.clientHeight);
+        setShowScrollBottom(dist > 300);
         return;
       }
       if (messageCount <= 1 || isSyncing?.[activeChat?.id] || isChatLoading?.[activeChat?.id]) {
@@ -489,6 +538,8 @@ function formatDateDivider(timestamp) {
         isInitialChatLoadRef.current = false;
         initialMountTickRef.current = false;
         persistSettledScroll(activeChat.id);
+        const dist = Math.max(0, element.scrollHeight - element.scrollTop - element.clientHeight);
+        setShowScrollBottom(dist > 300);
         return;
       }
       if (messageCount <= 1 || isSyncing?.[activeChat?.id] || isChatLoading?.[activeChat?.id]) {
@@ -499,7 +550,9 @@ function formatDateDivider(timestamp) {
       }
       if (typeof saved.scrollTop === 'number') {
         element.scrollTop = saved.scrollTop;
-        shouldAutoScrollRef.current = Boolean(saved.distanceFromBottom < 120);
+        const dist = Math.max(0, element.scrollHeight - element.scrollTop - element.clientHeight);
+        shouldAutoScrollRef.current = Boolean(dist < 120);
+        setShowScrollBottom(dist > 300);
         isInitialChatLoadRef.current = false;
         initialMountTickRef.current = false;
         persistSettledScroll(activeChat.id);
@@ -512,6 +565,7 @@ function formatDateDivider(timestamp) {
     shouldAutoScrollRef.current = true;
     anchorMessageIdRef.current = null;
     anchorOffsetRef.current = 0;
+    setShowScrollBottom(false);
 
     if (messageCount > 1 || (!initialMountTickRef.current && !isSyncing?.[activeChat?.id] && !isChatLoading?.[activeChat?.id])) {
       isInitialChatLoadRef.current = false;
@@ -530,7 +584,11 @@ function formatDateDivider(timestamp) {
 
     const observer = new ResizeObserver(() => {
       if (!chatBodyRef.current || isLoadingOlderRef.current || isPointerDownRef.current) return;
-      if (shouldAutoScrollRef.current) {
+      if (isScrollingToBottomRef.current) {
+        if (typeof chatBodyRef.current.scrollTo === 'function') {
+          chatBodyRef.current.scrollTo({ top: chatBodyRef.current.scrollHeight, behavior: 'smooth' });
+        }
+      } else if (shouldAutoScrollRef.current) {
         chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
       } else if (anchorMessageIdRef.current) {
         const targetMsg = chatBodyRef.current.querySelector(`.message-row[data-message-id="${anchorMessageIdRef.current}"]`);
@@ -547,6 +605,9 @@ function formatDateDivider(timestamp) {
   useEffect(() => {
     const saved = chatScrollPositionsRef.current.get(activeChat?.id) || getSavedChatScroll(activeChat?.id);
     shouldAutoScrollRef.current = saved ? (saved.distanceFromBottom < 120) : true;
+    if (!isInitialLoading) {
+      setShowScrollBottom(saved ? (saved.distanceFromBottom > 300) : false);
+    }
     setReplyingTo(null);
     setOpenedImageUrl(null);
     setInputVal('');
@@ -561,7 +622,23 @@ function formatDateDivider(timestamp) {
     if (isRecordingRef.current) {
       stopRecordingAndSendRef.current?.(true);
     }
-  }, [activeChat?.id]);
+  }, [activeChat?.id, isInitialLoading]);
+
+  useEffect(() => {
+    const el = footerRef.current;
+    if (!el) return;
+    const updateHeight = () => {
+      if (footerRef.current) {
+        setFooterHeight(footerRef.current.offsetHeight);
+      }
+    };
+    updateHeight();
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(updateHeight);
+      observer.observe(el);
+      return () => observer.disconnect();
+    }
+  }, [replyingTo, canPost]);
 
   useEffect(() => {
     const handleGlobalPointerMove = (event) => recordPointerMoveHandlerRef.current?.(event);
@@ -1051,6 +1128,37 @@ function formatDateDivider(timestamp) {
     if (!element) return;
     const { scrollTop, scrollHeight, clientHeight } = element;
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    const effectiveDistance = Math.max(0, distanceFromBottom);
+
+    if (isScrollingToBottomRef.current) {
+      if (effectiveDistance <= 30) {
+        isScrollingToBottomRef.current = false;
+        if (scrollTimeoutRef.current) {
+          clearTimeout(scrollTimeoutRef.current);
+          scrollTimeoutRef.current = null;
+        }
+        shouldAutoScrollRef.current = true;
+        setShowScrollBottom(false);
+        persistSettledScroll(activeChat?.id);
+      } else {
+        shouldAutoScrollRef.current = true;
+        setShowScrollBottom(false);
+        if (scrollTimeoutRef.current) {
+          clearTimeout(scrollTimeoutRef.current);
+        }
+        scrollTimeoutRef.current = setTimeout(() => {
+          if (isScrollingToBottomRef.current && chatBodyRef.current) {
+            chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
+            isScrollingToBottomRef.current = false;
+            shouldAutoScrollRef.current = true;
+            setShowScrollBottom(false);
+            persistSettledScroll(activeChat?.id);
+          }
+        }, 300);
+      }
+      return;
+    }
+
     shouldAutoScrollRef.current = distanceFromBottom < 120;
     setShowScrollBottom(distanceFromBottom > 300);
 
@@ -1322,10 +1430,33 @@ function formatDateDivider(timestamp) {
         className={`chat-body ${isCustomWallpaper ? 'has-custom-wallpaper' : ''}`}
         ref={chatBodyRef}
         onScroll={handleScroll}
-        onWheel={() => { userScrolledManuallyRef.current = true; }}
-        onTouchStart={() => { userScrolledManuallyRef.current = true; isPointerDownRef.current = true; }}
+        onWheel={() => {
+          userScrolledManuallyRef.current = true;
+          isScrollingToBottomRef.current = false;
+          if (scrollTimeoutRef.current) {
+            clearTimeout(scrollTimeoutRef.current);
+            scrollTimeoutRef.current = null;
+          }
+        }}
+        onTouchStart={() => {
+          userScrolledManuallyRef.current = true;
+          isScrollingToBottomRef.current = false;
+          if (scrollTimeoutRef.current) {
+            clearTimeout(scrollTimeoutRef.current);
+            scrollTimeoutRef.current = null;
+          }
+          isPointerDownRef.current = true;
+        }}
         onTouchEnd={() => { isPointerDownRef.current = false; }}
-        onPointerDown={() => { userScrolledManuallyRef.current = true; isPointerDownRef.current = true; }}
+        onPointerDown={() => {
+          userScrolledManuallyRef.current = true;
+          isScrollingToBottomRef.current = false;
+          if (scrollTimeoutRef.current) {
+            clearTimeout(scrollTimeoutRef.current);
+            scrollTimeoutRef.current = null;
+          }
+          isPointerDownRef.current = true;
+        }}
         onPointerUp={() => { isPointerDownRef.current = false; }}
         onPointerCancel={() => { isPointerDownRef.current = false; }}
         style={chatBodyStyle}
@@ -1388,9 +1519,15 @@ function formatDateDivider(timestamp) {
       {/* Floating scroll to bottom button */}
       {showScrollBottom && (
         <button
+          type="button"
           className="scroll-bottom-btn"
+          aria-label="Прокрутить вниз"
+          style={footerHeight > 0 ? { bottom: `${footerHeight + 12}px` } : undefined}
+          onPointerDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
           onClick={() => {
             shouldAutoScrollRef.current = true;
+            setShowScrollBottom(false);
             scrollToBottom('smooth');
           }}
         >
@@ -1404,7 +1541,7 @@ function formatDateDivider(timestamp) {
 
       {/* Input Area */}
       {!canPost ? (
-        <footer className="chat-footer-input restricted" style={{ padding: '8px 16px' }}>
+        <footer className="chat-footer-input restricted" ref={footerRef} style={{ padding: '8px 16px' }}>
           <div className="restricted-input-bar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px', color: 'var(--text-secondary)', fontSize: '13px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', border: '1px solid var(--border-color)', width: '100%', textAlign: 'center', boxSizing: 'border-box' }}>
             <span>{activeChat?.requiresUpdate
               ? 'Для этого чата требуется версия Coiny с поддержкой E2EE v2. Отправка заблокирована.'
@@ -1414,7 +1551,7 @@ function formatDateDivider(timestamp) {
           </div>
         </footer>
       ) : (
-        <footer className="chat-footer-input">
+        <footer className="chat-footer-input" ref={footerRef}>
         {recipientMissingE2EE && (
           <div className="e2ee-waiting-banner">
             <Lock size={14} className="e2ee-banner-icon" />

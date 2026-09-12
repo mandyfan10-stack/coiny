@@ -786,12 +786,20 @@ html.theme-light .seen-check.blue {
   box-shadow: var(--shadow-md);
   cursor: pointer;
   transition: var(--transition-fast);
-  z-index: 8;
+  z-index: 320;
 }
 
 .scroll-bottom-btn:hover {
   transform: translateY(-2px);
   background-color: var(--bg-active);
+}
+
+.scroll-bottom-btn:active {
+  transform: scale(0.95);
+}
+
+.scroll-bottom-btn svg {
+  pointer-events: none;
 }
 
 /* Chat Message Input Container */
