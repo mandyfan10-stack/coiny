@@ -1,7 +1,7 @@
 {
   "name": "coingram-chat",
   "private": true,
-  "version": "1.20.58",
+  "version": "1.20.59",
   "type": "module",
   "main": "electron-main.cjs",
   "scripts": {
@@ -59,7 +59,7 @@
     "brace-expansion@4": "5.0.9",
     "brace-expansion@5": "5.0.9",
     "fast-uri@3": "3.1.7",
-    "js-yaml@4": "4.3.1",
+    "js-yaml@4": "4.3.2",
     "nanoid@3": "3.3.18",
     "postcss@8": "8.5.23",
     "tar@7": "7.5.21",
