@@ -9,7 +9,8 @@ import {
   Database,
   Trash2,
   Moon,
-  Sun
+  Sun,
+  Sparkles
 } from 'lucide-react';
 import { requestNotificationPermission } from '../../services/notificationService';
 import { SETTINGS_THEMES as themes } from './themesData';
@@ -19,6 +20,10 @@ import {
   triggerHaptic,
   HAPTIC_SUCCESS
 } from '../../hooks/useMessageTouch';
+import {
+  isCustomBubbleGeometryEnabled,
+  setCustomBubbleGeometryEnabled
+} from '../../utils/bubbleGeometrySupport';
 import {
   getCacheStorageStats,
   clearMediaAndMessageCache
@@ -43,6 +48,7 @@ export default function AppearanceTab({
   const [cacheStats, setCacheStats] = useState({ messageCount: 0, chatCount: 0, mediaCount: 0, mediaBytes: 0 });
   const [isClearingCache, setIsClearingCache] = useState(false);
   const [cacheClearedSuccess, setCacheClearedSuccess] = useState(false);
+  const [customGeometry, setCustomGeometry] = useState(() => isCustomBubbleGeometryEnabled());
 
   useEffect(() => {
     getCacheStorageStats().then(setCacheStats).catch(() => {});
@@ -245,6 +251,36 @@ export default function AppearanceTab({
               }
             }}
           />
+        </div>
+      </div>
+
+      {/* Bubble Geometry Toggle */}
+      <div className="settings-section">
+        <h5 className="section-title">
+          <Sparkles size={16} />
+          <span>Геометрия сообщений</span>
+        </h5>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 4px 10px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <span style={{ fontSize: '13.5px', fontWeight: 500, color: 'var(--text-primary)' }}>
+              Параметрические суперэллипсы
+            </span>
+            <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+              {customGeometry ? 'Включены плавные суперэллипсы и кубические хвосты' : 'Классические стандартные скругления CSS'}
+            </span>
+          </div>
+          <label className="switch-wrapper">
+            <input 
+              type="checkbox" 
+              checked={customGeometry} 
+              onChange={(e) => {
+                const nextVal = e.target.checked;
+                setCustomGeometry(nextVal);
+                setCustomBubbleGeometryEnabled(nextVal);
+              }}
+            />
+            <span className="switch-slider"></span>
+          </label>
         </div>
       </div>
 

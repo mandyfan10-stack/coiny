@@ -319,6 +319,41 @@ html.theme-light[data-wallpaper="classic"] .chat-body {
   pointer-events: none;
 }
 
+/* Custom Parametric Squircle Geometry */
+.message-bubble.custom-geometry-active {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.22));
+}
+
+html.theme-light .message-bubble.custom-geometry-active {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.08));
+}
+
+/* Suppress CSS pseudo-element tails when custom geometry renders the continuous Bezier tail */
+.message-bubble.custom-geometry-active::before,
+.message-bubble.custom-geometry-active::after {
+  display: none !important;
+}
+
+/* Extra tail clearance when continuous tail is active */
+.message-row.row-me .message-bubble.custom-geometry-active.has-tail {
+  padding-right: 14px;
+}
+
+.message-row.row-other .message-bubble.custom-geometry-active.has-tail {
+  padding-left: 14px;
+}
+
+/* Dense series seamless connection */
+.message-row:not(.group-last) .message-bubble.custom-geometry-active {
+  margin-bottom: 0px;
+}
+
+.message-row:not(.group-first) .message-bubble.custom-geometry-active {
+  margin-top: 0px;
+}
+
 /* Sender name in group */
 .sender-name {
   font-size: 13px;

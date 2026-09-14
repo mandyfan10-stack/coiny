@@ -24,6 +24,7 @@ import {
 } from './mediaPlayers';
 import MobileActionSheet from './MobileActionSheet';
 import useMessageTouch from '../../hooks/useMessageTouch';
+import useBubbleGeometry from '../../hooks/useBubbleGeometry';
 import { getReplyType } from '../../utils/mobileActionSheetUtils';
 import './Message.css';
 
@@ -178,13 +179,51 @@ export default function MessageBubble({
     moveThresholdPx: 10
   });
 
-  const handleBubblePointerDown = touchHandlers.handleBubblePointerDown;
+  const bubbleRef = useRef(null);
+  const [isHovered, setIsHovered] = useState(false);
+  const [isPressed, setIsPressed] = useState(false);
+
+  const handleBubblePointerDown = useCallback((e) => {
+    setIsPressed(true);
+    touchHandlers.handleBubblePointerDown(e);
+  }, [touchHandlers]);
   const handleBubblePointerMove = touchHandlers.handleBubblePointerMove;
-  const handleBubblePointerUp = touchHandlers.handleBubblePointerUp;
-  const clearLongPress = touchHandlers.clearLongPress;
+  const handleBubblePointerUp = useCallback((e) => {
+    setIsPressed(false);
+    touchHandlers.handleBubblePointerUp(e);
+  }, [touchHandlers]);
+  const clearLongPress = useCallback((e) => {
+    setIsPressed(false);
+    touchHandlers.clearLongPress(e);
+  }, [touchHandlers]);
   const handleContextMenu = touchHandlers.onContextMenu;
   const swipeOffset = touchHandlers.swipeOffset;
   const isSwiping = touchHandlers.isSwiping;
+
+  const seriesPosition = !isSameSenderAsPrev && !isSameSenderAsNext
+    ? 'single'
+    : !isSameSenderAsPrev && isSameSenderAsNext
+    ? 'first'
+    : isSameSenderAsPrev && isSameSenderAsNext
+    ? 'middle'
+    : 'last';
+
+  const hasTail = isLastInGroup && !isSticker && !isVideoNote && !isPureImage && !isPureVideo;
+
+  const { isCustomActive, bubbleStyle, svgClipElement } = useBubbleGeometry(bubbleRef, {
+    side: isMe ? 'out' : 'in',
+    seriesPosition,
+    hasTail,
+    isHovered,
+    isPressed,
+    swipeOffset,
+    isPending: Boolean(msg.isPending),
+    hasReactions: Boolean(msg.reactions && msg.reactions.length > 0),
+    reactionsCount: msg.reactions?.length ?? 0,
+    denseNext: isSameSenderAsNext,
+    densePrev: isSameSenderAsPrev,
+    disabled: isSticker || isVideoNote
+  });
 
   const repositionDrawer = useCallback(() => {
     if (!isReactionOpen || !smileBtnRef.current) return;
@@ -311,8 +350,10 @@ export default function MessageBubble({
 
       {/* Bubble */}
       <div
-        className={`message-bubble ${isMe ? 'bubble-me' : 'bubble-other'} ${isVideoNote ? 'bubble-video' : ''} ${isSticker ? 'bubble-sticker' : ''} ${isPureImage || isPureVideo ? 'bubble-media-only' : ''} ${showSenderName ? 'has-sender-name' : ''} ${isImageWithCaption || isVideoWithCaption ? 'bubble-media-with-caption' : ''}`}
+        ref={bubbleRef}
+        className={`message-bubble ${isMe ? 'bubble-me' : 'bubble-other'} ${isVideoNote ? 'bubble-video' : ''} ${isSticker ? 'bubble-sticker' : ''} ${isPureImage || isPureVideo ? 'bubble-media-only' : ''} ${showSenderName ? 'has-sender-name' : ''} ${isImageWithCaption || isVideoWithCaption ? 'bubble-media-with-caption' : ''} ${isCustomActive ? 'custom-geometry-active' : ''} ${hasTail ? 'has-tail' : ''}`}
         style={{
+          ...bubbleStyle,
           transform: swipeOffset ? `translateX(${swipeOffset}px)` : undefined,
           transition: isSwiping ? 'none' : 'transform 0.22s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
         }}
@@ -321,7 +362,10 @@ export default function MessageBubble({
         onPointerUp={handleBubblePointerUp}
         onPointerCancel={clearLongPress}
         onContextMenu={handleContextMenu}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
       >
+        {svgClipElement}
         {swipeOffset !== 0 && (
           <div
             className="message-swipe-reply-indicator"
