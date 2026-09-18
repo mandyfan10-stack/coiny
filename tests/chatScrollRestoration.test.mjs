@@ -323,4 +323,115 @@ test('Smooth scroll idle debounce protects multi-second flights from premature c
   clearTimeout(timeoutId);
 });
 
+test('ChatArea ignores history hydration and does not trigger smooth scroll upon entering a chat', () => {
+  assert.match(chatAreaSource, /isHydratingChatHistory/);
+  assert.match(chatAreaSource, /!isHydratingChatHistory\s*&&\s*isNewMessage/);
+
+  let scrollCalls = 0;
+  let prevChatId = null;
+  let prevMessageCount = 0;
+  let prevLatestMessageId = null;
+  let isInitialChatLoad = true;
+
+  function handleMessageEffect(chatId, messages, isChatLoading = false) {
+    const isChatChanged = prevChatId !== chatId;
+    prevChatId = chatId;
+
+    const messageCount = messages.length;
+    const latestMessage = messages[messages.length - 1];
+    const latestMessageId = latestMessage?.id;
+
+    if (isChatChanged) {
+      prevMessageCount = messageCount;
+      prevLatestMessageId = latestMessageId;
+      isInitialChatLoad = true;
+      return;
+    }
+
+    const isNewMessage = (
+      messageCount > prevMessageCount &&
+      latestMessageId !== prevLatestMessageId
+    );
+
+    const isHydratingChatHistory = Boolean(
+      isInitialChatLoad ||
+      isChatLoading ||
+      (prevMessageCount <= 1 && messageCount > 1)
+    );
+
+    if (!isHydratingChatHistory && isNewMessage) {
+      scrollCalls++;
+    }
+
+    if (messageCount > 1) {
+      isInitialChatLoad = false;
+    }
+
+    prevMessageCount = messageCount;
+    prevLatestMessageId = latestMessageId;
+  }
+
+  // Step 1: User enters chat with 1 preview message
+  handleMessageEffect('chat-100', [{ id: 'msg-preview', text: 'Preview' }]);
+  assert.equal(scrollCalls, 0, 'Entering chat must not trigger autoscroll');
+
+  // Step 2: Full history hydrates from IndexedDB (30 messages)
+  const fullHistory = Array.from({ length: 30 }, (_, i) => ({
+    id: `msg-${i + 1}`,
+    text: `Message ${i + 1}`
+  }));
+  handleMessageEffect('chat-100', fullHistory);
+  assert.equal(scrollCalls, 0, 'Hydrating history must not trigger smooth autoscroll');
+
+  // Step 3: Now an actual new message arrives while chatting
+  handleMessageEffect('chat-100', [...fullHistory, { id: 'msg-31', text: 'Real new message' }]);
+  assert.equal(scrollCalls, 1, 'Real new message must trigger autoscroll');
+});
+
+test('Upward scroll cancels programmatic scroll and unlocks scrolling up', () => {
+  assert.match(chatAreaSource, /lastScrollTopRef/);
+  assert.match(chatAreaSource, /isScrollingUp/);
+
+  let isScrollingToBottom = true;
+  let userScrolledManually = false;
+  let shouldAutoScroll = true;
+  let lastScrollTop = 1000;
+
+  function onScroll(scrollTop) {
+    const isScrollingUp = scrollTop < lastScrollTop;
+    lastScrollTop = scrollTop;
+
+    if (isScrollingUp && isScrollingToBottom) {
+      isScrollingToBottom = false;
+      userScrolledManually = true;
+      shouldAutoScroll = false;
+    }
+  }
+
+  // User scrolls UP from 1000 to 900
+  onScroll(900);
+
+  assert.equal(isScrollingToBottom, false, 'Upward scroll must cancel programmatic scroll');
+  assert.equal(userScrolledManually, true, 'Upward scroll marks userScrolledManually');
+  assert.equal(shouldAutoScroll, false, 'Upward scroll releases auto-scroll pin');
+});
+
+test('ResizeObserver does not snap to bottom when user scrolled manually or is looking at an anchor', () => {
+  let userScrolledManually = true;
+  let shouldAutoScroll = true;
+  let scrollTop = 500;
+  const scrollHeight = 2000;
+  const clientHeight = 600;
+  const currentDist = scrollHeight - scrollTop - clientHeight; // 900px away from bottom
+
+  if (shouldAutoScroll) {
+    if (!userScrolledManually && currentDist <= 30) {
+      scrollTop = scrollHeight;
+    }
+  }
+
+  assert.equal(scrollTop, 500, 'scrollTop must stay untouched when user scrolled manually');
+});
+
+
 

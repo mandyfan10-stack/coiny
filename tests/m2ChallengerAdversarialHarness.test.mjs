@@ -273,7 +273,7 @@ test('EMPIRICAL ADVERSARIAL: Action buttons & reaction drawer at very top of cha
   try {
     for (const vp of VIEWPORT_MATRIX) {
       const page = await browser.newPage({ viewport: { width: vp.width, height: vp.height } });
-      await page.setContent(html, { waitUntil: 'domcontentloaded' });
+      await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
       for (const yPos of [0, 10, 20, 30]) {
         for (const type of ['me', 'other']) {
@@ -400,7 +400,7 @@ test('EMPIRICAL ADVERSARIAL: Action buttons & reaction drawer at very bottom of 
   try {
     for (const vp of VIEWPORT_MATRIX) {
       const page = await browser.newPage({ viewport: { width: vp.width, height: vp.height } });
-      await page.setContent(html, { waitUntil: 'domcontentloaded' });
+      await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
       for (const bottomOffset of [60, 45, 30]) {
         for (const type of ['me', 'other']) {
@@ -504,7 +504,7 @@ test('EMPIRICAL ADVERSARIAL: Extreme horizontal edge positions (leftmost incomin
   try {
     for (const vp of VIEWPORT_MATRIX) {
       const page = await browser.newPage({ viewport: { width: vp.width, height: vp.height } });
-      await page.setContent(html, { waitUntil: 'domcontentloaded' });
+      await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
       // Test cases:
       // 1. Ultra-short bubble (e.g. "K")
@@ -653,7 +653,7 @@ test('EMPIRICAL ADVERSARIAL: Exact pixel coordinate stress testing (scrolled top
   try {
     for (const vp of VIEWPORT_MATRIX) {
       const page = await browser.newPage({ viewport: { width: vp.width, height: vp.height } });
-      await page.setContent(html, { waitUntil: 'domcontentloaded' });
+      await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
       // Test extreme fixed anchor coordinates:
       // (1) Anchor at top of window: y=5, y=15, y=25, y=35

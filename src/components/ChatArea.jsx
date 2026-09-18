@@ -319,6 +319,7 @@ function formatDateDivider(timestamp) {
   const isPointerDownRef = useRef(false);
   const initialMountTickRef = useRef(true);
   const footerRef = useRef(null);
+  const lastScrollTopRef = useRef(0);
   const [footerHeight, setFooterHeight] = useState(0);
 
   const SCROLL_STORAGE_KEY_PREFIX = 'coingram_chat_scroll_';
@@ -489,6 +490,11 @@ function formatDateDivider(timestamp) {
     if (messageCount === 0) return;
 
     if (!isInitialChatLoadRef.current) return;
+    if (userScrolledManuallyRef.current) {
+      isInitialChatLoadRef.current = false;
+      initialMountTickRef.current = false;
+      return;
+    }
 
     const saved = chatScrollPositionsRef.current.get(activeChat?.id) || getSavedChatScroll(activeChat?.id);
 
@@ -589,7 +595,15 @@ function formatDateDivider(timestamp) {
           chatBodyRef.current.scrollTo({ top: chatBodyRef.current.scrollHeight, behavior: 'smooth' });
         }
       } else if (shouldAutoScrollRef.current) {
-        chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
+        const currentDist = Math.max(0, chatBodyRef.current.scrollHeight - chatBodyRef.current.scrollTop - chatBodyRef.current.clientHeight);
+        if (!userScrolledManuallyRef.current && currentDist <= 30) {
+          chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
+        } else if (anchorMessageIdRef.current) {
+          const targetMsg = chatBodyRef.current.querySelector(`.message-row[data-message-id="${anchorMessageIdRef.current}"]`);
+          if (targetMsg) {
+            chatBodyRef.current.scrollTop = targetMsg.offsetTop - anchorOffsetRef.current;
+          }
+        }
       } else if (anchorMessageIdRef.current) {
         const targetMsg = chatBodyRef.current.querySelector(`.message-row[data-message-id="${anchorMessageIdRef.current}"]`);
         if (targetMsg) {
@@ -1110,7 +1124,13 @@ function formatDateDivider(timestamp) {
     );
     const isOwnMessage = isNewMessage && (latestMessageSenderId === currentUser?.id || latestMessageSenderId === 'current');
 
-    if (!isLoadingOlderRef.current && isNewMessage) {
+    const isHydratingChatHistory = Boolean(
+      isInitialChatLoadRef.current ||
+      isChatLoading?.[activeChat?.id] ||
+      (prevMessageCountRef.current <= 1 && messageCount > 1)
+    );
+
+    if (!isLoadingOlderRef.current && !isHydratingChatHistory && isNewMessage) {
       if (shouldAutoScrollRef.current || isOwnMessage) {
         // Own sends jump instantly so smooth-scroll cannot be interrupted by
         // pagination/layout while the row is still off-screen.
@@ -1120,7 +1140,7 @@ function formatDateDivider(timestamp) {
 
     prevMessageCountRef.current = messageCount;
     prevLatestMessageIdRef.current = latestMessageId;
-  }, [activeChat?.id, latestMessageId, latestMessageSenderId, messageCount, currentUser?.id, scrollToBottom]);
+  }, [activeChat?.id, latestMessageId, latestMessageSenderId, messageCount, currentUser?.id, scrollToBottom, isChatLoading]);
 
   // Monitor scroll, virtualize off-screen rows, and page backwards near the top.
   const handleScroll = async () => {
@@ -1129,6 +1149,21 @@ function formatDateDivider(timestamp) {
     const { scrollTop, scrollHeight, clientHeight } = element;
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
     const effectiveDistance = Math.max(0, distanceFromBottom);
+    const isScrollingUp = scrollTop < (lastScrollTopRef.current || 0);
+    lastScrollTopRef.current = scrollTop;
+
+    if (isScrollingUp && isScrollingToBottomRef.current) {
+      isScrollingToBottomRef.current = false;
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+        scrollTimeoutRef.current = null;
+      }
+      userScrolledManuallyRef.current = true;
+      shouldAutoScrollRef.current = false;
+      if (typeof element.scrollTo === 'function') {
+        element.scrollTo({ top: element.scrollTop, behavior: 'auto' });
+      }
+    }
 
     if (isScrollingToBottomRef.current) {
       if (effectiveDistance <= 30) {
@@ -1162,8 +1197,17 @@ function formatDateDivider(timestamp) {
     shouldAutoScrollRef.current = distanceFromBottom < 120;
     setShowScrollBottom(distanceFromBottom > 300);
 
-    if (userScrolledManuallyRef.current) {
+    if (userScrolledManuallyRef.current || isScrollingUp) {
       isInitialChatLoadRef.current = false;
+      if (effectiveDistance > 20) {
+        shouldAutoScrollRef.current = false;
+      }
+    }
+
+    if (effectiveDistance <= 15) {
+      userScrolledManuallyRef.current = false;
+      shouldAutoScrollRef.current = true;
+      setShowScrollBottom(false);
     }
 
     if (!isInitialChatLoadRef.current) {
@@ -1430,9 +1474,15 @@ function formatDateDivider(timestamp) {
         className={`chat-body ${isCustomWallpaper ? 'has-custom-wallpaper' : ''}`}
         ref={chatBodyRef}
         onScroll={handleScroll}
-        onWheel={() => {
+        onWheel={(e) => {
           userScrolledManuallyRef.current = true;
           isScrollingToBottomRef.current = false;
+          if (e.deltaY < 0) {
+            shouldAutoScrollRef.current = false;
+            if (typeof chatBodyRef.current?.scrollTo === 'function') {
+              chatBodyRef.current.scrollTo({ top: chatBodyRef.current.scrollTop, behavior: 'auto' });
+            }
+          }
           if (scrollTimeoutRef.current) {
             clearTimeout(scrollTimeoutRef.current);
             scrollTimeoutRef.current = null;
@@ -1441,6 +1491,9 @@ function formatDateDivider(timestamp) {
         onTouchStart={() => {
           userScrolledManuallyRef.current = true;
           isScrollingToBottomRef.current = false;
+          if (typeof chatBodyRef.current?.scrollTo === 'function') {
+            chatBodyRef.current.scrollTo({ top: chatBodyRef.current.scrollTop, behavior: 'auto' });
+          }
           if (scrollTimeoutRef.current) {
             clearTimeout(scrollTimeoutRef.current);
             scrollTimeoutRef.current = null;
@@ -1451,6 +1504,9 @@ function formatDateDivider(timestamp) {
         onPointerDown={() => {
           userScrolledManuallyRef.current = true;
           isScrollingToBottomRef.current = false;
+          if (typeof chatBodyRef.current?.scrollTo === 'function') {
+            chatBodyRef.current.scrollTo({ top: chatBodyRef.current.scrollTop, behavior: 'auto' });
+          }
           if (scrollTimeoutRef.current) {
             clearTimeout(scrollTimeoutRef.current);
             scrollTimeoutRef.current = null;
@@ -1474,7 +1530,7 @@ function formatDateDivider(timestamp) {
               const firstUnreadIndex = (activeChat.unread_count > 0)
                 ? activeChat.messages.length - activeChat.unread_count
                 : activeChat.messages.findIndex((m) => m.senderId !== currentUser?.id && m.senderId !== 'current' && !m.read);
-              const showUnreadDivider = index === firstUnreadIndex && firstUnreadIndex > 0;
+              const showUnreadDivider = index === firstUnreadIndex && firstUnreadIndex >= 0;
 
               return (
                 <React.Fragment key={msg.id}>

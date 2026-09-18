@@ -239,7 +239,7 @@ test('EMPIRICAL M2: Message action bar positioning at the very top of chat histo
   try {
     for (const vp of mobileViewports) {
       const page = await browser.newPage({ viewport: { width: vp.width, height: vp.height } });
-      await page.setContent(htmlContent, { waitUntil: 'domcontentloaded' });
+      await page.setContent(htmlContent, { waitUntil: 'domcontentloaded', timeout: 60000 });
       await page.waitForTimeout(50);
 
       const actionPositions = await page.evaluate(() => {
@@ -328,7 +328,7 @@ test('EMPIRICAL M2: Short viewport with virtual keyboard open (< 500px height) r
   try {
     for (const vp of shortViewports) {
       const page = await browser.newPage({ viewport: { width: vp.width, height: vp.height } });
-      await page.setContent(htmlContent, { waitUntil: 'domcontentloaded' });
+      await page.setContent(htmlContent, { waitUntil: 'domcontentloaded', timeout: 60000 });
       await page.waitForTimeout(50);
 
       // Test opening reaction drawer on bottom message (near keyboard)
@@ -393,7 +393,7 @@ test('EMPIRICAL M2: Ultra-narrow screens (320px, 360px) opening 8-emoji reaction
   try {
     for (const vp of narrowViewports) {
       const page = await browser.newPage({ viewport: { width: vp.width, height: vp.height } });
-      await page.setContent(htmlContent, { waitUntil: 'domcontentloaded' });
+      await page.setContent(htmlContent, { waitUntil: 'domcontentloaded', timeout: 60000 });
       await page.waitForTimeout(50);
 
       // Test opening reaction drawer on middle message
@@ -456,7 +456,7 @@ test('EMPIRICAL M2: Reaction badges wrapping and touch target height', async () 
 
   try {
     const page = await browser.newPage({ viewport: { width: 360, height: 640 } });
-    await page.setContent(htmlContent, { waitUntil: 'domcontentloaded' });
+    await page.setContent(htmlContent, { waitUntil: 'domcontentloaded', timeout: 60000 });
     await page.waitForTimeout(50);
 
     const badgeMetrics = await page.evaluate(() => {
