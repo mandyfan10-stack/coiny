@@ -1,5 +1,4 @@
-import React from 'react';
-import { ArrowLeft, Lock, MoreVertical } from 'lucide-react';
+import { ArrowLeft, Lock, MoreVertical, Search } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useE2EE } from '../../context/E2EEContext';
 import { isSavedMessagesChat, requiresPersonalE2EE, savedMessagesDisplayName } from '../../utils/savedMessages';
@@ -14,7 +13,9 @@ export default function ChatHeader({
   isSyncing,
   isInfoOpen,
   setIsInfoOpen,
-  setActiveChatId
+  setActiveChatId,
+  isSearchOpen = false,
+  onToggleSearch
 }) {
   const { currentUser } = useAuth();
   const { e2eePrivateKey } = useE2EE();
@@ -63,6 +64,19 @@ export default function ChatHeader({
         </div>
       </div>
       <div className="chat-header-actions" onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          className={`chat-header-btn ${isSearchOpen ? 'active' : ''}`}
+          onClick={() => {
+            triggerHaptic(8);
+            onToggleSearch?.();
+          }}
+          title="Поиск в чате (Ctrl+F)"
+          aria-label="Поиск в чате"
+          data-testid="chat-header-search-btn"
+        >
+          <Search size={19} />
+        </button>
         <button type="button" className="chat-header-btn" onClick={toggleInfo} title="Информация">
           <MoreVertical size={20} />
         </button>

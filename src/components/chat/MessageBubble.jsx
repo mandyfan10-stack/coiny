@@ -64,7 +64,9 @@ export default function MessageBubble({
   toggleReaction,
   retrySendMessage,
   deleteFailedMessage,
-  emojis
+  emojis,
+  searchQuery = '',
+  isSearchMatchTarget = false
 }) {
   const isMe = msg.senderId === currentUser?.id || msg.senderId === 'current';
   const isGroupOther = activeChat?.type === 'group' && !isMe;
@@ -351,7 +353,7 @@ export default function MessageBubble({
       {/* Bubble */}
       <div
         ref={bubbleRef}
-        className={`message-bubble ${isMe ? 'bubble-me' : 'bubble-other'} ${isVideoNote ? 'bubble-video' : ''} ${isSticker ? 'bubble-sticker' : ''} ${isPureImage || isPureVideo ? 'bubble-media-only' : ''} ${showSenderName ? 'has-sender-name' : ''} ${isImageWithCaption || isVideoWithCaption ? 'bubble-media-with-caption' : ''} ${isCustomActive ? 'custom-geometry-active' : ''} ${hasTail ? 'has-tail' : ''}`}
+        className={`message-bubble ${isMe ? 'bubble-me' : 'bubble-other'} ${isVideoNote ? 'bubble-video' : ''} ${isSticker ? 'bubble-sticker' : ''} ${isPureImage || isPureVideo ? 'bubble-media-only' : ''} ${showSenderName ? 'has-sender-name' : ''} ${isImageWithCaption || isVideoWithCaption ? 'bubble-media-with-caption' : ''} ${isCustomActive ? 'custom-geometry-active' : ''} ${hasTail ? 'has-tail' : ''} ${isSearchMatchTarget ? 'search-match-target' : ''}`}
         style={{
           ...bubbleStyle,
           transform: swipeOffset ? `translateX(${swipeOffset}px)` : undefined,
@@ -442,7 +444,7 @@ export default function MessageBubble({
             <div className="bubble-caption">
               <p className="message-text">
                 {msg.isLocked && <Lock size={13} style={{ color: 'var(--text-secondary)', opacity: 0.8, marginRight: 4 }} />}
-                <span>{renderMessageTextWithLinks(msg.text)}</span>
+                <span>{renderMessageTextWithLinks(msg.text, searchQuery)}</span>
                 {renderMetadata()}
               </p>
             </div>
@@ -468,7 +470,7 @@ export default function MessageBubble({
             <div className="bubble-caption">
               <p className="message-text">
                 {msg.isLocked && <Lock size={13} style={{ color: 'var(--text-secondary)', opacity: 0.8, marginRight: 4 }} />}
-                <span>{renderMessageTextWithLinks(msg.text)}</span>
+                <span>{renderMessageTextWithLinks(msg.text, searchQuery)}</span>
                 {renderMetadata()}
               </p>
             </div>
@@ -508,7 +510,7 @@ export default function MessageBubble({
             ) : (
               <p className="message-text">
                 {msg.isLocked && <Lock size={13} style={{ color: 'var(--text-secondary)', opacity: 0.8, marginRight: 4 }} />}
-                <span>{renderMessageTextWithLinks(msg.text)}</span>
+                <span>{renderMessageTextWithLinks(msg.text, searchQuery)}</span>
                 {renderMetadata()}
               </p>
             )}

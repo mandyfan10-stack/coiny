@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useLayoutEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect, useCallback, useMemo } from 'react';
 import { useChat } from '../context/ChatContext';
 import './ChatArea.css';
 import coinyLogo from '../assets/logo.png';
@@ -34,6 +34,7 @@ import {
 } from '../utils/mediaRecording';
 import { requiresPersonalE2EE } from '../utils/savedMessages';
 import ChatHeader from './chat/ChatHeader';
+import ChatSearchBar from './chat/ChatSearchBar';
 import MessageBubble from './chat/MessageBubble';
 import ImageViewer from './chat/ImageViewer';
 import MediaPickerPanel from './chat/MediaPickerPanel';
@@ -150,6 +151,9 @@ export default function ChatArea() {
   const [showScrollBottom, setShowScrollBottom] = useState(false);
   const [openedImageUrl, setOpenedImageUrl] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
   const [isCurrentlyTyping, setIsCurrentlyTyping] = useState(false);
   const isCurrentlyTypingRef = useRef(isCurrentlyTyping);
   const isRecordingRef = useRef(false);
@@ -321,6 +325,100 @@ function formatDateDivider(timestamp) {
   const footerRef = useRef(null);
   const lastScrollTopRef = useRef(0);
   const [footerHeight, setFooterHeight] = useState(0);
+
+  // In-chat message search
+  const matchedMessages = useMemo(() => {
+    if (!searchQuery.trim() || !activeChat?.messages) return [];
+    const query = searchQuery.trim().toLowerCase();
+    return activeChat.messages.filter((m) => {
+      if (!m.text) return false;
+      return m.text.toLowerCase().includes(query);
+    });
+  }, [searchQuery, activeChat?.messages]);
+
+  useEffect(() => {
+    if (matchedMessages.length === 0) {
+      setCurrentMatchIndex(0);
+    } else if (currentMatchIndex >= matchedMessages.length) {
+      setCurrentMatchIndex(matchedMessages.length - 1);
+    }
+  }, [matchedMessages.length, currentMatchIndex]);
+
+  useEffect(() => {
+    setIsSearchOpen(false);
+    setSearchQuery('');
+    setCurrentMatchIndex(0);
+  }, [activeChat?.id]);
+
+  const scrollToMatchedMessage = useCallback((msgId) => {
+    if (!msgId || !chatBodyRef.current) return;
+    const targetEl = chatBodyRef.current.querySelector(`.message-row[data-message-id="${msgId}"]`);
+    if (targetEl) {
+      userScrolledManuallyRef.current = true;
+      shouldAutoScrollRef.current = false;
+      targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, []);
+
+  const handleNextMatch = useCallback(() => {
+    if (matchedMessages.length === 0) return;
+    const nextIdx = (currentMatchIndex + 1) % matchedMessages.length;
+    setCurrentMatchIndex(nextIdx);
+    scrollToMatchedMessage(matchedMessages[nextIdx]?.id);
+  }, [matchedMessages, currentMatchIndex, scrollToMatchedMessage]);
+
+  const handlePrevMatch = useCallback(() => {
+    if (matchedMessages.length === 0) return;
+    const prevIdx = (currentMatchIndex - 1 + matchedMessages.length) % matchedMessages.length;
+    setCurrentMatchIndex(prevIdx);
+    scrollToMatchedMessage(matchedMessages[prevIdx]?.id);
+  }, [matchedMessages, currentMatchIndex, scrollToMatchedMessage]);
+
+  const handleSearchChange = useCallback((newQuery) => {
+    setSearchQuery(newQuery);
+    setCurrentMatchIndex(0);
+  }, []);
+
+  const handleCloseSearch = useCallback(() => {
+    setIsSearchOpen(false);
+    setSearchQuery('');
+    setCurrentMatchIndex(0);
+  }, []);
+
+  const handleToggleSearch = useCallback(() => {
+    setIsSearchOpen((prev) => {
+      const next = !prev;
+      if (!next) {
+        setSearchQuery('');
+        setCurrentMatchIndex(0);
+      }
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (isSearchOpen && matchedMessages.length > 0 && matchedMessages[currentMatchIndex]) {
+      scrollToMatchedMessage(matchedMessages[currentMatchIndex]?.id);
+    }
+  }, [isSearchOpen, currentMatchIndex, matchedMessages, scrollToMatchedMessage]);
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F' || e.key === 'а' || e.key === 'А')) {
+        if (activeChat?.id) {
+          e.preventDefault();
+          setIsSearchOpen(true);
+        }
+      } else if (e.key === 'Escape' && isSearchOpen) {
+        e.preventDefault();
+        handleCloseSearch();
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [activeChat?.id, isSearchOpen, handleCloseSearch]);
+
 
   const SCROLL_STORAGE_KEY_PREFIX = 'coingram_chat_scroll_';
 
@@ -1461,7 +1559,20 @@ function formatDateDivider(timestamp) {
         isInfoOpen={isInfoOpen}
         setIsInfoOpen={setIsInfoOpen}
         setActiveChatId={setActiveChatId}
+        isSearchOpen={isSearchOpen}
+        onToggleSearch={handleToggleSearch}
       />
+      {isSearchOpen && (
+        <ChatSearchBar
+          searchQuery={searchQuery}
+          onSearchChange={handleSearchChange}
+          totalMatches={matchedMessages.length}
+          currentMatchIndex={currentMatchIndex}
+          onPrevMatch={handlePrevMatch}
+          onNextMatch={handleNextMatch}
+          onClose={handleCloseSearch}
+        />
+      )}
       {!isOnline && (
         <div className="offline-banner" style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
           <WifiOff size={14} className="offline-banner-icon" />
@@ -1563,6 +1674,8 @@ function formatDateDivider(timestamp) {
                     retrySendMessage={retrySendMessage}
                     deleteFailedMessage={deleteFailedMessage}
                     emojis={emojis}
+                    searchQuery={searchQuery}
+                    isSearchMatchTarget={isSearchOpen && matchedMessages[currentMatchIndex]?.id === msg.id}
                   />
                 </React.Fragment>
               );

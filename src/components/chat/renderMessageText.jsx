@@ -1,9 +1,27 @@
 import React from 'react';
 import { normalizeExternalHttpsUrl } from '../../utils/urlSecurity';
 import { parseInviteParam } from '../../utils/inviteLink';
+import { splitTextBySearchQuery, escapeRegExp } from '../../utils/searchHighlight';
 
-function renderMessageTextWithLinks(text) {
+function highlightSearchQuery(text, query) {
+  if (!query || !text || typeof text !== 'string') return text;
+  const segments = splitTextBySearchQuery(text, query);
+  if (segments.length <= 1 && !segments[0]?.isMatch) return text;
+  return segments.map((seg, idx) => {
+    if (seg.isMatch) {
+      return (
+        <mark key={idx} className="search-match-highlight">
+          {seg.text}
+        </mark>
+      );
+    }
+    return seg.text;
+  });
+}
+
+function renderMessageTextWithLinks(text, searchQuery = '') {
   if (!text) return null;
+  const query = typeof searchQuery === 'string' ? searchQuery.trim() : '';
   const urlRegex = /(https?:\/\/[^\s]+)/g;
   const parts = text.split(urlRegex);
   return parts.map((part, i) => {
@@ -21,7 +39,7 @@ function renderMessageTextWithLinks(text) {
       }
 
       const safeHref = normalizeExternalHttpsUrl(href);
-      if (!safeHref) return part;
+      if (!safeHref) return highlightSearchQuery(part, query);
 
       const handleLinkClick = (e) => {
         e.stopPropagation();
@@ -50,14 +68,14 @@ function renderMessageTextWithLinks(text) {
             rel="noopener noreferrer"
             onClick={handleLinkClick}
           >
-            {display}
+            {highlightSearchQuery(display, query)}
           </a>
           {trailing}
         </React.Fragment>
       );
     }
-    return part;
+    return highlightSearchQuery(part, query);
   });
 }
 
-export { renderMessageTextWithLinks };
+export { renderMessageTextWithLinks, highlightSearchQuery, escapeRegExp };

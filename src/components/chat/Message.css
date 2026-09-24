@@ -80,3 +80,30 @@
   opacity: 0.9;
 }
 
+/* --- Search Match Highlighting --- */
+mark.search-match-highlight {
+  background-color: #ffd54f;
+  color: #1a1a1a;
+  border-radius: 3px;
+  padding: 0 2px;
+  font-weight: 500;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.message-bubble.search-match-target {
+  animation: searchBubblePulse 1.8s ease-in-out;
+  box-shadow: 0 0 0 2.5px var(--accent-color, #2481cc), 0 4px 16px rgba(36, 129, 204, 0.35) !important;
+}
+
+@keyframes searchBubblePulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(36, 129, 204, 0.7);
+  }
+  35% {
+    box-shadow: 0 0 0 4px var(--accent-color, #2481cc), 0 4px 20px rgba(36, 129, 204, 0.5);
+  }
+  100% {
+    box-shadow: 0 0 0 2.5px var(--accent-color, #2481cc), 0 4px 16px rgba(36, 129, 204, 0.35);
+  }
+}
+
