@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { flushSync } from 'react-dom';
 import '../../src/index.css';
 import { AuthProvider } from '../../src/context/AuthContext.jsx';
 import { E2EEProvider } from '../../src/context/E2EEContext.jsx';
@@ -9,6 +10,8 @@ import ChatArea from '../../src/components/ChatArea.jsx';
 const self = { id: 'scroll-self', username: 'scroll_self', name: 'Scroll Self', has_e2ee: false };
 localStorage.setItem('tg-user-mock', JSON.stringify(self));
 const noop = () => {};
+const recentHistory = new URLSearchParams(location.search).has('recent');
+const missingMessageId = new URLSearchParams(location.search).get('missing');
 const makeMessage = (chatId, index) => ({
   id: `${chatId}-msg-${index}`,
   senderId: 'scroll-peer',
@@ -25,20 +28,42 @@ const makeChat = (id, count) => ({
 });
 
 function Harness() {
-  const [chats, setChats] = useState([makeChat('a', 200), makeChat('b', 120)]);
+  const [chats, setChats] = useState(() => {
+    const a = makeChat('a', 200);
+    if (recentHistory) a.messages = a.messages.slice(-50);
+    return [a, makeChat('b', 120)];
+  });
   const [activeChatId, setActiveChatId] = useState('a');
   const activeChat = chats.find(chat => chat.id === activeChatId);
   useEffect(() => {
     window.__scrollTest = {
       select: setActiveChatId,
+      leaveAt(top) {
+        document.querySelector('.chat-body').scrollTop = top;
+        flushSync(() => setActiveChatId(null));
+      },
+      setUnread(chatId, count) {
+        setChats(previous => previous.map(chat => chat.id === chatId ? { ...chat, unread_count: count } : chat));
+      },
       requests: [],
+      failNext(chatId) {
+        const request = this.requests.find(item => item.chatId === chatId && !item.done);
+        if (!request) throw new Error(`No pending history request for ${chatId}`);
+        request.done = true;
+        request.resolve(0);
+      },
       resolveNext(chatId) {
         const request = this.requests.find(item => item.chatId === chatId && !item.done);
         if (!request) throw new Error(`No pending history request for ${chatId}`);
         request.done = true;
-        setChats(previous => previous.map(chat => chat.id === chatId ? {
-          ...chat, messages: [...Array.from({ length: 30 }, (_, index) => makeMessage(chatId, index - 30)), ...chat.messages],
-        } : chat));
+        setChats(previous => previous.map(chat => {
+          if (chat.id !== chatId) return chat;
+          const first = Number(chat.messages[0].id.replace(`${chatId}-msg-`, ''));
+          const start = recentHistory ? Math.max(0, first - 30) : first - 30;
+          const older = Array.from({ length: first - start }, (_, index) => makeMessage(chatId, start + index))
+            .filter(message => message.id !== missingMessageId);
+          return { ...chat, messages: [...older, ...chat.messages] };
+        }));
         request.resolve(30);
       },
       append(chatId) {
@@ -74,10 +99,12 @@ function Harness() {
     isInfoOpen: false, setIsInfoOpen: noop, typingStatuses: {}, sendTypingStatus: noop,
     wallpaper: 'classic', renderAvatar: () => '👤', installedStickers: [], isOnline: true,
     retrySendMessage: noop, deleteFailedMessage: noop, loadOlderMessages,
-    messagePagination: Object.fromEntries(chats.map(chat => [chat.id, { hasMore: chat.messages[0].id === `${chat.id}-msg-0` }])),
+    messagePagination: Object.fromEntries(chats.map(chat => [chat.id, {
+      hasMore: recentHistory ? Number(chat.messages[0].id.replace(`${chat.id}-msg-`, '')) > 0 : chat.messages[0].id === `${chat.id}-msg-0`,
+    }])),
     isChatLoading: {}, isSyncing: {}, setIsSettingsOpen: noop, setSettingsTab: noop,
   };
-  return <ChatContext.Provider value={value}><div className="app-container"><ChatArea /></div></ChatContext.Provider>;
+  return <ChatContext.Provider value={value}><div className={`app-container${activeChatId ? ' active-chat-selected' : ''}`}><ChatArea /></div></ChatContext.Provider>;
 }
 
 createRoot(document.getElementById('root')).render(<AuthProvider><E2EEProvider><Harness /></E2EEProvider></AuthProvider>);

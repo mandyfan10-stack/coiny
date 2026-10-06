@@ -44,6 +44,17 @@ import useResolvedMedia from '../hooks/useResolvedMedia';
 import useEdgeSwipeBack from '../hooks/useSwipeGesture';
 import ChatSkeleton from './chat/ChatSkeleton';
 
+function findSavedScrollTarget(element, saved) {
+  const rows = [...element.querySelectorAll('.message-row[data-message-id]')];
+  const exact = rows.find(row => row.dataset.messageId === saved.topMessageId);
+  if (exact) return { row: exact, needsOlder: false };
+  const timestamp = saved.topMessageTimestamp;
+  if (!Number.isFinite(timestamp)) return { row: null, needsOlder: true };
+  const closest = rows.find(row => Number(row.dataset.messageTimestamp) >= timestamp) || rows.at(-1);
+  const oldest = Number(rows[0]?.dataset.messageTimestamp);
+  return { row: closest, needsOlder: !Number.isFinite(oldest) || oldest > timestamp };
+}
+
 export default function ChatArea() {
   const {
     activeChat,
@@ -321,7 +332,10 @@ function formatDateDivider(timestamp) {
   const anchorOffsetRef = useRef(0);
   const chatScrollPositionsRef = useRef(new Map());
   const paginationRequestRef = useRef(null);
-  const paginationFrameRef = useRef(null);
+  const [paginationRestoreRevision, setPaginationRestoreRevision] = useState(0);
+  const historyRestoreRequestRef = useRef(null);
+  const historyRestoreStoppedRef = useRef(false);
+  const [historyRestoreRevision, setHistoryRestoreRevision] = useState(0);
   const isPointerDownRef = useRef(false);
   const initialMountTickRef = useRef(true);
   const footerRef = useRef(null);
@@ -330,9 +344,7 @@ function formatDateDivider(timestamp) {
 
   useEffect(() => () => {
     paginationRequestRef.current = null;
-    if (paginationFrameRef.current !== null) {
-      cancelAnimationFrame(paginationFrameRef.current);
-    }
+    historyRestoreRequestRef.current = null;
   }, []);
 
   // In-chat message search
@@ -455,17 +467,20 @@ function formatDateDivider(timestamp) {
     if (scrollHeight <= 0) return;
 
     const distanceFromBottom = Math.max(0, scrollHeight - scrollTop - clientHeight);
-    const isAtBottom = distanceFromBottom < 60;
+    const isAtBottom = shouldAutoScrollRef.current && (!userScrolledManuallyRef.current || distanceFromBottom <= 15);
 
     const messageRows = element.querySelectorAll('.message-row[data-message-id]');
     let topMessageId = null;
     let topMessageOffset = 0;
+    let topMessageTimestamp = null;
     const containerTop = element.getBoundingClientRect().top;
     for (const row of messageRows) {
       const rect = row.getBoundingClientRect();
       if (rect.bottom > containerTop + 5) {
         topMessageId = row.getAttribute('data-message-id');
         topMessageOffset = rect.top - containerTop;
+        const timestamp = Number(row.dataset.messageTimestamp);
+        topMessageTimestamp = Number.isFinite(timestamp) ? timestamp : null;
         break;
       }
     }
@@ -477,6 +492,7 @@ function formatDateDivider(timestamp) {
       isAtBottom,
       topMessageId,
       topMessageOffset,
+      topMessageTimestamp,
       timestamp: Date.now()
     };
 
@@ -487,6 +503,15 @@ function formatDateDivider(timestamp) {
   const saveCurrentScrollPosition = useCallback(() => {
     if (isInitialChatLoadRef.current) return;
     persistSettledScroll(activeChat?.id);
+  }, [activeChat?.id, persistSettledScroll]);
+
+  const attachChatBody = useCallback(element => {
+    // Each chat owns its DOM node. Save the outgoing node before React removes
+    // it, including a final movement whose scroll event has not fired yet.
+    if (!element && chatBodyRef.current && !isInitialChatLoadRef.current) {
+      persistSettledScroll(activeChat?.id);
+    }
+    chatBodyRef.current = element;
   }, [activeChat?.id, persistSettledScroll]);
 
   // Auto-scroll to bottom on chat switch or new message
@@ -582,11 +607,9 @@ function formatDateDivider(timestamp) {
     if (currentChatIdRef.current !== activeChat?.id) {
       currentChatIdRef.current = activeChat?.id;
       paginationRequestRef.current = null;
+      historyRestoreRequestRef.current = null;
+      historyRestoreStoppedRef.current = false;
       isLoadingOlderRef.current = false;
-      if (paginationFrameRef.current !== null) {
-        cancelAnimationFrame(paginationFrameRef.current);
-        paginationFrameRef.current = null;
-      }
       lastScrollTopRef.current = 0;
       isInitialChatLoadRef.current = true;
       userScrolledManuallyRef.current = false;
@@ -611,8 +634,36 @@ function formatDateDivider(timestamp) {
     }
 
     const saved = chatScrollPositionsRef.current.get(activeChat?.id) || getSavedChatScroll(activeChat?.id);
+    shouldAutoScrollRef.current = !saved || saved.isAtBottom;
 
-    // 1. Unread Messages Divider
+    // Restore the place the user left before considering new unread messages.
+    // The initial cache/server window can omit that message, so retain the
+    // saved anchor while older pages are fetched instead of overwriting it.
+    if (saved && !saved.isAtBottom && saved.topMessageId) {
+      const target = findSavedScrollTarget(element, saved);
+      if (target.needsOlder && (
+        messageCount <= 1 || isSyncing?.[activeChat.id] || isChatLoading?.[activeChat.id] ||
+        messagePagination?.[activeChat.id]?.hasMore !== false
+      )) {
+        if (typeof saved.scrollTop === 'number') element.scrollTop = saved.scrollTop;
+        lastScrollTopRef.current = element.scrollTop;
+        return;
+      }
+
+      const offset = typeof saved.topMessageOffset === 'number' ? saved.topMessageOffset : 0;
+      element.scrollTop = target.row ? target.row.offsetTop - offset : saved.scrollTop || 0;
+      lastScrollTopRef.current = element.scrollTop;
+      anchorMessageIdRef.current = target.row?.dataset.messageId || null;
+      anchorOffsetRef.current = offset;
+      userScrolledManuallyRef.current = true;
+      isInitialChatLoadRef.current = false;
+      initialMountTickRef.current = false;
+      persistSettledScroll(activeChat.id);
+      setShowScrollBottom(element.scrollHeight - element.scrollTop - element.clientHeight > 300);
+      return;
+    }
+
+    // With no saved reading anchor, start at the unread divider.
     const unreadCount = typeof activeChat?.unread_count === 'number'
       ? activeChat.unread_count
       : (Array.isArray(activeChat?.messages) ? activeChat.messages : []).filter(
@@ -646,40 +697,6 @@ function formatDateDivider(timestamp) {
       }
     }
 
-    // 2. Saved Anchor Message (when user was reading a specific message)
-    if (saved && !saved.isAtBottom && saved.topMessageId) {
-      const targetMsg = element.querySelector(`.message-row[data-message-id="${saved.topMessageId}"]`);
-      if (targetMsg) {
-        const offset = typeof saved.topMessageOffset === 'number' ? saved.topMessageOffset : 0;
-        element.scrollTop = targetMsg.offsetTop - offset;
-        shouldAutoScrollRef.current = false;
-        anchorMessageIdRef.current = saved.topMessageId;
-        anchorOffsetRef.current = offset;
-        isInitialChatLoadRef.current = false;
-        initialMountTickRef.current = false;
-        persistSettledScroll(activeChat.id);
-        const dist = Math.max(0, element.scrollHeight - element.scrollTop - element.clientHeight);
-        setShowScrollBottom(dist > 300);
-        return;
-      }
-      if (messageCount <= 1 || isSyncing?.[activeChat?.id] || isChatLoading?.[activeChat?.id]) {
-        if (typeof saved.scrollTop === 'number') {
-          element.scrollTop = saved.scrollTop;
-        }
-        return;
-      }
-      if (typeof saved.scrollTop === 'number') {
-        element.scrollTop = saved.scrollTop;
-        const dist = Math.max(0, element.scrollHeight - element.scrollTop - element.clientHeight);
-        shouldAutoScrollRef.current = Boolean(dist < 120);
-        setShowScrollBottom(dist > 300);
-        isInitialChatLoadRef.current = false;
-        initialMountTickRef.current = false;
-        persistSettledScroll(activeChat.id);
-        return;
-      }
-    }
-
     // 3. Saved Bottom OR Default to Bottom
     element.scrollTop = element.scrollHeight;
     shouldAutoScrollRef.current = true;
@@ -694,7 +711,59 @@ function formatDateDivider(timestamp) {
     } else {
       initialMountTickRef.current = false;
     }
-  }, [activeChat?.id, activeChat?.messages, activeChat?.unread_count, isInitialLoading, isChatLoading, isSyncing, currentUser?.id, persistSettledScroll]);
+  }, [activeChat?.id, activeChat?.messages, activeChat?.unread_count, isInitialLoading, isChatLoading, isSyncing, messagePagination, historyRestoreRevision, currentUser?.id, persistSettledScroll]);
+
+  useEffect(() => {
+    if (!activeChat?.id || !isInitialChatLoadRef.current || userScrolledManuallyRef.current ||
+      historyRestoreRequestRef.current || historyRestoreStoppedRef.current ||
+      isChatLoading?.[activeChat.id] || isSyncing?.[activeChat.id] ||
+      messagePagination?.[activeChat.id]?.loading ||
+      activeChat.messages.length <= 1 || messagePagination?.[activeChat.id]?.hasMore === false) return;
+    const saved = chatScrollPositionsRef.current.get(activeChat.id) || getSavedChatScroll(activeChat.id);
+    if (!saved || saved.isAtBottom || !saved.topMessageId || !chatBodyRef.current ||
+      !findSavedScrollTarget(chatBodyRef.current, saved).needsOlder) return;
+
+    const request = { chatId: activeChat.id };
+    historyRestoreRequestRef.current = request;
+    Promise.resolve().then(() => historyRestoreRequestRef.current === request
+      ? loadOlderMessages(request.chatId) : 0).then(loaded => {
+      if (historyRestoreRequestRef.current !== request) return;
+      // A failed/offline page must not erase the original saved position or
+      // retry indefinitely. A new visit can try again; manual scrolling wins.
+      if (!loaded) historyRestoreStoppedRef.current = true;
+    }).catch(() => {
+      if (historyRestoreRequestRef.current === request) historyRestoreStoppedRef.current = true;
+    }).finally(() => {
+      if (historyRestoreRequestRef.current !== request) return;
+      historyRestoreRequestRef.current = null;
+      setHistoryRestoreRevision(revision => revision + 1);
+    });
+  }, [activeChat?.id, activeChat?.messages, isChatLoading, isSyncing, messagePagination, loadOlderMessages, historyRestoreRevision]);
+
+  useLayoutEffect(() => {
+    const request = paginationRequestRef.current;
+    if (!request?.restorationPending || currentChatIdRef.current !== request.chatId ||
+      chatBodyRef.current !== request.element) return;
+    // The state update and this layout effect commit together. An animation
+    // frame after the promise can run before React has inserted the new rows.
+    const { element, previousTop, previousHeight, readingAnchorId, readingAnchorOffset } = request;
+    const readingAnchor = readingAnchorId
+      ? [...element.querySelectorAll('.message-row')].find(row => row.dataset.messageId === readingAnchorId)
+      : null;
+    if (shouldAutoScrollRef.current) {
+      element.scrollTop = element.scrollHeight;
+    } else if (readingAnchor) {
+      element.scrollTop = readingAnchor.offsetTop - readingAnchorOffset;
+      anchorMessageIdRef.current = readingAnchorId;
+      anchorOffsetRef.current = readingAnchorOffset;
+    } else {
+      chatBodyRef.current.scrollTop = previousTop + chatBodyRef.current.scrollHeight - previousHeight;
+    }
+    lastScrollTopRef.current = element.scrollTop;
+    persistSettledScroll(request.chatId);
+    paginationRequestRef.current = null;
+    isLoadingOlderRef.current = false;
+  }, [activeChat?.messages, paginationRestoreRevision, persistSettledScroll]);
 
   useEffect(() => {
     const element = chatBodyRef.current;
@@ -703,7 +772,7 @@ function formatDateDivider(timestamp) {
     const listElement = element.querySelector('.messages-list') || element;
 
     const observer = new ResizeObserver(() => {
-      if (!chatBodyRef.current || isLoadingOlderRef.current || isPointerDownRef.current) return;
+      if (!chatBodyRef.current || isInitialChatLoadRef.current || isLoadingOlderRef.current || isPointerDownRef.current) return;
       if (isScrollingToBottomRef.current) {
         if (typeof chatBodyRef.current.scrollTo === 'function') {
           chatBodyRef.current.scrollTo({ top: chatBodyRef.current.scrollHeight, behavior: 'smooth' });
@@ -730,11 +799,6 @@ function formatDateDivider(timestamp) {
   }, [activeChat?.id]);
 
   useEffect(() => {
-    const saved = chatScrollPositionsRef.current.get(activeChat?.id) || getSavedChatScroll(activeChat?.id);
-    shouldAutoScrollRef.current = saved ? (saved.distanceFromBottom < 120) : true;
-    if (!isInitialLoading) {
-      setShowScrollBottom(saved ? (saved.distanceFromBottom > 300) : false);
-    }
     setReplyingTo(null);
     setOpenedImageUrl(null);
     setInputVal('');
@@ -1260,6 +1324,9 @@ function formatDateDivider(timestamp) {
     const element = chatBodyRef.current;
     if (!element) return;
     const { scrollTop, scrollHeight, clientHeight } = element;
+    const pendingPage = paginationRequestRef.current;
+    if (isLoadingOlderRef.current && pendingPage?.element === element &&
+      element.querySelector('.message-row')?.dataset.messageId !== pendingPage.firstMessageId) return;
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
     const effectiveDistance = Math.max(0, distanceFromBottom);
     // Browser anchoring can emit scroll events during image decoding. Only
@@ -1356,39 +1423,20 @@ function formatDateDivider(timestamp) {
     if (scrollTop > 80 || page?.hasMore === false || isLoadingOlderRef.current) return;
 
     isLoadingOlderRef.current = true;
-    const request = { chatId: activeChat.id, element };
+    const request = {
+      chatId: activeChat.id, element, previousHeight: scrollHeight, previousTop: scrollTop,
+      firstMessageId: element.querySelector('.message-row')?.dataset.messageId,
+    };
     paginationRequestRef.current = request;
     let restorationScheduled = false;
-    const previousHeight = scrollHeight;
-    const previousTop = scrollTop;
     try {
       const loaded = await loadOlderMessages(activeChat.id);
       if (loaded > 0 && paginationRequestRef.current === request) {
-        const readingAnchorId = anchorMessageIdRef.current;
-        const readingAnchorOffset = anchorOffsetRef.current;
+        request.readingAnchorId = anchorMessageIdRef.current;
+        request.readingAnchorOffset = anchorOffsetRef.current;
+        request.restorationPending = true;
         restorationScheduled = true;
-        paginationFrameRef.current = requestAnimationFrame(() => {
-          paginationFrameRef.current = null;
-          if (paginationRequestRef.current !== request) return;
-          try {
-            if (currentChatIdRef.current !== request.chatId || chatBodyRef.current !== request.element) return;
-            const readingAnchor = readingAnchorId
-              ? element.querySelector(`.message-row[data-message-id="${readingAnchorId}"]`)
-              : null;
-            if (shouldAutoScrollRef.current) {
-              element.scrollTop = element.scrollHeight;
-            } else if (readingAnchor) {
-              element.scrollTop = readingAnchor.offsetTop - readingAnchorOffset;
-            } else {
-              chatBodyRef.current.scrollTop = previousTop + chatBodyRef.current.scrollHeight - previousHeight;
-            }
-            lastScrollTopRef.current = chatBodyRef.current.scrollTop;
-            persistSettledScroll(request.chatId);
-          } finally {
-            paginationRequestRef.current = null;
-            isLoadingOlderRef.current = false;
-          }
-        });
+        setPaginationRestoreRevision(revision => revision + 1);
       }
     } finally {
       if (!restorationScheduled && paginationRequestRef.current === request) {
@@ -1629,8 +1677,9 @@ function formatDateDivider(timestamp) {
 
       {/* Messages Window */}
       <div
+        key={activeChat.id}
         className={`chat-body ${isCustomWallpaper ? 'has-custom-wallpaper' : ''}`}
-        ref={chatBodyRef}
+        ref={attachChatBody}
         tabIndex={0}
         onScroll={handleScroll}
         onKeyDown={(event) => {

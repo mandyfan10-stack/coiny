@@ -325,6 +325,7 @@ export default function MessageBubble({
       key={msg.id}
       className={`message-row ${isMe ? 'row-me' : 'row-other'} ${isFirstInGroup ? 'group-first' : ''} ${isLastInGroup ? 'group-last' : ''}`}
       data-message-id={msg.id}
+      data-message-timestamp={msg.timestamp == null ? undefined : new Date(msg.timestamp).getTime()}
       data-message-sender-id={msg.senderId}
       onMouseLeave={() => {
         if (showMsgActionsId !== msg.id) {

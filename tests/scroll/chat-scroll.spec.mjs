@@ -64,6 +64,107 @@ test('long histories open at the newest message and restore the reading anchor',
   await expectAnchor(page, saved);
 });
 
+test('saved reading position takes priority over newly unread messages', async ({ page }) => {
+  const saved = await readHistory(page, 8000);
+  await select(page, 'b');
+  await page.evaluate(() => window.__scrollTest.setUnread('a', 3));
+  await select(page, 'a');
+  await expectAnchor(page, saved);
+});
+
+test('a reading position near the bottom survives leaving the chat', async ({ page }) => {
+  const before = await position(page);
+  const saved = await readHistory(page, before.top - 40);
+  await select(page, 'b');
+  await select(page, 'a');
+  await expectAnchor(page, saved);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expectAnchor(page, saved);
+});
+
+test('leaving before the scroll event saves the actual final position', async ({ page }) => {
+  const saved = await readHistory(page, 8000);
+  await page.evaluate(() => window.__scrollTest.leaveAt(8400));
+  await expect(page.locator('.chat-body')).toHaveCount(0);
+  await select(page, 'a');
+  await expectAnchor(page, { ...saved, offset: saved.offset - 400 });
+});
+
+test('reopening recent history loads older pages until the saved message is available', async ({ page }) => {
+  const saved = await readHistory(page, 8000);
+  const pages = Math.ceil((150 - Number(saved.anchor.replace('a-msg-', ''))) / 30);
+  await page.goto('/tests/scroll/fixture.html?recent=1', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('.message-row')).toHaveCount(50);
+  for (let count = 1; count <= pages; count++) {
+    await pending(page, 'a', count);
+    await page.evaluate(() => window.__scrollTest.resolveNext('a'));
+  }
+  await expectAnchor(page, saved);
+  await page.waitForTimeout(100);
+  // Restoration must stop paging once the anchor becomes available.
+  await pending(page, 'a', pages);
+});
+
+test('an unavailable history page retains the saved anchor for the next visit', async ({ page }) => {
+  const saved = await readHistory(page, 8000);
+  await page.goto('/tests/scroll/fixture.html?recent=1', { waitUntil: 'domcontentloaded' });
+  await pending(page, 'a');
+  await page.evaluate(() => window.__scrollTest.failNext('a'));
+  await page.waitForTimeout(100);
+  await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.coingram_chat_scroll_a).topMessageId)).toBe(saved.anchor);
+  await pending(page, 'a');
+  await select(page, 'b');
+  await select(page, 'a');
+  const pages = Math.ceil((150 - Number(saved.anchor.replace('a-msg-', ''))) / 30);
+  for (let count = 2; count <= pages + 1; count++) {
+    await pending(page, 'a', count);
+    await page.evaluate(() => window.__scrollTest.resolveNext('a'));
+  }
+  await expectAnchor(page, saved);
+});
+
+test('a deleted saved message restores the adjacent place in history', async ({ page }) => {
+  const saved = await readHistory(page, 8000);
+  const index = Number(saved.anchor.replace('a-msg-', ''));
+  await page.goto(`/tests/scroll/fixture.html?recent=1&missing=${saved.anchor}`, { waitUntil: 'domcontentloaded' });
+  const pages = Math.ceil((151 - index) / 30);
+  for (let count = 1; count <= pages; count++) {
+    await pending(page, 'a', count);
+    await page.evaluate(() => window.__scrollTest.resolveNext('a'));
+  }
+  await expectAnchor(page, { ...saved, anchor: `a-msg-${index + 1}` });
+  await page.waitForTimeout(100);
+  await pending(page, 'a', pages);
+});
+
+test('a late restore page cannot move another chat or erase the saved anchor', async ({ page }) => {
+  const savedA = await readHistory(page, 8000);
+  await page.goto('/tests/scroll/fixture.html?recent=1', { waitUntil: 'domcontentloaded' });
+  await pending(page, 'a');
+  await select(page, 'b');
+  const savedB = await readHistory(page, 4000);
+  await page.evaluate(() => window.__scrollTest.resolveNext('a'));
+  await expectAnchor(page, savedB);
+  await page.waitForTimeout(100);
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.coingram_chat_scroll_a).topMessageId)).toBe(savedA.anchor);
+  await pending(page, 'a');
+});
+
+test('manual reading during restoration takes priority over the old saved anchor', async ({ page }) => {
+  await readHistory(page, 8000);
+  await page.goto('/tests/scroll/fixture.html?recent=1', { waitUntil: 'domcontentloaded' });
+  await pending(page, 'a');
+  const saved = await readHistory(page, 2000);
+  await page.evaluate(() => window.__scrollTest.resolveNext('a'));
+  await expectAnchor(page, saved);
+  await page.waitForTimeout(100);
+  await pending(page, 'a');
+  await select(page, 'b');
+  await select(page, 'a');
+  await expectAnchor(page, saved);
+});
+
 test('row growth and viewport resizing keep the latest message visible', async ({ page }) => {
   await page.evaluate(() => window.__scrollTest.expand('a', 'a-msg-199'));
   await expect.poll(async () => (await position(page)).gap).toBeLessThan(2);
