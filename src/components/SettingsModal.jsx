@@ -52,6 +52,7 @@ export default function SettingsModal() {
   const closeButtonRef = useRef(null);
   const bodyRef = useRef(null);
   const keepEditingRef = useRef(null);
+  const promptReturnFocusRef = useRef(null);
   const didSetInitialFocusRef = useRef(false);
   const initializedRef = useRef(false);
   const pendingRef = useRef(new Set());
@@ -141,14 +142,14 @@ export default function SettingsModal() {
   }, [isSettingsOpen]);
 
   useEffect(() => {
-    if (!isSettingsOpen || !isVisible || didSetInitialFocusRef.current) return undefined;
+    if (!isSettingsOpen || !isVisible || discardPrompt || didSetInitialFocusRef.current) return undefined;
     const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     const focusTimer = window.setTimeout(() => {
       didSetInitialFocusRef.current = true;
       closeButtonRef.current?.focus({ preventScroll: true });
     }, reduceMotion ? 32 : 260);
     return () => window.clearTimeout(focusTimer);
-  }, [isSettingsOpen, isVisible]);
+  }, [isSettingsOpen, isVisible, discardPrompt]);
 
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: 0 });
@@ -157,15 +158,28 @@ export default function SettingsModal() {
   }, [section]);
 
   useEffect(() => {
-    if (discardPrompt) keepEditingRef.current?.focus({ preventScroll: true });
+    if (discardPrompt) {
+      didSetInitialFocusRef.current = true;
+      keepEditingRef.current?.focus({ preventScroll: true });
+    } else if (promptReturnFocusRef.current) {
+      const target = promptReturnFocusRef.current;
+      promptReturnFocusRef.current = null;
+      // The form becomes focusable only after React removes inert from its parent.
+      if (target.isConnected && !target.disabled) target.focus({ preventScroll: true });
+      else closeButtonRef.current?.focus({ preventScroll: true });
+    }
   }, [discardPrompt]);
 
   const requestClose = () => {
-    if (hasDirtyForms) setDiscardPrompt(true);
+    if (hasDirtyForms) {
+      promptReturnFocusRef.current = dialogRef.current?.contains(document.activeElement)
+        ? document.activeElement : closeButtonRef.current;
+      setDiscardPrompt(true);
+    }
     else setIsSettingsOpen(false);
   };
   const handleBack = () => {
-    if (discardPrompt) { setDiscardPrompt(false); closeButtonRef.current?.focus(); }
+    if (discardPrompt) setDiscardPrompt(false);
     else if (isMobile && section) setSettingsTab(null);
     else requestClose();
   };
@@ -398,7 +412,7 @@ export default function SettingsModal() {
           <div role="alertdialog" aria-modal="true" aria-labelledby="settings-discard-title" aria-describedby="settings-discard-description" className="settings-discard-dialog">
             <h3 id="settings-discard-title">Закрыть без сохранения?</h3>
             <p id="settings-discard-description">Изменения в формах будут потеряны. Сохранённые настройки останутся.</p>
-            <button ref={keepEditingRef} type="button" className="settings-action" onClick={() => { setDiscardPrompt(false); closeButtonRef.current?.focus(); }}>Продолжить редактирование</button>
+            <button ref={keepEditingRef} type="button" className="settings-action" onClick={() => setDiscardPrompt(false)}>Продолжить редактирование</button>
             <button type="button" className="settings-action settings-danger" onClick={() => setIsSettingsOpen(false)}>Закрыть без сохранения</button>
           </div>
         </div>}

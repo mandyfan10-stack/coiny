@@ -148,7 +148,7 @@ test('email, password and profile actions are independent, with drafts and error
   await expect(page.locator('#name-input')).toHaveValue('Черновик профиля');
 });
 
-test('dirty forms require a discard choice and keyboard focus stays in that choice', async ({ page }) => {
+test('dirty forms require a discard choice and keyboard focus stays in that choice', async ({ page }, testInfo) => {
   await open(page, 'profile');
   await page.locator('#name-input').fill('Черновик');
   await page.getByRole('button', { name: 'Закрыть настройки' }).click();
@@ -158,7 +158,20 @@ test('dirty forms require a discard choice and keyboard focus stays in that choi
   await page.keyboard.press('Shift+Tab'); await expect(discard).toBeFocused();
   await page.keyboard.press('Tab'); await expect(keep).toBeFocused();
   await keep.click();
+  await expect(page.getByRole('button', { name: 'Закрыть настройки' })).toBeFocused();
   await expect(page.locator('#name-input')).toHaveValue('Черновик');
+  if (testInfo.project.name === 'desktop') {
+    await page.locator('#name-input').focus();
+    await page.keyboard.press('Escape'); await expect(keep).toBeFocused();
+    await page.keyboard.press('Escape'); await expect(page.locator('#name-input')).toBeFocused();
+  } else {
+    await page.evaluate(() => window.handleAndroidBackButton());
+    await page.getByRole('button', { name: 'Закрыть настройки' }).focus();
+    await page.evaluate(() => window.handleAndroidBackButton()); await expect(keep).toBeFocused();
+    await page.evaluate(() => window.handleAndroidBackButton());
+    await expect(page.getByRole('button', { name: 'Закрыть настройки' })).toBeFocused();
+    await navigate(page, 'profile');
+  }
   await page.getByRole('button', { name: 'Закрыть настройки' }).click();
   await discard.click();
   await expect(dialog(page)).toHaveCount(0);
