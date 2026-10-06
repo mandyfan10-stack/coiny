@@ -23,10 +23,10 @@ export default function ChatHeader({
     triggerHaptic(8);
     setIsInfoOpen(!isInfoOpen);
   };
-  const isSaved = isSavedMessagesChat(activeChat);
-  const title = isSaved ? savedMessagesDisplayName(activeChat) : activeChat.name;
+  const isSaved = isSavedMessagesChat(activeChat, currentUser?.id);
+  const title = isSaved ? savedMessagesDisplayName(activeChat, currentUser?.id) : activeChat.name;
   const otherMember = (activeChat.members || []).find((member) => member?.id && member.id !== currentUser?.id);
-  const showE2eeLock = requiresPersonalE2EE(activeChat)
+  const showE2eeLock = requiresPersonalE2EE(activeChat, currentUser?.id)
     && Boolean(e2eePrivateKey)
     && Boolean(otherMember?.publicKey || otherMember?.hasE2ee);
 

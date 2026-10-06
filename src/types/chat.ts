@@ -21,6 +21,7 @@ export interface Chat {
   bio?: string;
   username?: string;
   createdBy?: ProfileId | null;
+  savedMessagesOwnerId?: ProfileId | null;
   pinned?: boolean;
   notifications?: boolean;
   members: ChatMember[];

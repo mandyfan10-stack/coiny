@@ -258,6 +258,41 @@ test('offline personal messages fail closed when E2EE key material is missing', 
   }), (error) => error === missingKeyError);
 });
 
+test('saved-message aliases cannot send offline personal text or files without E2EE keys', async () => {
+  for (const alias of ['Избранное', 'Saved Messages', 'Saved Messages 🔖', 'saved_messages', '@saved-messages']) {
+    const item = createOfflineQueueItem({
+      chatId: 'personal-1', senderId: 'user-1', text: 'private text',
+      optimisticId: 'spoofed-saved', hasOfflineMedia: true
+    });
+    await assert.rejects(() => processOfflineQueueItem(item, {
+      chat: {
+        type: 'personal', name: alias, username: alias, createdBy: 'user-1',
+        members: [{ id: 'user-1' }, { id: 'user-2' }]
+      },
+      currentUser: { id: 'user-1' }, e2eePrivateKey: null, sharedKey: null,
+      getAttachment: async () => assert.fail('key failure must precede reading or uploading the file'),
+      sendMessage: async () => assert.fail('plaintext must not reach the send service')
+    }), /ключ/i);
+  }
+});
+
+test('verified, self-owned saved messages still send without a personal E2EE key', async () => {
+  const sent = [];
+  const item = createOfflineQueueItem({
+    chatId: 'saved', senderId: 'user-1', text: 'my notes', optimisticId: 'saved-note'
+  });
+  const result = await processOfflineQueueItem(item, {
+    chat: {
+      type: 'personal', name: 'Renamed notes', createdBy: 'user-1',
+      savedMessagesOwnerId: 'user-1', members: [{ id: 'user-1' }]
+    },
+    currentUser: { id: 'user-1' }, e2eePrivateKey: null, sharedKey: null,
+    sendMessage: async (...args) => { sent.push(args); return { id: item.optimisticId }; }
+  });
+  assert.equal(result.data.id, 'saved-note');
+  assert.equal(sent[0][2], 'my notes');
+});
+
 test('offline media surfaces upload errors other than deterministic 409 conflicts', async () => {
   const item = createOfflineQueueItem({
     chatId: 'group-1',

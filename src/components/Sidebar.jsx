@@ -369,10 +369,10 @@ export default function Sidebar() {
                     </p>
 
                     <div className="chat-badges">
-                      {!(isSavedMessagesChat(chat) && !lastMsg) && !chat.notifications && (
+                      {!(isSavedMessagesChat(chat, currentUser?.id) && !lastMsg) && !chat.notifications && (
                         <VolumeX size={14} className="mute-icon" />
                       )}
-                      {!(isSavedMessagesChat(chat) && !lastMsg) && chat.pinned && (
+                      {!(isSavedMessagesChat(chat, currentUser?.id) && !lastMsg) && chat.pinned && (
                         <Pin size={14} className="pinned-icon" />
                       )}
                       {unreadCount > 0 && (

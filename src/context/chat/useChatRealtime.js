@@ -130,6 +130,7 @@ export function useChatRealtime({
                 read: chat.messages.find((m) => m.id === newMsg.id)?.read || newMsg.read,
                 reads: chat.messages.find((m) => m.id === newMsg.id)?.reads,
                 reactions: newMsg.reactions || [],
+                createdAt: newMsg.created_at,
                 timestamp: new Date(newMsg.created_at),
                 isLocked: !isDecrypted,
                 isOptimistic: false,
@@ -144,7 +145,9 @@ export function useChatRealtime({
                   isOptimistic: false,
                   isPending: false,
                   read: formattedMsg.read,
-                  reads: formattedMsg.reads
+                  reads: formattedMsg.reads,
+                  createdAt: newMsg.created_at,
+                  timestampIso: formattedMsg.timestamp.toISOString()
                 });
                 const nextMessages = chat.messages.map((m, index) => (
                   index === existingIndex

@@ -6,5 +6,5 @@ const chatArea = await readFile(new URL("../src/components/ChatArea.jsx", import
 
 test("ChatArea imports requiresPersonalE2EE from savedMessages", () => {
   assert.match(chatArea, /import\s*\{\s*requiresPersonalE2EE\s*\}\s*from\s*['"]\.\.\/utils\/savedMessages['"]/);
-  assert.match(chatArea, /requiresPersonalE2EE\(activeChat\)/);
+  assert.match(chatArea, /requiresPersonalE2EE\(activeChat, currentUser\?\.id\)/);
 });

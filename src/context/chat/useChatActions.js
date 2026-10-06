@@ -321,7 +321,7 @@ export function useChatActions({
         let textToSend = text;
         let mediaToSend = media;
 
-        const requiresE2EE = requiresPersonalE2EE(activeChat);
+        const requiresE2EE = requiresPersonalE2EE(activeChat, currentUser.id);
         if (requiresE2EE) {
           const otherMember = activeChat.members?.find((m) => m.id !== currentUser.id);
           let sharedKey = sharedKeysCacheRef.current[activeChatId];
@@ -535,7 +535,7 @@ export function useChatActions({
 
   const openSavedMessages = useCallback(async () => {
     if (!currentUser) return null;
-    const existing = chats.find((c) => isSavedMessagesChat(c));
+    const existing = chats.find((c) => isSavedMessagesChat(c, currentUser.id));
     if (existing) {
       setActiveChatId(existing.id);
       return existing;
@@ -564,6 +564,7 @@ export function useChatActions({
         avatar: '🔖',
         pinned: true,
         createdBy: currentUser.id,
+        savedMessagesOwnerId: currentUser.id,
         members: [{ id: currentUser.id, name: currentUser.name || 'Вы' }],
         messages: []
       };

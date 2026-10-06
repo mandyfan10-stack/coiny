@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createMessageService } from '../src/services/messageService.js';
 import { createV1MessageCompatibilityAdapter } from '../src/services/v1MessageCompatibilityAdapter.js';
+import { getMessageCursor } from '../src/utils/messageCursor.ts';
 
 function createClient({
   resultFor = () => ({ data: null, error: null }),
@@ -12,7 +13,7 @@ function createClient({
   const createQuery = (table) => {
     const steps = [];
     const query = {};
-    for (const method of ['select', 'eq', 'order', 'limit', 'lt', 'in', 'insert', 'delete', 'single']) {
+    for (const method of ['select', 'eq', 'order', 'limit', 'lt', 'or', 'in', 'insert', 'delete', 'single']) {
       query[method] = (...args) => {
         const step = { method, args };
         steps.push(step);
@@ -141,6 +142,65 @@ test('mock message loading restores dates, limits history, and tolerates missing
   assert.deepEqual(messages.map(({ id }) => id), ['message-2']);
   assert.ok(messages[0].timestamp instanceof Date);
   assert.deepEqual(await service.loadChatMessages('missing'), []);
+});
+
+test('live history pages visit every ID when more than one page shares a timestamp', async () => {
+  const rows = Array.from({ length: 135 }, (_, index) => ({
+    id: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+    chat_id: 'chat-1', sender_id: 'peer', text: 'row',
+    created_at: '2026-10-06T12:00:00.123456Z'
+  })).reverse();
+  const { client, calls } = createClient({
+    resultFor(table, steps) {
+      if (table !== 'messages') return { data: [], error: null };
+      let page = [...rows];
+      for (const { method, args } of steps) {
+        if (method === 'lt') page = page.filter(row => row[args[0]] < args[1]);
+        if (method === 'or') {
+          const match = args[0].match(/^created_at\.lt\.([^,]+),and\(created_at\.eq\.([^,]+),id\.lt\.(.+)\)$/);
+          assert.ok(match, 'valid PostgREST compound filter required');
+          const timestamp = JSON.parse(match[1]);
+          assert.equal(JSON.parse(match[2]), timestamp);
+          const id = JSON.parse(match[3]);
+          page = page.filter(row => row.created_at < timestamp || (row.created_at === timestamp && row.id < id));
+        }
+      }
+      const order = steps.filter(step => step.method === 'order');
+      page.sort((left, right) => {
+        for (const { args: [column, { ascending }] } of order) {
+          if (left[column] !== right[column]) return (left[column] < right[column] ? -1 : 1) * (ascending ? 1 : -1);
+        }
+        return 0;
+      });
+      return { data: page.slice(0, steps.find(step => step.method === 'limit').args[0]), error: null };
+    }
+  });
+  const service = createMessageService({ client, configured: true });
+  const ids = [];
+  let cursor = null;
+  for (let index = 0; index < 4; index++) {
+    const page = await service.loadChatMessages('chat-1', index === 0 ? 100 : 30, cursor);
+    ids.push(...page.map(row => row.id));
+    if (!page.length) break;
+    cursor = getMessageCursor(page[0]);
+    assert.equal(cursor.timestamp, '2026-10-06T12:00:00.123456Z');
+  }
+  assert.equal(ids.length, rows.length);
+  assert.equal(new Set(ids).size, rows.length);
+  assert.deepEqual([...ids].sort(), rows.map(row => row.id).sort());
+  assert.ok(calls.some(call => call.method === 'order' && call.args[0] === 'id'));
+});
+
+test('mock history uses the same compound cursor and keeps older timestamp-only callers working', async () => {
+  const timestamp = '2026-10-06T12:00:00.123456Z';
+  const storage = { getItem: () => JSON.stringify([{ id: 'chat-1', messages: [
+    { id: 'a', timestamp: '2026-10-06T11:00:00Z' },
+    ...['c', 'b', 'd'].map(id => ({ id, timestamp, createdAt: timestamp }))
+  ] }]) };
+  const service = createMessageService({ client: null, configured: false, storage });
+  assert.deepEqual((await service.loadChatMessages('chat-1', 2)).map(row => row.id), ['c', 'd']);
+  assert.deepEqual((await service.loadChatMessages('chat-1', 2, { id: 'c', timestamp })).map(row => row.id), ['a', 'b']);
+  assert.deepEqual((await service.loadChatMessages('chat-1', 2, timestamp)).map(row => row.id), ['a']);
 });
 
 test('v2 send rejects malformed and mock-mode payloads before database access', async () => {

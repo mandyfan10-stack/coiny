@@ -161,7 +161,7 @@ test('indexedDbHelper provides getCachedMessagesBeforeTimestamp and non-blocking
 
 test('useChatLoader preserves older history on SWR merge and supports local pagination', () => {
   assert.match(useChatLoaderCode, /olderHistory/);
-  assert.match(useChatLoaderCode, /getCachedMessagesBeforeTimestamp\(chatId,\s*oldestTimestamp/);
+  assert.match(useChatLoaderCode, /getCachedMessagesBeforeTimestamp\(chatId,\s*oldestCursor/);
   // Must not have the 5-message trap
   assert.ok(!useChatLoaderCode.includes('(currentChat?.messages?.length || 0) > 1'));
 });

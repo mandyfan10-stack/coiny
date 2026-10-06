@@ -135,13 +135,20 @@ export function useOfflineSync({
       && sessionRef.current.userId === session.userId;
 
     const syncPromise = (async () => {
+      // Chat metadata can still be loading, or the user may have lost access.
+      // Defer those entries for this pass while delivering other chats.
+      const deferredQueueIds = new Set();
       while (isCurrentSession()) {
-        const item = offlineQueueRef.current.find((queued) => !queued.isFailed);
+        const item = offlineQueueRef.current.find((queued) => !queued.isFailed && !deferredQueueIds.has(queued.queueId));
         if (!item) break;
         try {
           const chat = chatsRef.current.find((candidate) => candidate.id === item.chatId);
           const sessionUser = currentUserRef.current;
-          if (!chat || !sessionUser || sessionUser.id !== session.userId) break;
+          if (!sessionUser || sessionUser.id !== session.userId) break;
+          if (!chat) {
+            deferredQueueIds.add(item.queueId);
+            continue;
+          }
           const { data, finalMediaUrl } = await processOfflineQueueItem(item, {
             chat,
             currentUser: sessionUser,
@@ -158,6 +165,7 @@ export function useOfflineSync({
           });
 
           if (!isCurrentSession()) break;
+          if (!data) throw new Error('Сервер не подтвердил отправку сообщения.');
           if (data) {
             deleteCachedMessage(item.optimisticId);
             saveCachedMessage({
@@ -166,7 +174,8 @@ export function useOfflineSync({
               text: item.text,
               media: finalMediaUrl,
               replyTo: item.replyToId,
-              timestamp: new Date(),
+              createdAt: data.created_at,
+              timestamp: new Date(data.created_at || Date.now()),
               isPending: false,
               isOptimistic: false
             }, item.chatId, currentUser?.id);
@@ -181,6 +190,8 @@ export function useOfflineSync({
                         ...m,
                         id: data.id,
                         media: finalMediaUrl,
+                        createdAt: data.created_at,
+                        timestamp: new Date(data.created_at || Date.now()),
                         isPending: false,
                         isOptimistic: false
                       };
@@ -269,7 +280,7 @@ export function useOfflineSync({
     if (queueLoaded && queueOwnerId === (currentUser?.id ?? null) && isOnline && offlineQueue.length > 0) {
       syncOfflineMessages();
     }
-  }, [currentUser?.id, isOnline, offlineQueue.length, queueLoaded, queueOwnerId, syncOfflineMessages]);
+  }, [currentUser?.id, chats, isOnline, offlineQueue.length, queueLoaded, queueOwnerId, syncOfflineMessages]);
 
   return {
     isOnline,

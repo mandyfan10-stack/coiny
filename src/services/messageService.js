@@ -1,5 +1,10 @@
 import { supabase, isSupabaseConfigured } from '../supabaseClient.js';
 import { toISO } from './serviceUtils.ts';
+import { compareMessages } from '../utils/messageCursor.ts';
+
+// .or() accepts raw PostgREST syntax; quote values rather than interpolating
+// unescaped cursor fields into its filter expression.
+const filterValue = (value) => `"${String(value).replace(/[\\"]/g, '\\$&')}"`;
 
 export const createMessageService = ({
   client = supabase,
@@ -7,16 +12,24 @@ export const createMessageService = ({
   storage = globalThis.localStorage,
   e2eeV2Enabled = Boolean(import.meta.env && import.meta.env.VITE_E2EE_V2_ENABLED === 'true')
 } = {}) => ({
-  loadChatMessages: async (chatId, limit = 100, beforeTimestamp = null) => {
+  loadChatMessages: async (chatId, limit = 100, beforeCursor = null) => {
     if (configured) {
       let query = client
         .from('messages')
         .select('*')
         .eq('chat_id', chatId)
         .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
         .limit(limit);
 
-      if (beforeTimestamp) query = query.lt('created_at', toISO(beforeTimestamp));
+      if (beforeCursor?.id && beforeCursor.timestamp) {
+        const timestamp = filterValue(toISO(beforeCursor.timestamp));
+        const id = filterValue(beforeCursor.id);
+        query = query.or(`created_at.lt.${timestamp},and(created_at.eq.${timestamp},id.lt.${id})`);
+      } else if (beforeCursor) {
+        // Compatibility for consumers that only have a timestamp.
+        query = query.lt('created_at', toISO(beforeCursor));
+      }
       const { data, error } = await query;
       if (error) throw error;
 
@@ -46,6 +59,7 @@ export const createMessageService = ({
           read: message.read || messageReads.length > 0,
           reads: messageReads.map((receipt) => receipt.profile_id),
           reactions: message.reactions || [],
+          createdAt: message.created_at,
           timestamp: new Date(message.created_at)
         };
       }).reverse();
@@ -56,7 +70,11 @@ export const createMessageService = ({
       const chats = JSON.parse(saved);
       const chat = chats.find((candidate) => candidate.id === chatId);
       if (chat) {
-        const messages = chat.messages.map((message) => ({ ...message, timestamp: new Date(message.timestamp) }));
+        const messages = chat.messages.map((message) => ({ ...message, timestamp: new Date(message.timestamp) }))
+          .filter((message) => !beforeCursor || (beforeCursor.id
+            ? compareMessages(message, beforeCursor) < 0
+            : new Date(message.timestamp) < new Date(beforeCursor)))
+          .sort(compareMessages);
         return messages.slice(-limit);
       }
     }

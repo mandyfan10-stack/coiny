@@ -13,6 +13,8 @@ import {
 import { loadOfflineQueue } from '../../services/offlineQueue';
 import { createManagedObjectUrl } from '../../utils/objectUrlRegistry';
 import { decryptMessageFields, resolveSharedKey } from './decryptHelpers';
+import { compareMessages, getMessageCursor } from '../../utils/messageCursor.ts';
+import { createHistorySnapshot, retainCachedMessage } from '../../utils/messageHistory.js';
 
 /**
  * Load / paginate chat list and message history with E2EE decrypt.
@@ -33,6 +35,7 @@ export function useChatLoader({
   const [isSyncing, setIsSyncing] = useState({});
   const [historyLoadStatus, setHistoryLoadStatus] = useState({});
   const loadRequestsRef = useRef(new Map());
+  const historySnapshotsRef = useRef(new Map());
   const sessionUserRef = useRef(currentUser?.id);
   sessionUserRef.current = currentUser?.id;
 
@@ -46,6 +49,8 @@ export function useChatLoader({
   useEffect(() => {
     const requests = loadRequestsRef.current;
     requests.clear();
+    historySnapshotsRef.current.clear();
+    setMessagePagination({});
     setHistoryLoadStatus({});
     setIsChatLoading({});
     setIsSyncing({});
@@ -256,7 +261,8 @@ export function useChatLoader({
     try {
       const msgsRaw = await dataService.loadChatMessages(chatId, 100);
       if (!isCurrentRequest()) return;
-      const msgs = Array.isArray(msgsRaw) ? msgsRaw : [];
+      if (!Array.isArray(msgsRaw)) throw new Error('Некорректный ответ сервера при загрузке истории.');
+      const msgs = msgsRaw;
       const chat = chatsRef.current.find((c) => c.id === chatId);
       if (!chat) return;
 
@@ -273,6 +279,8 @@ export function useChatLoader({
         msgs.map((m) => decryptMessageFields(m, sharedKey, chat.type === 'personal'))
       );
       if (!isCurrentRequest()) return;
+      const snapshot = createHistorySnapshot(decryptedMsgs, 100);
+      historySnapshotsRef.current.set(chatId, snapshot);
 
       // Seamless Merge: preserve local optimistic & unlocked bodies without visual jumps
       setChats((prev) => (Array.isArray(prev) ? prev : []).map((c) => {
@@ -281,12 +289,13 @@ export function useChatLoader({
         const existingById = new Map(existingMessages.map((m) => [m.id, m]));
 
         const merged = decryptedMsgs.map((incoming) => {
+          const confirmed = { ...incoming, isPending: false, isOptimistic: false, isFailed: false };
           const existing = existingById.get(incoming.id);
-          if (!existing) return incoming;
+          if (!existing) return confirmed;
           const keepLocalBody = !existing.isLocked || incoming.isLocked;
           return {
             ...existing,
-            ...incoming,
+            ...confirmed,
             text: keepLocalBody ? existing.text : incoming.text,
             media: keepLocalBody ? existing.media : incoming.media,
             isLocked: keepLocalBody ? existing.isLocked : incoming.isLocked,
@@ -299,26 +308,26 @@ export function useChatLoader({
         const incomingIds = new Set(decryptedMsgs.map((m) => m.id));
 
         // Seamless Merge: preserve older history already in memory so SWR doesn't truncate chat
-        const oldestIncomingTime = decryptedMsgs.length > 0
-          ? new Date(decryptedMsgs[0].timestamp).getTime()
-          : Infinity;
         const olderHistory = existingMessages.filter(
-          (m) => !incomingIds.has(m.id) && !m.isPending && !m.isOptimistic && new Date(m.timestamp).getTime() < oldestIncomingTime
+          (m) => !incomingIds.has(m.id) && !m.isPending && !m.isOptimistic && !m.isFailed
+            && snapshot.oldestCursor && compareMessages(m, snapshot.oldestCursor) < 0
         );
 
         // Retain optimistic / pending messages not yet reflected on server
         const pending = existingMessages.filter(
-          (m) => (m.isPending || m.isOptimistic) && !incomingIds.has(m.id)
+          (m) => (m.isPending || m.isOptimistic || m.isFailed) && !incomingIds.has(m.id)
         );
         const finalMessages = [...olderHistory, ...merged, ...pending].sort(
-          (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
+          compareMessages
         );
 
-        saveCachedMessagesBatch(chatId, finalMessages, currentUserId);
+        saveCachedMessagesBatch(chatId, finalMessages, currentUserId, snapshot);
         return { ...c, messages: finalMessages };
       }));
 
-      setMessagePagination((prev) => ({ ...prev, [chatId]: { loading: false, hasMore: msgs.length >= 100 } }));
+      setMessagePagination((prev) => ({ ...prev, [chatId]: {
+        loading: false, hasMore: snapshot.hasMore, cursor: getMessageCursor(decryptedMsgs[0])
+      } }));
       setHistoryLoadStatus((prev) => ({ ...prev, [chatId]: 'loaded' }));
     } catch (e) {
       if (isCurrentRequest()) {
@@ -340,30 +349,46 @@ export function useChatLoader({
 
     setMessagePagination((prev) => ({ ...prev, [chatId]: { ...prev[chatId], loading: true } }));
     try {
-      const oldestTimestamp = chat.messages[0]?.timestamp;
+      // Pending messages never become history cursors. Keep the server cursor
+      // separate from cached history so cache gaps cannot skip server rows.
+      const oldestConfirmed = [...chat.messages]
+        .filter((message) => !message.isPending && !message.isOptimistic && !message.isFailed)
+        .sort(compareMessages)[0];
+      const oldestCursor = navigator.onLine
+        ? pagination?.cursor || getMessageCursor(oldestConfirmed)
+        : getMessageCursor(oldestConfirmed);
+      if (!oldestCursor) {
+        setMessagePagination((prev) => ({ ...prev, [chatId]: { ...prev[chatId], loading: false } }));
+        return 0;
+      }
 
       // 1. Instant 0ms pagination from local IndexedDB cache
-      const cachedOlder = await getCachedMessagesBeforeTimestamp(chatId, oldestTimestamp, 30);
-      if (Array.isArray(cachedOlder) && cachedOlder.length > 0) {
+      const cachedOlder = await getCachedMessagesBeforeTimestamp(chatId, oldestCursor, 30, currentUserId);
+      const knownIds = new Set(chat.messages.map((message) => message.id));
+      const unseenCached = cachedOlder.filter((message) => !knownIds.has(message.id));
+      if (unseenCached.length > 0) {
         setChats((prev) => (Array.isArray(prev) ? prev : []).map((c) => {
           if (c.id !== chatId) return c;
           const currentMessages = Array.isArray(c.messages) ? c.messages : [];
           const known = new Set(currentMessages.map((message) => message.id));
-          const finalMessages = [...cachedOlder.filter((message) => !known.has(message.id)), ...currentMessages];
+          const finalMessages = [...unseenCached.filter((message) => !known.has(message.id)), ...currentMessages].sort(compareMessages);
           return { ...c, messages: finalMessages };
         }));
-        setMessagePagination((prev) => ({ ...prev, [chatId]: { loading: false, hasMore: true } }));
-        return cachedOlder.length;
+        setMessagePagination((prev) => ({ ...prev, [chatId]: {
+          ...prev[chatId], loading: false, hasMore: true
+        } }));
+        return unseenCached.length;
       }
 
       // 2. If local cache is exhausted or offline, handle network
       if (!navigator.onLine) {
-        setMessagePagination((prev) => ({ ...prev, [chatId]: { loading: false, hasMore: false } }));
+        setMessagePagination((prev) => ({ ...prev, [chatId]: { ...prev[chatId], loading: false } }));
         return 0;
       }
 
-      const olderRaw = await dataService.loadChatMessages(chatId, 30, oldestTimestamp);
-      const older = Array.isArray(olderRaw) ? olderRaw : [];
+      const olderRaw = await dataService.loadChatMessages(chatId, 30, oldestCursor);
+      if (!Array.isArray(olderRaw)) throw new Error('Некорректный ответ сервера при загрузке истории.');
+      const older = olderRaw;
 
       const sharedKey = await resolveSharedKey({
         chatId,
@@ -382,11 +407,13 @@ export function useChatLoader({
         if (c.id !== chatId) return c;
         const currentMessages = Array.isArray(c.messages) ? c.messages : [];
         const known = new Set(currentMessages.map((message) => message.id));
-        const finalMessages = [...decrypted.filter((message) => !known.has(message.id)), ...currentMessages];
+        const finalMessages = [...decrypted.filter((message) => !known.has(message.id)), ...currentMessages].sort(compareMessages);
         saveCachedMessagesBatch(chatId, finalMessages, currentUserId);
         return { ...c, messages: finalMessages };
       }));
-      setMessagePagination((prev) => ({ ...prev, [chatId]: { loading: false, hasMore: older.length === 30 } }));
+      setMessagePagination((prev) => ({ ...prev, [chatId]: {
+        loading: false, hasMore: older.length === 30, cursor: getMessageCursor(decrypted[0]) || oldestCursor
+      } }));
       return decrypted.length;
     } catch (error) {
       console.error('Failed to load older messages', error);
@@ -412,14 +439,16 @@ export function useChatLoader({
     readCachedMessages(activeChatId, currentUserId).then((cached) => {
       if (!isMounted) return;
       if (Array.isArray(cached) && cached.length > 0) {
+        const snapshot = historySnapshotsRef.current.get(activeChatId);
+        const eligibleCache = snapshot ? cached.filter((message) => retainCachedMessage(message, snapshot)) : cached;
         setChats((prev) => (Array.isArray(prev) ? prev : []).map((c) => {
           if (c.id !== activeChatId || !isMounted) return c;
           const currentMsgs = Array.isArray(c.messages) ? c.messages : [];
 
           // Late cache hydration must not overwrite newer bodies, receipts or reactions.
           const currentById = new Map(currentMsgs.map((message) => [message.id, message]));
-          const cachedIds = new Set(cached.map((m) => m.id));
-          const merged = cached.map((message) => {
+          const cachedIds = new Set(eligibleCache.map((m) => m.id));
+          const merged = eligibleCache.map((message) => {
             const current = currentById.get(message.id);
             if (!current) return message;
             const keepCurrentBody = !current.isLocked || message.isLocked;
@@ -433,9 +462,9 @@ export function useChatLoader({
             };
           });
           const additional = currentMsgs.filter((message) => !cachedIds.has(message.id));
-          return { ...c, messages: [...merged, ...additional].sort(
-            (left, right) => new Date(left.timestamp) - new Date(right.timestamp)
-          ) };
+          const finalMessages = [...merged, ...additional].sort(compareMessages);
+          if (snapshot) saveCachedMessagesBatch(activeChatId, finalMessages, currentUserId, snapshot);
+          return { ...c, messages: finalMessages };
         }));
         setIsChatLoading((prev) => ({ ...prev, [activeChatId]: false }));
       }

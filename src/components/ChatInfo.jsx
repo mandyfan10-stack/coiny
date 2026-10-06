@@ -423,7 +423,7 @@ export default function ChatInfo() {
   }, [activeChat?.members, memberSearchQuery]);
 
   const isPersonal = activeChat?.type === 'personal';
-  const isSavedMessages = isSavedMessagesChat(activeChat);
+  const isSavedMessages = isSavedMessagesChat(activeChat, currentUser?.id);
   const otherMember = isPersonal ? (activeChat?.members || []).find((m) => m.id !== currentUser?.id) : null;
   const contactBanner = isSavedMessages ? currentUser?.banner : (otherMember?.banner || activeChat?.banner);
   const { url: bannerUrl } = useResolvedMedia(contactBanner);

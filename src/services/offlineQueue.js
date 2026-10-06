@@ -47,7 +47,7 @@ export async function processOfflineQueueItem(item, deps) {
   } = deps;
 
   let finalMediaUrl = item.media ?? null;
-  const requiresE2EE = requiresPersonalE2EE(chat);
+  const requiresE2EE = requiresPersonalE2EE(chat, currentUser.id);
   const otherMember = requiresE2EE
     ? chat.members?.find((m) => m.id !== currentUser.id)
     : null;

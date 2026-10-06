@@ -26,7 +26,7 @@ for (const first of ['cache', 'network']) {
   });
 }
 
-test('cached messages stay visible during refresh, failure and retry', async ({ page }) => {
+test('cached messages stay visible during failure and retry, then reconcile with a successful history', async ({ page }) => {
   await openChat(page);
   await complete(page, 'cache', 'a', [message('cached', 'Сохранённое сообщение')]);
   await expect(page.getByText('Сохранённое сообщение')).toBeVisible();
@@ -39,7 +39,7 @@ test('cached messages stay visible during refresh, failure and retry', async ({ 
   await expect(page.getByRole('alert')).toHaveCount(0);
   await complete(page, 'network', 'a', [message('fresh', 'Новое сообщение', 1)]);
   await expect(page.getByText('Новое сообщение')).toBeVisible();
-  await expect(page.getByText('Сохранённое сообщение')).toBeVisible();
+  await expect(page.getByText('Сохранённое сообщение')).toHaveCount(0);
 });
 
 test('an empty failed request is not presented as an empty successful history', async ({ page }) => {
@@ -57,14 +57,89 @@ test('an empty failed request is not presented as an empty successful history', 
 
 test('late cache preserves newer bodies and receipts while restoring older history', async ({ page }) => {
   await openChat(page);
-  await complete(page, 'network', 'a', [message('same', 'Свежий текст', 2), { ...message('receipt', 'Сохранённое прочтение', 3), read: false }]);
-  await expect(page.getByText('Свежий текст')).toBeVisible();
+  await complete(page, 'network', 'a', [message('same', 'Свежий текст', 2), { ...message('receipt', 'Сохранённое прочтение', 3), read: false },
+    ...Array.from({ length: 98 }, (_, index) => message(`filler-${index}`, `Сообщение ${index}`, index + 4))]);
+  await expect(page.getByText('Свежий текст')).toBeAttached();
   await complete(page, 'cache', 'a', [message('old', 'Старая история'), { ...message('same', 'Устаревший текст', 2), read: false }, message('receipt', 'Сохранённое прочтение', 3)]);
-  await expect(page.getByText('Старая история')).toBeVisible();
-  await expect(page.getByText('Свежий текст')).toBeVisible();
+  await expect(page.getByText('Старая история')).toBeAttached();
+  await expect(page.getByText('Свежий текст')).toBeAttached();
   await expect(page.getByText('Устаревший текст')).toHaveCount(0);
   expect((await state(page)).chats[0].messages.find(item => item.id === 'same').read).toBe(true);
   expect((await state(page)).chats[0].messages.find(item => item.id === 'receipt').read).toBe(true);
+});
+
+for (const first of ['cache', 'network']) {
+  test(`an empty server history removes deleted messages when ${first} resolves first`, async ({ page }) => {
+    await openChat(page);
+    const deleted = message('deleted', 'Удалённое сообщение');
+    const pending = { ...message('pending', 'Ожидающее сообщение', 1), isPending: true, isOptimistic: true };
+    await page.evaluate(messages => window.__messengerTest.cache.seed(messages), [deleted, pending]);
+    await complete(page, first, 'a', first === 'cache' ? [deleted, pending] : []);
+    await complete(page, first === 'cache' ? 'network' : 'cache', 'a', first === 'cache' ? [] : [deleted, pending]);
+    await expect(page.getByText('Удалённое сообщение')).toHaveCount(0);
+    await expect(page.getByText('Ожидающее сообщение')).toBeVisible();
+    await expect.poll(() => page.evaluate(async () => (await window.__messengerTest.cache.read()).map(row => row.id))).toEqual(['pending']);
+    await expect.poll(() => page.evaluate(async () => (await window.__messengerTest.cache.legacy()).map(row => row.id))).toEqual(['pending']);
+    expect((await state(page)).status.a).toBe('loaded');
+  });
+}
+
+test('an empty successful history clears both cache stores when there are no pending messages', async ({ page }) => {
+  await openChat(page);
+  const deleted = message('deleted', 'Удалённое сообщение');
+  await page.evaluate(messages => window.__messengerTest.cache.seed(messages), [deleted]);
+  await complete(page, 'cache', 'a', [deleted]);
+  await complete(page, 'network', 'a');
+  await expect(page.getByText('Здесь пока нет сообщений')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.__messengerTest.cache.read())).toEqual([]);
+  await expect.poll(() => page.evaluate(() => window.__messengerTest.cache.legacy())).toEqual([]);
+});
+
+test('a server-confirmed optimistic message becomes delivered and can be removed on the next refresh', async ({ page }) => {
+  await openChat(page);
+  const optimistic = { ...message('confirmed', 'Локальный текст'), isPending: true, isOptimistic: true, isFailed: true };
+  await complete(page, 'cache', 'a', [optimistic]);
+  await complete(page, 'network', 'a', [message('confirmed', 'Серверная запись', 1)]);
+  await expect.poll(async () => (await state(page)).chats[0].messages.map(({ isPending, isOptimistic, isFailed }) => ({ isPending, isOptimistic, isFailed })))
+    .toEqual([{ isPending: false, isOptimistic: false, isFailed: false }]);
+  await page.evaluate(() => { void window.__messengerTest.load('a'); });
+  await complete(page, 'network', 'a');
+  await expect(page.getByText('Локальный текст')).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => window.__messengerTest.cache.read())).toEqual([]);
+});
+
+test('older pagination uses the server cursor even when cached history starts earlier', async ({ page }) => {
+  await openChat(page);
+  const timestamp = '2026-10-06T12:00:00.123456Z';
+  const row = number => ({ ...message(String(number).padStart(4, '0'), `Строка ${number}`), timestamp, createdAt: timestamp });
+  await complete(page, 'cache', 'a', [row(30)]);
+  await complete(page, 'network', 'a', Array.from({ length: 100 }, (_, index) => row(index + 100)));
+  await expect.poll(async () => (await state(page)).chats[0].messages.length).toBe(101);
+  await page.evaluate(() => { void window.__messengerTest.older('a'); });
+  await expect.poll(() => page.evaluate(() => window.__messengerTest.requests.length)).toBe(3);
+  expect(await page.evaluate(() => window.__messengerTest.requests[2].cursor)).toEqual({ id: '0100', timestamp });
+  await complete(page, 'network', 'a', [row(90), row(91)]);
+  await expect.poll(async () => (await state(page)).chats[0].messages.length).toBe(103);
+  expect((await state(page)).chats[0].messages.slice(0, 3).map(row => row.id)).toEqual(['0030', '0090', '0091']);
+});
+
+test('offline cache pages do not move the server cursor or prevent retry after reconnecting', async ({ page, context }) => {
+  await openChat(page);
+  const timestamp = '2026-10-06T12:00:00.123456Z';
+  const row = number => ({ ...message(String(number).padStart(4, '0'), `Строка ${number}`), timestamp, createdAt: timestamp });
+  await complete(page, 'cache', 'a');
+  await complete(page, 'network', 'a', Array.from({ length: 100 }, (_, index) => row(index + 100)));
+  await expect.poll(async () => (await state(page)).status.a).toBe('loaded');
+  await page.evaluate(messages => window.__messengerTest.cache.seed(messages), [row(30)]);
+  await context.setOffline(true);
+  expect(await page.evaluate(() => window.__messengerTest.older('a'))).toBe(1);
+  expect(await page.evaluate(() => window.__messengerTest.older('a'))).toBe(0);
+  await context.setOffline(false);
+  await page.evaluate(() => { void window.__messengerTest.older('a'); });
+  await expect.poll(() => page.evaluate(() => window.__messengerTest.requests.length)).toBe(3);
+  expect(await page.evaluate(() => window.__messengerTest.requests[2].cursor)).toEqual({ id: '0100', timestamp });
+  await complete(page, 'network', 'a', [row(90)]);
+  await expect.poll(async () => (await state(page)).chats[0].messages.map(message => message.id)).toContain('0090');
 });
 
 test('older requests cannot end or overwrite a newer refresh', async ({ page }) => {

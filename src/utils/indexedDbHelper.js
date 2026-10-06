@@ -5,6 +5,8 @@ import {
   encryptOfflineQueuePayload,
   generateOfflineQueueKey
 } from './offlineQueueCrypto.js';
+import { compareMessages } from './messageCursor.ts';
+import { retainCachedMessage } from './messageHistory.js';
 
 const DB_NAME = 'CoinyOfflineDB';
 const DB_VERSION = 8;
@@ -331,6 +333,7 @@ export function normalizeCachedMessage(m, chatId, userId) {
     reads: Array.isArray(m.reads) ? m.reads : [],
     reactions: Array.isArray(m.reactions) ? m.reactions : [],
     timestampIso: validTs.toISOString(),
+    createdAt: m.createdAt || null,
     isOptimistic: Boolean(m.isOptimistic),
     isPending: Boolean(m.isPending),
     isLocked: Boolean(m.isLocked),
@@ -370,12 +373,24 @@ export async function saveCachedMessage(message, chatId, userId) {
 /**
  * Batch saves messages in messages-cache-v2 (relational storage per message)
  */
-export async function saveCachedMessagesBatch(chatId, messages, userId) {
-  if (!chatId || !Array.isArray(messages) || messages.length === 0 || typeof indexedDB === 'undefined') return;
+export async function saveCachedMessagesBatch(chatId, messages, userId, snapshot = null) {
+  if (!chatId || !Array.isArray(messages) || (!messages.length && !snapshot) || typeof indexedDB === 'undefined') return;
   try {
     const db = await initOfflineDB();
     const tx = db.transaction(MESSAGES_CACHE_V2_STORE_NAME, 'readwrite');
     const store = tx.objectStore(MESSAGES_CACHE_V2_STORE_NAME);
+
+    if (snapshot) {
+      const request = store.index('by-chat').openCursor(IDBKeyRange.only(String(chatId)));
+      request.onsuccess = (event) => {
+        const cursor = event.target.result;
+        if (!cursor) return;
+        if (cursor.value.userId === userContext(userId) && !retainCachedMessage(cursor.value, snapshot)) {
+          cursor.delete();
+        }
+        cursor.continue();
+      };
+    }
 
     for (const m of messages) {
       const norm = normalizeCachedMessage(m, chatId, userId);
@@ -409,11 +424,15 @@ export async function getCachedMessagesForChat(chatId, userId, limit = 200) {
 
     return new Promise((resolve) => {
       const results = [];
+      let lastTimestamp = null;
       const req = index.openCursor(range, 'prev'); // Most recent first
       req.onsuccess = (e) => {
         const cursor = e.target.result;
-        if (cursor && results.length < limit) {
-          results.push(denormalizeCachedMessage(cursor.value));
+        if (cursor && (results.length < limit || cursor.value.timestampIso === lastTimestamp)) {
+          if (cursor.value.userId === userContext(userId)) {
+            results.push(denormalizeCachedMessage(cursor.value));
+            lastTimestamp = cursor.value.timestampIso;
+          }
           cursor.continue();
         } else {
           if (results.length === 0) {
@@ -422,7 +441,7 @@ export async function getCachedMessagesForChat(chatId, userId, limit = 200) {
               resolve(Array.isArray(legacy) ? legacy : []);
             }).catch(() => resolve([]));
           } else {
-            resolve(results.reverse()); // Chronological order
+            resolve(results.sort(compareMessages).slice(-limit));
           }
         }
       };
@@ -439,12 +458,14 @@ export async function getCachedMessagesForChat(chatId, userId, limit = 200) {
 }
 
 /**
- * Retrieve messages for a chat from messages-cache-v2 that occurred before a given timestamp, sorted chronologically
+ * Retrieve a cache page before a (timestamp, id) cursor. Timestamp-only callers
+ * retain the legacy exclusive-time behavior.
  */
-export async function getCachedMessagesBeforeTimestamp(chatId, beforeTimestamp, limit = 30) {
+export async function getCachedMessagesBeforeTimestamp(chatId, beforeTimestamp, limit = 30, userId) {
   if (!chatId || !beforeTimestamp || typeof indexedDB === 'undefined') return [];
   try {
-    const beforeDate = new Date(beforeTimestamp);
+    const beforeCursor = beforeTimestamp?.id ? beforeTimestamp : null;
+    const beforeDate = new Date(beforeCursor?.timestamp || beforeTimestamp);
     if (isNaN(beforeDate.getTime())) return [];
     const beforeIso = beforeDate.toISOString();
 
@@ -455,18 +476,26 @@ export async function getCachedMessagesBeforeTimestamp(chatId, beforeTimestamp, 
 
     const lowerBound = [String(chatId), ''];
     const upperBound = [String(chatId), beforeIso];
-    const range = IDBKeyRange.bound(lowerBound, upperBound, false, true);
+    const range = IDBKeyRange.bound(lowerBound, upperBound, false, !beforeCursor);
 
     return new Promise((resolve) => {
       const results = [];
+      let lastTimestamp = null;
       const req = index.openCursor(range, 'prev'); // Most recent before timestamp
       req.onsuccess = (e) => {
         const cursor = e.target.result;
-        if (cursor && results.length < limit) {
-          results.push(denormalizeCachedMessage(cursor.value));
+        // Read the whole boundary millisecond before sorting: server timestamps
+        // can differ in microseconds even when IndexedDB's Date index is equal.
+        if (cursor && (results.length < limit || cursor.value.timestampIso === lastTimestamp)) {
+          if (cursor.value.userId === userContext(userId)
+            && !cursor.value.isPending && !cursor.value.isOptimistic && !cursor.value.isFailed
+            && (!beforeCursor || compareMessages(cursor.value, beforeCursor) < 0)) {
+            results.push(denormalizeCachedMessage(cursor.value));
+            lastTimestamp = cursor.value.timestampIso;
+          }
           cursor.continue();
         } else {
-          resolve(results.reverse()); // Chronological order
+          resolve(results.sort(compareMessages).slice(-limit));
         }
       };
       req.onerror = () => resolve([]);
@@ -533,6 +562,8 @@ export async function saveCachedChatList(chats, userId) {
         avatarColor: c.avatarColor,
         username: c.username,
         type: c.type,
+        createdBy: c.createdBy,
+        savedMessagesOwnerId: c.savedMessagesOwnerId,
         pinned: c.pinned,
         notifications: c.notifications,
         settings: c.settings,
@@ -848,7 +879,7 @@ export async function clearMediaAndMessageCache() {
  * Persists up to 100 recent messages for a chat to IndexedDB (legacy fallback)
  */
 export async function saveCachedMessages(chatId, messages, userId) {
-  if (!chatId || !Array.isArray(messages) || messages.length === 0) return;
+  if (!chatId || !Array.isArray(messages)) return;
   if (typeof indexedDB === 'undefined') return;
   const context = `chat-messages:${userContext(userId)}:${chatId}`;
   try {
@@ -893,4 +924,3 @@ export async function clearCachedMessages(chatId, userId) {
     console.warn('Failed to clear cached messages from IndexedDB:', err);
   }
 }
-

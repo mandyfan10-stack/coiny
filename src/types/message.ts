@@ -20,6 +20,7 @@ export interface ChatMessage {
   reads?: ProfileId[];
   reactions?: MessageReaction[];
   timestamp: Date | string;
+  createdAt?: string;
   isOptimistic?: boolean;
   isPending?: boolean;
   isFailed?: boolean;

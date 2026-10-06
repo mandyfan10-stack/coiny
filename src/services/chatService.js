@@ -1,9 +1,9 @@
 import { supabase, isSupabaseConfigured } from '../supabaseClient';
 import { isMockOnlyBotProfile, isMockOnlyBotUsername } from '../utils/mockOnlyBots';
-import { isSavedMessagesChat, SAVED_MESSAGES_DISPLAY_NAME } from '../utils/savedMessages';
+import { SAVED_MESSAGES_DISPLAY_NAME } from '../utils/savedMessages';
 
 
-function buildDefaultMockChats() {
+function buildDefaultMockChats(userId) {
   return [
     {
       id: 'mock-saved-messages',
@@ -13,10 +13,11 @@ function buildDefaultMockChats() {
       avatarColor: '#5a9ae6',
       bio: 'Ваши сохраненные сообщения',
       username: 'saved_messages',
-      createdBy: 'system',
+      createdBy: userId,
+      savedMessagesOwnerId: userId,
       pinned: true,
       notifications: false,
-      members: [],
+      members: [{ id: userId, name: 'Вы' }],
       settings: { only_admins_can_post: false, allow_media: true, allow_add_members: false, allow_pin_messages: true },
       lastSeen: null,
       messages: []
@@ -129,33 +130,36 @@ export const chatService = {
       for (const chat of [...(memberChatsResult.data || []), ...(createdChatsResult.data || [])]) {
         if (chat?.id) chatsById.set(chat.id, chat);
       }
-      let rawChats = [...chatsById.values()];
+      const rawChats = [...chatsById.values()];
 
-      const hasSaved = rawChats.some((c) =>
-        isSavedMessagesChat({
-          type: c.type,
-          name: c.name,
-          username: c.username,
-        }) && (c.created_by === userId || !c.created_by)
-      );
-      if (!hasSaved) {
-        try {
-          const { data: savedChatId, error: savedErr } = await supabase
-            .rpc('ensure_saved_messages_chat');
-          if (savedErr) throw savedErr;
-
+      // Obtain the notes-to-self identity from the authenticated RPC on every
+      // refresh. A peer's profile name/username must never set this marker.
+      let savedMessagesChatId = null;
+      try {
+        const { data: savedChatId, error: savedErr } = await supabase
+          .rpc('ensure_saved_messages_chat');
+        if (savedErr) throw savedErr;
+        if (savedChatId && !rawChats.some(chat => chat.id === savedChatId)) {
           const { data: savedChat, error: savedChatErr } = await supabase
             .from('chats')
             .select(CHAT_SELECT)
             .eq('id', savedChatId)
             .single();
           if (savedChatErr) throw savedChatErr;
-          if (savedChat && !rawChats.some(chat => chat.id === savedChat.id)) {
-            rawChats.unshift(savedChat);
-          }
-        } catch (e) {
-          console.warn('Failed to auto-create Saved Messages:', e);
+          if (savedChat) rawChats.unshift(savedChat);
         }
+        if (savedChatId) {
+          // The legacy RPC can encounter a name collision. An exact count also
+          // prevents a truncated member-list response from granting an exemption.
+          const { count, error: countError } = await supabase
+            .from('chat_members')
+            .select('profile_id', { count: 'exact', head: true })
+            .eq('chat_id', savedChatId);
+          if (countError) throw countError;
+          if (count === 1) savedMessagesChatId = savedChatId;
+        }
+      } catch (e) {
+        console.warn('Failed to identify Saved Messages:', e);
       }
 
       const chatList = rawChats;
@@ -244,6 +248,7 @@ export const chatService = {
             read: latestMsg.legacy_read || (latestMsg.read_by || []).length > 0,
             reads: latestMsg.read_by || [],
             reactions: latestMsg.reactions || [],
+            createdAt: latestMsg.created_at,
             timestamp: new Date(latestMsg.created_at)
           }];
         }
@@ -265,6 +270,7 @@ export const chatService = {
           username: otherMember ? otherMember.username : chat.username,
           banner: otherMember ? otherMember.banner : (chat.banner || null),
           createdBy: chat.created_by,
+          savedMessagesOwnerId: chat.id === savedMessagesChatId && chat.created_by === userId ? userId : null,
           pinned: membership?.pinned || false,
           notifications: membership?.notifications ?? true,
           members: formattedMembers,
@@ -288,14 +294,21 @@ export const chatService = {
     }
 
     if (!chats || chats.length === 0) {
-      chats = buildDefaultMockChats();
+      chats = buildDefaultMockChats(userId);
       localStorage.setItem('tg-chats-mock', JSON.stringify(chats));
     }
 
     try {
       return chats.map((chat) => ({
         ...chat,
-        members: Array.isArray(chat.members) ? chat.members : [],
+        // Upgrade the fixed demo fixture identity without trusting its label.
+        ...(chat.id === 'mock-saved-messages' ? {
+          createdBy: userId,
+          savedMessagesOwnerId: userId
+        } : {}),
+        members: chat.id === 'mock-saved-messages'
+          ? [{ id: userId, name: 'Вы' }]
+          : (Array.isArray(chat.members) ? chat.members : []),
         messages: (Array.isArray(chat.messages) ? chat.messages : []).map((m) => ({
           ...m,
           timestamp: new Date(m.timestamp)

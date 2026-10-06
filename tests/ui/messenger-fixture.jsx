@@ -8,6 +8,8 @@ import { ChatContext } from '../../src/context/ChatContext';
 import { useChatLoader } from '../../src/context/chat/useChatLoader';
 import { useChatUiState } from '../../src/context/chat/useChatUiState';
 import { dataService } from '../../src/services/dataLayer';
+import { saveCachedMessagesBatch, getCachedMessagesForChat, getCachedMessages, getCachedMessagesBeforeTimestamp } from '../../src/utils/indexedDbHelper';
+import { createHistorySnapshot } from '../../src/utils/messageHistory';
 import ChatArea from '../../src/components/ChatArea';
 import NewChatModal from '../../src/components/NewChatModal';
 import CreateStoryModal from '../../src/components/CreateStoryModal';
@@ -19,6 +21,13 @@ const makeChat = id => ({ id, name: `Chat ${id}`, type: 'group', members: [self]
 const requests = [];
 const controller = {
   requests,
+  cache: {
+    seed: (messages, chatId = 'a', userId = self.id) => saveCachedMessagesBatch(chatId, messages, userId),
+    read: (chatId = 'a', userId = self.id) => getCachedMessagesForChat(chatId, userId),
+    legacy: (chatId = 'a', userId = self.id) => getCachedMessages(chatId, userId),
+    page: (cursor, limit = 30, chatId = 'a', userId = self.id) => getCachedMessagesBeforeTimestamp(chatId, cursor, limit, userId),
+    reconcile: (messages, pageSize = 100, chatId = 'a') => saveCachedMessagesBatch(chatId, messages, self.id, createHistorySnapshot(messages, pageSize))
+  },
   complete(kind, chatId, messages = [], error = null) {
     const item = requests.find(request => request.kind === kind && request.chatId === chatId && !request.done);
     if (!item) throw new Error(`No ${kind} request for ${chatId}`);
@@ -31,9 +40,9 @@ const controller = {
   }
 };
 window.__messengerTest = controller;
-const request = (kind, chatId) => new Promise((resolve, reject) => requests.push({ kind, chatId, resolve, reject, done: false }));
+const request = (kind, chatId, limit = null, cursor = null) => new Promise((resolve, reject) => requests.push({ kind, chatId, limit, cursor, resolve, reject, done: false }));
 const readCachedMessages = chatId => request('cache', chatId);
-dataService.loadChatMessages = chatId => request('network', chatId);
+dataService.loadChatMessages = (chatId, limit, cursor) => request('network', chatId, limit, cursor);
 dataService.searchProfiles = async () => [{ id: 'long-peer', username: 'very_long_username', display_name: 'Очень длинное имя собеседника '.repeat(5), avatar: '👤' }];
 
 function Harness() {
@@ -47,8 +56,8 @@ function Harness() {
   const loader = useChatLoader({ currentUser, setChats, chatsRef, e2eePrivateKeyRef, sharedKeysCacheRef,
     setSharedKeysCache: noop, activeChatId, e2eePrivateKey: null, readCachedMessages });
   const ui = useChatUiState(currentUser);
-  Object.assign(controller, { select: setActiveChatId, user: setCurrentUser, load: loader.loadActiveChatMessages,
-    state: { chats, status: loader.historyLoadStatus, loading: loader.isChatLoading, syncing: loader.isSyncing } });
+  Object.assign(controller, { select: setActiveChatId, user: setCurrentUser, load: loader.loadActiveChatMessages, older: loader.loadOlderMessages,
+    state: { chats, status: loader.historyLoadStatus, loading: loader.isChatLoading, syncing: loader.isSyncing, pagination: loader.messagePagination } });
   const dialogs = new URLSearchParams(location.search).has('dialogs');
   const value = { ...ui, ...loader, currentUser, chats, activeChat: chats.find(chat => chat.id === activeChatId),
     setActiveChatId, getChatStatus: () => 'Тестовая история', renderAvatar: () => '👤', wallpaper: 'classic',

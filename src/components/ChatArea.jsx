@@ -112,7 +112,7 @@ export default function ChatArea() {
   const otherMember = activeChat?.type === 'personal'
     ? activeChat.members?.find(m => m.id !== currentUser?.id)
     : null;
-  const requiresE2EE = requiresPersonalE2EE(activeChat);
+  const requiresE2EE = requiresPersonalE2EE(activeChat, currentUser?.id);
   const recipientMissingE2EE = requiresE2EE && (!otherMember || !otherMember.hasE2ee);
 
   const chatMessagesCount = activeChat?.messages?.length || 0;
