@@ -1188,3 +1188,38 @@ html.theme-light .reply-preview-sender {
     cursor: pointer;
   }
 }
+.chat-history-notice,
+.chat-history-empty {
+  margin: 16px auto;
+  max-width: 100%;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-size: 14px;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.chat-history-notice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.chat-history-notice button {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  color: var(--accent-color);
+  cursor: pointer;
+}
+
+.chat-history-notice button:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}

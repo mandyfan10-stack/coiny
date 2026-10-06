@@ -197,6 +197,7 @@ export const ChatProvider = ({ children }) => {
       loadOlderMessages: loader.loadOlderMessages,
       messagePagination: loader.messagePagination,
       isChatLoading: loader.isChatLoading,
+      historyLoadStatus: loader.historyLoadStatus,
       isSyncing: loader.isSyncing
     }}>
       {children}

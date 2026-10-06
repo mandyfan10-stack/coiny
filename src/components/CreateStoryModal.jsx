@@ -53,7 +53,6 @@ export default function CreateStoryModal() {
     stopCamera();
     if (!navigator?.mediaDevices?.getUserMedia) {
       setCameraError('Камера не поддерживается вашим браузером');
-      setMode('editor');
       return;
     }
 
@@ -301,7 +300,7 @@ export default function CreateStoryModal() {
             </div>
 
             {/* Bottom Camera Toolbar: Gallery | Shutter | Placeholder */}
-            <div className="story-studio-bottom-toolbar">
+            {cameraActive && <div className="story-studio-bottom-toolbar">
               {/* Gallery button */}
               <button
                 type="button"
@@ -334,7 +333,7 @@ export default function CreateStoryModal() {
               >
                 <RefreshCw size={20} />
               </button>
-            </div>
+            </div>}
           </div>
         )}
 

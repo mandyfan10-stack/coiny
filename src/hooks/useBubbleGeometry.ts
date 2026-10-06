@@ -177,10 +177,10 @@ export default function useBubbleGeometry(
   if (isCustomActive && bubblePath) {
     if (strategy === 'clip-path-path') {
       bubbleStyle.clipPath = `path("${bubblePath}")`;
-      (bubbleStyle as Record<string, string>)['-webkit-clip-path'] = `path("${bubblePath}")`;
+      bubbleStyle.WebkitClipPath = `path("${bubblePath}")`;
     } else if (strategy === 'svg-mask') {
       bubbleStyle.clipPath = `url(#${clipId})`;
-      (bubbleStyle as Record<string, string>)['-webkit-clip-path'] = `url(#${clipId})`;
+      bubbleStyle.WebkitClipPath = `url(#${clipId})`;
 
       // Render SVG clipPath element into DOM using React.createElement for pure .ts compatibility
       svgClipElement = React.createElement(

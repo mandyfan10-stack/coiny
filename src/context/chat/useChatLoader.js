@@ -25,11 +25,16 @@ export function useChatLoader({
   sharedKeysCacheRef,
   setSharedKeysCache,
   activeChatId,
-  e2eePrivateKey
+  e2eePrivateKey,
+  readCachedMessages = getCachedMessagesForChat
 }) {
   const [messagePagination, setMessagePagination] = useState({});
   const [isChatLoading, setIsChatLoading] = useState({});
   const [isSyncing, setIsSyncing] = useState({});
+  const [historyLoadStatus, setHistoryLoadStatus] = useState({});
+  const loadRequestsRef = useRef(new Map());
+  const sessionUserRef = useRef(currentUser?.id);
+  sessionUserRef.current = currentUser?.id;
 
   const activeChatIdRef = useRef(activeChatId);
   useEffect(() => {
@@ -37,6 +42,15 @@ export function useChatLoader({
   }, [activeChatId]);
 
   const currentUserId = currentUser?.id;
+
+  useEffect(() => {
+    const requests = loadRequestsRef.current;
+    requests.clear();
+    setHistoryLoadStatus({});
+    setIsChatLoading({});
+    setIsSyncing({});
+    return () => { requests.clear(); };
+  }, [currentUserId]);
 
   // Instant 0ms Chat List Hydration from IndexedDB
   useEffect(() => {
@@ -231,9 +245,17 @@ export function useChatLoader({
 
   const loadActiveChatMessages = useCallback(async (chatId) => {
     if (!chatId || !currentUser) return;
+    const request = {};
+    loadRequestsRef.current.set(chatId, request);
+    const isCurrentRequest = () => sessionUserRef.current === currentUserId
+      && loadRequestsRef.current.get(chatId) === request;
+    const existingChat = chatsRef.current.find((chat) => chat.id === chatId);
+    setIsChatLoading((prev) => ({ ...prev, [chatId]: !existingChat?.messages?.length }));
     setIsSyncing((prev) => ({ ...prev, [chatId]: true }));
+    setHistoryLoadStatus((prev) => ({ ...prev, [chatId]: 'loading' }));
     try {
       const msgsRaw = await dataService.loadChatMessages(chatId, 100);
+      if (!isCurrentRequest()) return;
       const msgs = Array.isArray(msgsRaw) ? msgsRaw : [];
       const chat = chatsRef.current.find((c) => c.id === chatId);
       if (!chat) return;
@@ -250,10 +272,11 @@ export function useChatLoader({
       const decryptedMsgs = await Promise.all(
         msgs.map((m) => decryptMessageFields(m, sharedKey, chat.type === 'personal'))
       );
+      if (!isCurrentRequest()) return;
 
       // Seamless Merge: preserve local optimistic & unlocked bodies without visual jumps
       setChats((prev) => (Array.isArray(prev) ? prev : []).map((c) => {
-        if (c.id !== chatId) return c;
+        if (c.id !== chatId || !isCurrentRequest()) return c;
         const existingMessages = Array.isArray(c.messages) ? c.messages : [];
         const existingById = new Map(existingMessages.map((m) => [m.id, m]));
 
@@ -296,11 +319,17 @@ export function useChatLoader({
       }));
 
       setMessagePagination((prev) => ({ ...prev, [chatId]: { loading: false, hasMore: msgs.length >= 100 } }));
+      setHistoryLoadStatus((prev) => ({ ...prev, [chatId]: 'loaded' }));
     } catch (e) {
-      console.error(e);
+      if (isCurrentRequest()) {
+        console.error('Failed to load chat history', e);
+        setHistoryLoadStatus((prev) => ({ ...prev, [chatId]: 'error' }));
+      }
     } finally {
-      setIsSyncing((prev) => ({ ...prev, [chatId]: false }));
-      setIsChatLoading((prev) => ({ ...prev, [chatId]: false }));
+      if (isCurrentRequest()) {
+        setIsSyncing((prev) => ({ ...prev, [chatId]: false }));
+        setIsChatLoading((prev) => ({ ...prev, [chatId]: false }));
+      }
     }
   }, [currentUser, currentUserId, setSharedKeysCache, setChats, chatsRef, e2eePrivateKeyRef, sharedKeysCacheRef]);
 
@@ -380,56 +409,62 @@ export function useChatLoader({
     }
 
     // Always hydrate from IndexedDB to show full cached history (not just preview messages)
-    getCachedMessagesForChat(activeChatId, currentUserId).then((cached) => {
+    readCachedMessages(activeChatId, currentUserId).then((cached) => {
       if (!isMounted) return;
       if (Array.isArray(cached) && cached.length > 0) {
         setChats((prev) => (Array.isArray(prev) ? prev : []).map((c) => {
-          if (c.id !== activeChatId) return c;
+          if (c.id !== activeChatId || !isMounted) return c;
           const currentMsgs = Array.isArray(c.messages) ? c.messages : [];
 
-          // If current chat already has more messages loaded (e.g. user paginated 100+ items), preserve them
-          if (currentMsgs.length > cached.length) {
-            const cachedById = new Map(cached.map((m) => [m.id, m]));
-            return {
-              ...c,
-              messages: currentMsgs.map((m) => {
-                const cm = cachedById.get(m.id);
-                return cm ? { ...cm, ...m } : m;
-              })
-            };
-          }
-
-          const pending = currentMsgs.filter((m) => m.isPending || m.isOptimistic);
+          // Late cache hydration must not overwrite newer bodies, receipts or reactions.
+          const currentById = new Map(currentMsgs.map((message) => [message.id, message]));
           const cachedIds = new Set(cached.map((m) => m.id));
-          const uniquePending = pending.filter((m) => !cachedIds.has(m.id));
-          return { ...c, messages: [...cached, ...uniquePending] };
+          const merged = cached.map((message) => {
+            const current = currentById.get(message.id);
+            if (!current) return message;
+            const keepCurrentBody = !current.isLocked || message.isLocked;
+            return {
+              ...message, ...current,
+              text: keepCurrentBody ? current.text : message.text,
+              media: keepCurrentBody ? current.media : message.media,
+              isLocked: keepCurrentBody ? current.isLocked : message.isLocked,
+              read: Boolean(current.read || message.read),
+              reads: current.reads?.length ? current.reads : message.reads
+            };
+          });
+          const additional = currentMsgs.filter((message) => !cachedIds.has(message.id));
+          return { ...c, messages: [...merged, ...additional].sort(
+            (left, right) => new Date(left.timestamp) - new Date(right.timestamp)
+          ) };
         }));
         setIsChatLoading((prev) => ({ ...prev, [activeChatId]: false }));
-      } else {
-        setIsChatLoading((prev) => ({ ...prev, [activeChatId]: inMemoryCount === 0 }));
       }
-    }).catch(() => {
-      if (isMounted) {
-        setIsChatLoading((prev) => ({ ...prev, [activeChatId]: false }));
-      }
-    });
+    }).catch(() => { /* A cache miss/error cannot change the network loading state. */ });
 
     return () => {
       isMounted = false;
     };
-  }, [activeChatId, currentUserId, setChats, chatsRef]);
+  }, [activeChatId, currentUserId, setChats, chatsRef, readCachedMessages]);
 
   // Contract: active encrypted chat reloads after the private key becomes available
   useEffect(() => {
+    const requests = loadRequestsRef.current;
     if (activeChatId) {
       loadActiveChatMessages(activeChatId);
     }
+    return () => {
+      if (!activeChatId) return;
+      requests.delete(activeChatId);
+      setIsSyncing((prev) => ({ ...prev, [activeChatId]: false }));
+      setIsChatLoading((prev) => ({ ...prev, [activeChatId]: false }));
+    };
   }, [activeChatId, e2eePrivateKey, loadActiveChatMessages]);
 
   return {
     messagePagination,
     isChatLoading,
     isSyncing,
+    historyLoadStatus,
     fetchChats,
     loadActiveChatMessages,
     loadOlderMessages

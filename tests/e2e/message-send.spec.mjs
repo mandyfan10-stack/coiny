@@ -1,6 +1,17 @@
 import { expect, test } from '@playwright/test';
 import { enterMockApp } from './helpers.mjs';
 
+test('empty Saved Messages finishes loading and shows an empty history', async ({ page }) => {
+  await enterMockApp(page);
+  await page.locator('.chat-item').filter({ hasText: 'Избранное' }).click();
+  await expect(page.getByText('Здесь пока нет сообщений')).toBeVisible();
+  await expect(page.locator('.chat-skeleton-container')).toHaveCount(0);
+  await page.reload();
+  await page.locator('.sidebar').waitFor();
+  await page.locator('.chat-item').filter({ hasText: 'Избранное' }).click();
+  await expect(page.getByText('Здесь пока нет сообщений')).toBeVisible();
+});
+
 test('mock group chat sends a message and clears its pending state', async ({ page }) => {
   const pageErrors = [];
   const marker = `E2E-MESSAGE-${Date.now()}`;

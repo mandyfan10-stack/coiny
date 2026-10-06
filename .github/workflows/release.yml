@@ -80,8 +80,8 @@ jobs:
       - name: Build web client
         run: npm run build
 
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+      - name: Install Chromium and WebKit
+        run: npx playwright install --with-deps chromium webkit
 
       - name: Test chat scroll restoration and pagination
         run: npm run test:scroll

@@ -110,7 +110,8 @@ test('indexedDbHelper defines schema version 8 and v2 cache stores with proper i
 test('useChatLoader implements instant 0ms chat list startup and SWR message hydration', () => {
   assert.match(useChatLoaderCode, /getCachedChatList\(currentUserId\)/);
   assert.match(useChatLoaderCode, /saveCachedChatList\(updatedChats,\s*currentUserId\)/);
-  assert.match(useChatLoaderCode, /getCachedMessagesForChat\(activeChatId,\s*currentUserId\)/);
+  assert.match(useChatLoaderCode, /readCachedMessages\s*=\s*getCachedMessagesForChat/);
+  assert.match(useChatLoaderCode, /readCachedMessages\(activeChatId,\s*currentUserId\)/);
   assert.match(useChatLoaderCode, /saveCachedMessagesBatch\(chatId,\s*finalMessages,\s*currentUserId\)/);
   assert.match(useChatLoaderCode, /isSyncing/);
 });
@@ -176,4 +177,3 @@ test('ChatArea and Sidebar calculate unread status and divider accurately', () =
   assert.match(chatAreaCode, /findIndex\(\(m\)\s*=>\s*m\.senderId\s*!==\s*currentUser\?\.id/);
   assert.match(sidebarCode, /typeof chat\.unread_count === 'number'/);
 });
-

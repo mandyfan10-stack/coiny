@@ -4004,6 +4004,11 @@ body.light-mode .auth-demo-subtext {
   background: transparent !important;
 }
 
+/* Keep the icon gutter when compact form styles override input padding. */
+.new-chat-container .modal-search input {
+  padding-left: 38px !important;
+}
+
 .search-results-list {
   display: flex;
   flex-direction: column;
@@ -7131,4 +7136,3 @@ body,
     padding-top: env(safe-area-inset-top, 0px) !important;
   }
 }
-

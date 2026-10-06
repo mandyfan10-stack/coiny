@@ -6,7 +6,8 @@ export default defineConfig({
   use: { baseURL: 'http://127.0.0.1:5194', trace: 'retain-on-failure', screenshot: 'only-on-failure' },
   projects: [
     { name: 'desktop', use: { viewport: { width: 1440, height: 900 } } },
-    { name: 'mobile', use: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } }
+    { name: 'mobile', use: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } },
+    { name: 'webkit', testMatch: /bubble-webkit\.spec\.mjs/, use: { browserName: 'webkit', viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } }
   ],
   webServer: {
     command: 'npm run dev -- --mode ui-test --host 127.0.0.1 --port 5194 --strictPort',

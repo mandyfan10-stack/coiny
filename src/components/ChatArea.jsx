@@ -76,6 +76,8 @@ export default function ChatArea() {
     loadOlderMessages,
     messagePagination,
     isChatLoading,
+    historyLoadStatus,
+    loadActiveChatMessages,
     isSyncing,
     openSettings
   } = useChat();
@@ -1744,6 +1746,15 @@ function formatDateDivider(timestamp) {
           <ChatSkeleton />
         ) : (
           <div className="messages-list">
+            {historyLoadStatus?.[activeChat.id] === 'error' && (
+              <div className="chat-history-notice" role="alert">
+                <span>Не удалось загрузить сообщения</span>
+                <button type="button" onClick={() => loadActiveChatMessages(activeChat.id)}>Повторить</button>
+              </div>
+            )}
+            {chatMessagesCount === 0 && historyLoadStatus?.[activeChat.id] === 'loaded' && (
+              <div className="chat-history-empty" role="status">Здесь пока нет сообщений</div>
+            )}
             {activeChat.messages.map((msg, index) => {
               const prevMsg = activeChat.messages[index - 1];
               const showDateDivider = !prevMsg || (

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
 import {
   Smile,
   Sparkles,
@@ -65,6 +65,37 @@ export default function MediaPickerPanel({
   const searchInputRef = useRef(null);
   const contentBodyRef = useRef(null);
   const debounceTimerRef = useRef(null);
+  const [viewportStyle, setViewportStyle] = useState({});
+
+  useLayoutEffect(() => {
+    if (!isOpen) return undefined;
+    const viewport = window.visualViewport;
+    const media = window.matchMedia('(max-width: 768px)');
+    const updateViewport = () => {
+      const top = viewport?.offsetTop || 0;
+      const height = viewport?.height || window.innerHeight;
+      const visibleBottom = top + height;
+      const anchor = panelRef.current?.parentElement?.getBoundingClientRect();
+      const anchorBottom = anchor?.bottom || visibleBottom;
+      const desktopBottom = Math.min(anchorBottom - 58, visibleBottom - 8);
+      setViewportStyle({
+        '--picker-available-height': `${Math.max(0, media.matches ? height - 8 : desktopBottom - top - 8)}px`,
+        '--picker-viewport-bottom': `${Math.max(0, window.innerHeight - visibleBottom)}px`,
+        '--picker-desktop-bottom': `${Math.max(58, anchorBottom - desktopBottom)}px`
+      });
+    };
+    updateViewport();
+    viewport?.addEventListener('resize', updateViewport);
+    viewport?.addEventListener('scroll', updateViewport);
+    window.addEventListener('resize', updateViewport);
+    media.addEventListener('change', updateViewport);
+    return () => {
+      viewport?.removeEventListener('resize', updateViewport);
+      viewport?.removeEventListener('scroll', updateViewport);
+      window.removeEventListener('resize', updateViewport);
+      media.removeEventListener('change', updateViewport);
+    };
+  }, [isOpen]);
 
   // GIF Categories Slider State
   const gifPillsRef = useRef(null);
@@ -249,7 +280,17 @@ export default function MediaPickerPanel({
       }
     };
     document.addEventListener('pointerdown', handleClickOutside);
-    return () => document.removeEventListener('pointerdown', handleClickOutside);
+    const handleEscape = (event) => {
+      if (event.key !== 'Escape') return;
+      event.stopPropagation();
+      onClose();
+      panelRef.current?.parentElement?.querySelector('.emoji-trigger')?.focus({ preventScroll: true });
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('pointerdown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
   }, [isOpen, onClose]);
 
   // Handle Emoji Selection
@@ -300,7 +341,7 @@ export default function MediaPickerPanel({
   if (!isOpen) return null;
 
   return (
-    <div className="media-picker-panel" ref={panelRef}>
+    <div className="media-picker-panel" ref={panelRef} style={viewportStyle}>
       {/* Top Segmented Switcher */}
       <div className="picker-top-tabs">
         <button
