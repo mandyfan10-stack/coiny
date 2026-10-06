@@ -30,8 +30,8 @@ const chatHeaderCode = await readFile(
   new URL('../src/components/chat/ChatHeader.jsx', import.meta.url),
   'utf8'
 );
-const appearanceTabCode = await readFile(
-  new URL('../src/components/settings/AppearanceTab.jsx', import.meta.url),
+const storageTabCode = await readFile(
+  new URL('../src/components/settings/StorageTab.jsx', import.meta.url),
   'utf8'
 );
 const useResolvedMediaCode = await readFile(
@@ -139,11 +139,11 @@ test('ChatHeader renders Telegram-style syncing status when background revalidat
   assert.match(chatHeaderCode, /Обновление\.\.\./);
 });
 
-test('AppearanceTab renders Storage and Data section with cache size and clear cache button', () => {
-  assert.match(appearanceTabCode, /Память и данные/);
-  assert.match(appearanceTabCode, /cacheStats/);
-  assert.match(appearanceTabCode, /clearMediaAndMessageCache/);
-  assert.match(appearanceTabCode, /Очистить кэш/);
+test('StorageTab renders Storage and Data section with cache size and clear cache button', () => {
+  assert.match(storageTabCode, /Кэш на устройстве/);
+  assert.match(storageTabCode, /getCacheStorageStats/);
+  assert.match(storageTabCode, /clearMediaAndMessageCache/);
+  assert.match(storageTabCode, /Очистить кэш/);
 });
 
 test('useResolvedMedia integrates persistent IndexedDB media caching for instant offline playback', () => {

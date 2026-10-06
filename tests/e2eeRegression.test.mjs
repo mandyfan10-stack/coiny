@@ -96,7 +96,7 @@ test('UI exposes Safety Number and public key fingerprint surfaces', () => {
   assert.match(chatInfo, /computeSafetyNumber/);
   assert.match(chatInfo, /Код безопасности \(Safety Number\)/);
   assert.match(chatInfo, /safetyNumber/);
-  assert.match(e2eeTab, /fingerprint-code/);
+  assert.match(e2eeTab, /settings-fingerprint/);
   assert.match(e2eeTab, /public_key/);
 });
 

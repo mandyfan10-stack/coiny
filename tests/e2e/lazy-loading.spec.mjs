@@ -52,87 +52,43 @@ test('secondary UI chunks load only when their surfaces open', async ({ page }) 
 test('settings focus and presence remain stable during rapid mobile reopen', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
   await enterMockApp(page);
-
   const menuButton = page.locator('.menu-btn[title="Настройки"]');
   const settingsItem = page.locator('.drawer-menu-item').filter({ hasText: 'Настройки' });
   const dialog = page.locator('.settings-container[role="dialog"]');
   const overlay = dialog.locator('..');
   const closeButton = dialog.locator('.settings-close-btn');
-  const firstFocusable = dialog.locator('.settings-sidebar-profile');
-  const saveButton = dialog.locator('.settings-btn.save');
-  const settingsBody = dialog.locator('.settings-body');
-  const settingsFooter = dialog.locator('.settings-footer');
-  const settingsNav = dialog.locator('.settings-nav-list');
-
-  await menuButton.click();
-  await settingsItem.click();
-  await expect(dialog).toBeVisible();
-  await expect(closeButton).toBeFocused();
-
-  const bounds = await dialog.evaluate((element) => {
-    const rect = element.getBoundingClientRect();
-    return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
-  });
-  expect(bounds.left).toBeGreaterThanOrEqual(0);
-  expect(bounds.right).toBeLessThanOrEqual(360);
-  expect(bounds.top).toBeGreaterThanOrEqual(0);
-  expect(bounds.bottom).toBeLessThanOrEqual(800);
-
-  const assertMobileSettingsGeometry = async () => {
-    const geometry = await dialog.evaluate((element) => {
+  await menuButton.click(); await settingsItem.click();
+  await expect(dialog).toBeVisible(); await expect(closeButton).toBeFocused();
+  await expect(dialog.locator('.settings-nav-item[data-section]')).toHaveCount(6);
+  await expect(dialog.getByRole('button', { name: 'Выйти из аккаунта' })).toBeVisible();
+  const assertGeometry = async () => {
+    const geometry = await dialog.evaluate(element => {
+      const rect = element.getBoundingClientRect();
       const body = element.querySelector('.settings-body');
-      const footer = element.querySelector('.settings-footer');
-      const nav = element.querySelector('.settings-nav-list');
-      const elementRect = element.getBoundingClientRect();
-      const bodyRect = body.getBoundingClientRect();
-      const footerRect = footer.getBoundingClientRect();
-      return {
-        dialogBottom: elementRect.bottom,
-        bodyBottom: bodyRect.bottom,
-        footerBottom: footerRect.bottom,
-        bodyClientWidth: body.clientWidth,
-        bodyScrollWidth: body.scrollWidth,
-        navClientWidth: nav.clientWidth,
-        navScrollWidth: nav.scrollWidth,
-      };
+      return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: body.clientWidth, scrollWidth: body.scrollWidth };
     });
-    expect(geometry.bodyBottom).toBeLessThanOrEqual(geometry.footerBottom);
-    expect(geometry.footerBottom).toBeLessThanOrEqual(geometry.dialogBottom + 1);
-    expect(geometry.bodyScrollWidth).toBeLessThanOrEqual(geometry.bodyClientWidth);
-    expect(geometry.navScrollWidth).toBeLessThanOrEqual(geometry.navClientWidth);
-    await expect(settingsFooter).toBeVisible();
+    expect(geometry.left).toBeGreaterThanOrEqual(0);
+    expect(geometry.right).toBeLessThanOrEqual(360);
+    expect(geometry.top).toBeGreaterThanOrEqual(0);
+    expect(geometry.bottom).toBeLessThanOrEqual(800);
+    expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.width);
   };
-
-  await assertMobileSettingsGeometry();
-  await expect(settingsNav.locator('.settings-nav-item')).toHaveCount(4);
-
-  for (const label of ['Оформление', 'Стикеры', 'Шифрование', 'Мой профиль']) {
-    await settingsNav.locator('.settings-nav-item').filter({ hasText: label }).click();
-    await assertMobileSettingsGeometry();
+  await assertGeometry();
+  for (const section of ['appearance', 'notifications', 'stickers', 'security', 'storage', 'profile']) {
+    await dialog.locator(`[data-section="${section}"]`).click();
+    await assertGeometry();
+    await dialog.getByRole('button', { name: 'Назад к настройкам' }).click();
+    await expect(dialog.locator('.settings-nav-item[data-section]')).toHaveCount(6);
   }
-
-  const inviteGeometry = await settingsBody.locator('.invite-link-wrapper').evaluate((element) => ({
-    clientWidth: element.clientWidth,
-    scrollWidth: element.scrollWidth,
-  }));
-  expect(inviteGeometry.scrollWidth).toBeLessThanOrEqual(inviteGeometry.clientWidth);
-
-  await firstFocusable.focus();
-  await page.keyboard.press('Shift+Tab');
-  await expect(saveButton).toBeFocused();
-  await page.keyboard.press('Tab');
-  await expect(firstFocusable).toBeFocused();
-
+  const logout = dialog.getByRole('button', { name: 'Выйти из аккаунта' });
+  await closeButton.focus(); await page.keyboard.press('Shift+Tab'); await expect(logout).toBeFocused();
+  await page.keyboard.press('Tab'); await expect(closeButton).toBeFocused();
   await closeButton.click();
-  await menuButton.click();
-  await settingsItem.click();
+  await menuButton.click(); await settingsItem.click();
   await expect(overlay).toBeVisible();
-  await page.waitForTimeout(350);
-  await expect(overlay).toBeVisible();
-
+  await page.waitForTimeout(350); await expect(overlay).toBeVisible();
   await page.keyboard.press('Escape');
-  await expect(overlay).toBeHidden();
-  await expect(menuButton).toBeFocused();
+  await expect(overlay).toBeHidden(); await expect(menuButton).toBeFocused();
 });
 
 test('settings honors reduced motion without delayed focus restoration', async ({ page }) => {

@@ -73,27 +73,54 @@ html.theme-light[data-wallpaper="classic"] .chat-body {
   padding: 0 16px;
   cursor: pointer;
   z-index: 9;
+  flex-shrink: 0;
+  gap: 8px;
 }
 
 .chat-header-info {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex: 1;
+  min-width: 0;
 }
 
 .chat-header-meta {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  flex: 1;
 }
 
 .chat-header-name {
   font-size: clamp(14px, 0.9rem + 0.4vw, 16px);
   font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
+
+.chat-header-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.chat-header .e2ee-header-lock-icon { flex-shrink: 0; color: #2ecc71; }
+.chat-header .chat-header-name { display: flex; }
+.chat-header-actions { display: flex; flex-flow: row nowrap; align-items: center; gap: 8px; flex: 0 0 auto; }
+.chat-header-actions .chat-header-btn { width: 44px; height: 44px; min-width: 44px; min-height: 44px; padding: 0; flex: 0 0 44px; }
+.chat-header-btn:focus-visible { outline: 2px solid var(--accent-color); outline-offset: -2px; }
+.chat-header-btn.active { color: var(--accent-color); background: var(--accent-color-alpha); }
 
 .chat-header-status {
   font-size: 12px;
   color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chat-header-status.typing {

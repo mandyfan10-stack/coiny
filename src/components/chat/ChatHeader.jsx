@@ -48,13 +48,12 @@ export default function ChatHeader({
         <div className="chat-avatar header-avatar">{renderAvatar(activeChat.avatar, chatAvatarFallback(activeChat))}</div>
         <div className="chat-header-meta">
           <h4 className="chat-header-name">
-            {title}
+            <span className="chat-header-title" title={title}>{title}</span>
             {showE2eeLock && (
               <Lock
                 size={15}
                 className="e2ee-header-lock-icon"
                 title="Сквозное шифрование включено"
-                style={{ color: '#2ecc71', marginLeft: '6px', display: 'inline-block', verticalAlign: 'middle' }}
               />
             )}
           </h4>
@@ -73,6 +72,7 @@ export default function ChatHeader({
           }}
           title="Поиск в чате (Ctrl+F)"
           aria-label="Поиск в чате"
+          aria-expanded={isSearchOpen}
           data-testid="chat-header-search-btn"
         >
           <Search size={19} />

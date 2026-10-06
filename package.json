@@ -1,7 +1,7 @@
 {
   "name": "coingram-chat",
   "private": true,
-  "version": "1.20.67",
+  "version": "1.20.68",
   "type": "module",
   "main": "electron-main.cjs",
   "scripts": {
@@ -26,7 +26,8 @@
     "cap:open": "npx cap open android",
     "electron:dev": "electron .",
     "electron:build": "npm run build && electron-builder --win --publish never",
-    "electron:verify-fuses": "node scripts/verify-electron-fuses.mjs"
+    "electron:verify-fuses": "node scripts/verify-electron-fuses.mjs",
+    "test:ui": "playwright test --config playwright.ui.config.mjs"
   },
   "dependencies": {
     "@capacitor/core": "8.5.2",

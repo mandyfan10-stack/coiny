@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient';
 import { dataService } from '../services/dataLayer';
 import { clearLocalAppData } from '../utils/localDataCleanup.js';
 
-const AuthContext = createContext();
+export const AuthContext = createContext();
 
 const AUTH_BOOTSTRAP_TIMEOUT_MS = 4_000;
 const AUTH_PROFILE_TIMEOUT_MS = 3_500;
@@ -77,7 +77,8 @@ export const AuthProvider = ({ children }) => {
               avatar: profile.avatar,
               banner: profile.banner,
               has_e2ee: profile.has_e2ee,
-              public_key: profile.public_key
+              public_key: profile.public_key,
+              notificationsEnabled: localStorage.getItem(`coingram-notifications-${profile.id}`) !== 'false'
             });
           } catch (error) {
             if (!cancelled && requestId === authRequestId) {
@@ -127,7 +128,9 @@ export const AuthProvider = ({ children }) => {
       const savedUser = localStorage.getItem('tg-user-mock');
       if (savedUser) {
         try {
-          setCurrentUser(JSON.parse(savedUser));
+          const user = JSON.parse(savedUser);
+          const notifications = localStorage.getItem(`coingram-notifications-${user.id}`);
+          setCurrentUser({ ...user, ...(notifications !== null ? { notificationsEnabled: notifications !== 'false' } : {}) });
         } catch (e) {
           console.warn(e);
         }
@@ -184,8 +187,14 @@ export const AuthProvider = ({ children }) => {
   const updateProfile = async (fields) => {
     if (!currentUser) return;
     try {
-      await dataService.updateProfile(currentUser.id, fields);
-      setCurrentUser(prev => ({ ...prev, ...fields }));
+      // Notification permission is device-specific; profiles has no notification column.
+      // Keep its existing updateProfile entry point without sending an empty server PATCH.
+      const { notificationsEnabled, ...profileFields } = fields;
+      if (Object.keys(profileFields).length) await dataService.updateProfile(currentUser.id, profileFields);
+      if (typeof notificationsEnabled === 'boolean') {
+        localStorage.setItem(`coingram-notifications-${currentUser.id}`, String(notificationsEnabled));
+      }
+      setCurrentUser(prev => prev?.id === currentUser.id ? { ...prev, ...fields } : prev);
     } catch (e) {
       console.error("Profile update failed", e);
       return { error: e };

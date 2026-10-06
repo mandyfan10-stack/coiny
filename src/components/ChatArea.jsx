@@ -77,8 +77,7 @@ export default function ChatArea() {
     messagePagination,
     isChatLoading,
     isSyncing,
-    setIsSettingsOpen,
-    setSettingsTab
+    openSettings
   } = useChat();
 
   const { currentUser } = useAuth();
@@ -1985,8 +1984,7 @@ function formatDateDivider(timestamp) {
                     }}
                     installedStickers={installedStickers}
                     onOpenStickerSettings={() => {
-                      setIsSettingsOpen(true);
-                      setSettingsTab('stickers');
+                      openSettings('stickers');
                     }}
                   />
                 </div>

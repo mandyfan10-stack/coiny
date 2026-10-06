@@ -99,7 +99,7 @@ test.describe('Parametric Bubble Geometry E2E Verification', () => {
           await page.waitForTimeout(400);
 
           // Verify bubble geometry toggle is rendered
-          const geometryHeading = page.getByText('Геометрия сообщений', { exact: false });
+          const geometryHeading = page.getByText('Форма сообщений', { exact: false });
           await expect(geometryHeading).toBeVisible({ timeout: 5_000 });
 
           // Take screenshot of settings
@@ -109,11 +109,11 @@ test.describe('Parametric Bubble Geometry E2E Verification', () => {
           });
 
           // Toggle off
-          const geomSection = page.locator('.settings-section').filter({ hasText: 'Геометрия сообщений' });
+          const geomSection = page.locator('.settings-section').filter({ hasText: 'Форма сообщений' });
           await geomSection.scrollIntoViewIfNeeded();
           await page.waitForTimeout(200);
-          const switchWrapper = geomSection.locator('.switch-wrapper, .switch-slider').first();
-          await switchWrapper.click();
+          const geometrySwitch = geomSection.getByRole('switch', { name: 'Плавные скругления' });
+          await geometrySwitch.uncheck();
           await page.waitForTimeout(400);
 
           // Close modal

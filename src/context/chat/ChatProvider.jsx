@@ -118,7 +118,7 @@ export const ChatProvider = ({ children }) => {
     if (!userProfile) return null;
     const profileId = userProfile.id || userProfile.profile_id;
     if (!profileId || profileId === currentUser?.id || profileId === 'current') {
-      ui.setIsSettingsOpen(true);
+      ui.openSettings('profile');
       return null;
     }
     const chat = await actions.createChat(userProfile, 'personal');
@@ -158,6 +158,8 @@ export const ChatProvider = ({ children }) => {
       setActiveFolder: ui.setActiveFolder,
       isSettingsOpen: ui.isSettingsOpen,
       setIsSettingsOpen: ui.setIsSettingsOpen,
+      openSettings: ui.openSettings,
+      registerSettingsBackHandler: ui.registerSettingsBackHandler,
       isInfoOpen: ui.isInfoOpen,
       setIsInfoOpen: ui.setIsInfoOpen,
       isNewChatOpen: ui.isNewChatOpen,

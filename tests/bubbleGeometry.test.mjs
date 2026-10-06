@@ -321,7 +321,7 @@ test('AppearanceTab.jsx includes toggle for custom bubble geometry', async () =>
 
   assert.match(
     appearanceTabJsx,
-    /Геометрия сообщений/,
+    /Форма сообщений/,
     'AppearanceTab must render section title for bubble geometry'
   );
   assert.match(

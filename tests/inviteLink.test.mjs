@@ -140,7 +140,7 @@ test('ProfileTab uses buildInviteLink without hardcoded URL', () => {
 
 test('SettingsModal uses buildInviteLink and copyTextToClipboard', () => {
   assert.match(settingsModalSource, /buildInviteLink\(currentUser\?\.username\)/);
-  assert.match(settingsModalSource, /copyTextToClipboard\(inviteLink\)/);
+  assert.match(settingsModalSource, /copyTextToClipboard\(buildInviteLink\(currentUser\?\.username\)\)/);
   assert.doesNotMatch(settingsModalSource, /const inviteLink = `https:\/\/mandyfan10-stack\.github\.io/);
 });
 

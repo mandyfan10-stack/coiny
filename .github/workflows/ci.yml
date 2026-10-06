@@ -154,8 +154,11 @@ jobs:
       - name: Test chat scroll restoration and pagination
         run: npm run test:scroll
 
+      - name: Test settings and responsive chat UI
+        run: npm run test:ui
+
       - name: Run mock UI E2E
-        run: npx playwright test tests/e2e/lazy-loading.spec.mjs tests/e2e/profile-rewards.spec.mjs tests/e2e/message-send.spec.mjs tests/e2e/mobile-recording.spec.mjs
+        run: npx playwright test tests/e2e/lazy-loading.spec.mjs tests/e2e/profile-rewards.spec.mjs tests/e2e/message-send.spec.mjs tests/e2e/mobile-recording.spec.mjs tests/e2e/settings-redesign.spec.mjs tests/e2e/bubble-geometry.spec.mjs
 
       - name: Upload failure artifacts
         if: failure()

@@ -36,11 +36,11 @@ test('profile header uses a compact identity row at 806x590', async ({ page }) =
   const [previewBox, bannerBox, bodyBox, avatarBox, identityBox] = await Promise.all([
     preview.boundingBox(), banner.boundingBox(), body.boundingBox(), avatar.boundingBox(), identity.boundingBox(),
   ]);
-  expect(previewBox.height).toBeGreaterThanOrEqual(195);
-  expect(previewBox.height).toBeLessThanOrEqual(215);
-  expect(bannerBox.height).toBeGreaterThanOrEqual(120);
+  expect(previewBox.height).toBeGreaterThanOrEqual(160);
+  expect(previewBox.height).toBeLessThanOrEqual(180);
+  expect(bannerBox.height).toBeGreaterThanOrEqual(94);
   expect(bodyBox.height).toBeLessThanOrEqual(90);
-  expect(avatarBox.height).toBeGreaterThanOrEqual(80);
+  expect(avatarBox.height).toBeGreaterThanOrEqual(62);
   expect(identityBox.x).toBeGreaterThan(avatarBox.x + avatarBox.width);
   expect(identityBox.y + (identityBox.height / 2)).toBeLessThan(
     avatarBox.y + avatarBox.height,

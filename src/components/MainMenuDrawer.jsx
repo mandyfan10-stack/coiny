@@ -18,11 +18,10 @@ export default function MainMenuDrawer() {
   const {
     isDrawerOpen,
     setIsDrawerOpen,
-    setIsSettingsOpen,
+    openSettings,
     setIsNewChatOpen,
     isDarkMode,
     setIsDarkMode,
-    setSettingsTab,
     setNewChatModalTab,
     renderAvatar,
     openSavedMessages
@@ -193,8 +192,7 @@ export default function MainMenuDrawer() {
           <button 
             className="drawer-menu-item"
             onClick={() => handleItemClick(() => {
-              setSettingsTab('profile');
-              setIsSettingsOpen(true);
+              openSettings('profile');
             })}
           >
             <UserCircle size={20} className="drawer-item-icon" />
@@ -238,8 +236,7 @@ export default function MainMenuDrawer() {
           <button 
             className="drawer-menu-item"
             onClick={() => handleItemClick(() => {
-              setSettingsTab('settings');
-              setIsSettingsOpen(true);
+              openSettings();
             })}
           >
             <Settings size={20} className="drawer-item-icon" />

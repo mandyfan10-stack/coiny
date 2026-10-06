@@ -86,6 +86,9 @@ jobs:
       - name: Test chat scroll restoration and pagination
         run: npm run test:scroll
 
+      - name: Test settings and responsive chat UI
+        run: npm run test:ui
+
       - name: Run mandatory live E2E
         run: |
           npx playwright test \

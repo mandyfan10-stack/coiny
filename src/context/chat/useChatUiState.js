@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { triggerHaptic } from '../../hooks/useMessageTouch.js';
+import { normalizeSettingsSection } from '../../utils/settingsNavigation.js';
 
 /**
  * UI chrome state: folders, modals, theme, wallpaper, dark mode.
@@ -22,7 +23,16 @@ export function useChatUiState(currentUser) {
     const deprecatedPresets = ['cyber', 'sunset', 'space', 'mint', 'default'];
     return (saved && !deprecatedPresets.includes(saved)) ? saved : 'classic';
   });
-  const [settingsTab, setSettingsTab] = useState('profile');
+  const [settingsTab, setSettingsTab] = useState(null);
+  const settingsBackHandlerRef = useRef(null);
+  const openSettings = useCallback((section) => {
+    setSettingsTab(normalizeSettingsSection(section));
+    setIsSettingsOpen(true);
+  }, []);
+  const registerSettingsBackHandler = useCallback((handler) => {
+    settingsBackHandlerRef.current = handler;
+    return () => { settingsBackHandlerRef.current = null; };
+  }, []);
   const [newChatModalTab, setNewChatModalTab] = useState('personal');
 
   // Synchronize wallpaper and theme when currentUser profile updates/loads
@@ -38,11 +48,14 @@ export function useChatUiState(currentUser) {
       }
       localStorage.setItem('coingram-wallpaper', safeWp);
     }
+  }, [currentUser?.wallpaper]);
+
+  useEffect(() => {
     if (currentUser?.theme) {
       setTheme(currentUser.theme);
       localStorage.setItem('coingram-theme', currentUser.theme);
     }
-  }, [currentUser?.wallpaper, currentUser?.theme]);
+  }, [currentUser?.theme]);
 
   useEffect(() => {
     if (isDarkMode) {
@@ -79,7 +92,8 @@ export function useChatUiState(currentUser) {
       // 2. Close settings modal
       if (isSettingsOpen) {
         triggerHaptic(10);
-        setIsSettingsOpen(false);
+        if (settingsBackHandlerRef.current) settingsBackHandlerRef.current();
+        else setIsSettingsOpen(false);
         return true;
       }
 
@@ -147,6 +161,8 @@ export function useChatUiState(currentUser) {
     setActiveFolder,
     isSettingsOpen,
     setIsSettingsOpen,
+    openSettings,
+    registerSettingsBackHandler,
     isInfoOpen,
     setIsInfoOpen,
     isNewChatOpen,

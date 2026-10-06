@@ -54,10 +54,10 @@ test('ChatProvider passes currentUser to useChatUiState', () => {
   assert.match(chatProviderCode, /const\s+ui\s*=\s*useChatUiState\(currentUser\);/);
 });
 
-test('SettingsModal detects custom wallpaper accurately and synchronizes with classic default', () => {
-  assert.match(settingsModalCode, /const\s+activeWp\s*=\s*wallpaper\s*\|\|\s*currentUser\.wallpaper;/);
-  assert.match(settingsModalCode, /setCustomWallpaperUrl/);
-  assert.match(settingsModalCode, /setWallpaper\('classic'\)/);
+test('AppearanceTab detects custom wallpaper while UI state normalizes legacy defaults', () => {
+  assert.match(appearanceTabCode, /const effectiveCustomUrl = wallpaper/);
+  assert.match(appearanceTabCode, /const hasCustomWallpaper = Boolean\(effectiveCustomUrl\)/);
+  assert.match(useChatUiStateCode, /setWallpaper\('classic'\)/);
 });
 
 test('settings wallpapers only has classic and preset wallpapers are removed', async () => {
@@ -137,17 +137,16 @@ test('custom wallpaper is correctly applied and prioritized over themes', () => 
   assert.match(settingsCss, /html:not\(\.theme-light\)\.theme-rainbow-pearl\s+\.chat-body:not\(\.has-custom-wallpaper\)/);
 
   assert.doesNotMatch(appearanceTabCode, /wallpapers-grid/);
-  assert.match(appearanceTabCode, /Поддерживаемые\s*форматы:\s*PNG,\s*JPG,\s*WebP/);
-  assert.match(appearanceTabCode, /wallpaper-custom-card/);
-  assert.match(appearanceTabCode, /wallpaper-default-card/);
+  assert.match(appearanceTabCode, /PNG,\s*JPG,\s*WebP/);
+  assert.match(appearanceTabCode, /settings-wallpaper-preview/);
+  assert.match(appearanceTabCode, /displayPreview/);
 });
 
-test('SettingsModal isolates profile form reset from wallpaper changes and clears file input', () => {
-  // Profile input initialization does NOT depend on wallpaper or setWallpaper
-  assert.match(settingsModalCode, /useEffect\(\(\)\s*=>\s*\{[\s\S]*?setName\(currentUser\.name\s*\|\|\s*''\);[\s\S]*?\}\s*,\s*\[currentUser,\s*isSettingsOpen\]\);/);
-
-  // Wallpaper upload clears e.target.value in finally block
-  assert.match(settingsModalCode, /handleWallpaperUpload[\s\S]*?finally\s*\{[\s\S]*?if\s*\(e\.target\)\s*e\.target\.value\s*=\s*'';/);
+test('SettingsModal initializes drafts once per opening and clears uploaded file input', () => {
+  assert.match(settingsModalCode, /if \(!currentUser \|\| initializedRef\.current\) return/);
+  assert.match(settingsModalCode, /initializedRef\.current = true/);
+  assert.match(settingsModalCode, /setName\(saved\.name\)/);
+  assert.match(settingsModalCode, /finally \{ finishRequest\(field\); input\.value = '';/);
 });
 
 test('ChatArea does not bind wallpaper resolution to activeChat.id and safely resolves direct URLs', () => {

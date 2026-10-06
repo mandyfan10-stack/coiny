@@ -7,10 +7,6 @@ const useChatUiStateCode = await readFile(
   new URL('../src/context/chat/useChatUiState.js', import.meta.url),
   'utf8'
 );
-const settingsModalCode = await readFile(
-  new URL('../src/components/SettingsModal.jsx', import.meta.url),
-  'utf8'
-);
 const settingsCss = await readFile(
   new URL('../src/components/SettingsModal.css', import.meta.url),
   'utf8'
@@ -39,7 +35,7 @@ test('preset wallpapers sunset, space, mint and cyber are excluded from selectab
   const themeIds = SETTINGS_THEMES.map((t) => t.id);
   assert.equal(themeIds.includes('cyber'), false, 'cyber must not be in SETTINGS_THEMES');
 
-  assert.match(settingsModalCode, /deprecatedPresets/);
+  assert.match(useChatUiStateCode, /deprecatedPresets/);
 });
 
 test('rainbow-pearl theme respects custom wallpaper and hides rainbow background overlay', () => {
@@ -92,7 +88,7 @@ test('all themes have bubble tail SVGs in light mode', () => {
 test('AppearanceTab provides toggle for night mode', () => {
   assert.match(appearanceTabCode, /isDarkMode/);
   assert.match(appearanceTabCode, /setIsDarkMode/);
-  assert.match(appearanceTabCode, /Ночной режим/);
+  assert.match(appearanceTabCode, /Тёмный режим/);
 });
 
 test('AuthScreen renders required contracts with modern presentation', () => {

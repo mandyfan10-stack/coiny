@@ -4,6 +4,7 @@ import ProfilePreview from './ProfilePreview';
 import { personAvatarFallback } from '../../context/chat/avatarFallback';
 import { buildInviteLink } from '../../utils/inviteLink';
 import styles from './ProfileTab.module.css';
+import SettingStatus from './SettingStatus';
 
 export default function ProfileTab({
   currentUser,
@@ -21,6 +22,7 @@ export default function ProfileTab({
   handleBannerUpload,
   handleBannerRemove,
   isUploadingBanner,
+  handleProfileSave, profileSaving, profileDirty, profileStatus,
 }) {
   return (
     <>
@@ -54,7 +56,7 @@ export default function ProfileTab({
         />
       </div>
 
-          <div className="settings-section">
+          <form className="settings-section" onSubmit={handleProfileSave}>
             <h5 className="section-title"><UserCircle size={16} /> Профиль</h5>
             
             <div className="input-group">
@@ -63,6 +65,7 @@ export default function ProfileTab({
                 id="name-input"
                 type="text"
                 value={name}
+                disabled={profileSaving}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Ваше имя"
               />
@@ -80,10 +83,11 @@ export default function ProfileTab({
             </div>
 
             <div className="input-group">
-              <label>Ссылка для приглашения</label>
+              <label htmlFor="settings-invite-link">Ссылка для приглашения</label>
               <div className="invite-link-wrapper">
                 <input
                   type="text"
+                  id="settings-invite-link"
                   value={buildInviteLink(currentUser?.username)}
                   readOnly
                   className="invite-link-input"
@@ -105,12 +109,15 @@ export default function ProfileTab({
               <textarea
                 id="bio-input"
                 value={bio}
+                disabled={profileSaving}
                 onChange={(e) => setBio(e.target.value)}
                 placeholder="Напишите что-нибудь о себе..."
                 rows={2}
               />
             </div>
-          </div>
+            <button type="submit" className="settings-action settings-primary" disabled={profileSaving || !profileDirty}>{profileSaving ? 'Сохранение…' : 'Сохранить профиль'}</button>
+            <SettingStatus status={profileStatus} />
+          </form>
     </>
   );
 }

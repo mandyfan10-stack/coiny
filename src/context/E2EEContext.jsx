@@ -22,7 +22,7 @@ import { isE2EEV2Enabled, e2eeV2ReleaseChannel, requireE2EEV2Enabled } from '../
 import { e2eeV2Client } from '../crypto/e2eeV2Client';
 import { e2eeV2Service } from '../services/e2eeV2Service';
 
-const E2EEContext = createContext();
+export const E2EEContext = createContext();
 
 export const E2EEProvider = ({ children }) => {
   const { currentUser, setCurrentUser } = useAuth();

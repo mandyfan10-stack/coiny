@@ -1,0 +1,227 @@
+/* All settings layout rules live under this root; shared story/chat modals keep their layout. */
+.settings-dialog-overlay {
+  padding: 24px !important;
+  box-sizing: border-box;
+}
+.settings-dialog-overlay.settings-modal-overlay .settings-dialog.settings-container {
+  width: min(960px, 100%) !important;
+  max-width: 960px !important;
+  height: min(720px, calc(100dvh - 48px)) !important;
+  max-height: calc(100dvh - 48px) !important;
+  flex-direction: row !important;
+  border-radius: 16px !important;
+  background: var(--bg-secondary) !important;
+  position: relative;
+  font-size: 15px;
+  color: var(--text-primary);
+}
+.settings-dialog-overlay .settings-dialog::after { display: none !important; }
+.settings-dialog-overlay .settings-sidebar {
+  width: 220px;
+  min-width: 220px;
+  flex: 0 0 220px;
+  padding: 16px 10px;
+  border-right: 1px solid var(--border-color);
+  border-bottom: 0;
+  background: var(--bg-primary);
+  overflow-y: auto;
+  gap: 0;
+}
+.settings-dialog-overlay .settings-sidebar-profile {
+  width: 100%;
+  display: flex;
+  gap: 12px;
+  padding: 12px 8px;
+  margin: 0 0 16px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  color: var(--text-primary);
+  min-width: 0;
+}
+.settings-dialog-overlay .settings-sidebar-avatar { width: 44px; height: 44px; }
+.settings-dialog-overlay .settings-sidebar-name { font-size: 15px; }
+.settings-dialog-overlay .settings-sidebar-username { font-size: 14px; }
+.settings-dialog-overlay .settings-sidebar-userinfo { flex: 1; overflow: hidden; }
+.settings-dialog-overlay .settings-nav-list { display: flex; flex-direction: column; gap: 4px; flex: 0 0 auto; }
+.settings-dialog-overlay .settings-nav-item {
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: center;
+  min-height: 48px;
+  padding: 10px 12px;
+  gap: 12px;
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--text-primary);
+  text-align: left;
+  border-radius: 8px;
+  background: transparent;
+  white-space: normal;
+}
+.settings-dialog-overlay .settings-nav-item svg { flex-shrink: 0; color: var(--text-secondary); }
+.settings-dialog-overlay .settings-nav-item.active { background: var(--accent-color-alpha); color: var(--accent-color); }
+.settings-dialog-overlay .settings-nav-item.active svg { color: inherit; }
+.settings-dialog-overlay .settings-nav-item .nav-item-label { min-width: 0; width: auto; flex: 1; font-size: 15px; line-height: 1.4; white-space: normal; overflow-wrap: anywhere; }
+.settings-dialog-overlay .settings-sidebar-footer { display: block; margin-top: auto; padding-top: 12px; }
+.settings-dialog-overlay .logout-item, .settings-dialog-overlay .logout-item svg { color: #e75c60; }
+.settings-dialog-overlay .settings-main { min-width: 0; min-height: 0; background: var(--bg-secondary); }
+.settings-dialog-overlay .settings-header {
+  display: flex;
+  flex: 0 0 auto;
+  min-height: 64px;
+  padding: 10px 20px !important;
+  gap: 12px;
+}
+.settings-dialog-overlay .settings-header h2 { margin: 0; font-size: 20px; font-weight: 600; flex: 1; min-width: 0; }
+.settings-dialog-overlay .settings-close-btn, .settings-dialog-overlay .settings-back-btn, .settings-dialog-overlay .settings-icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--text-secondary);
+  background: transparent;
+  cursor: pointer;
+}
+.settings-dialog-overlay .settings-body { padding: 24px !important; gap: 20px !important; overflow-y: auto; overflow-x: hidden; min-height: 0; }
+.settings-dialog-overlay .settings-tab-content { display: flex; flex-direction: column; gap: 20px; }
+.settings-dialog-overlay .settings-section { padding: 0; margin: 0; border: 0; background: transparent; border-radius: 0; box-shadow: none; }
+.settings-dialog-overlay .settings-section + .settings-section { border-top: 1px solid var(--border-color); padding-top: 20px; }
+.settings-dialog-overlay .section-title { display: flex; align-items: center; gap: 8px; font-size: 15px !important; font-weight: 600; margin: 0 0 16px; color: var(--accent-color); border: 0; padding: 0 !important; }
+.settings-dialog-overlay .input-group { margin: 0 0 16px; gap: 8px; }
+.settings-dialog-overlay .input-group label { font-size: 14px; font-weight: 400; color: var(--text-secondary); }
+.settings-dialog-overlay input:not([type='checkbox']):not([type='file']), .settings-dialog-overlay textarea {
+  min-width: 0;
+  width: 100%;
+  min-height: 44px;
+  padding: 11px 12px !important;
+  font: inherit;
+  font-size: 16px !important;
+  color: var(--text-primary);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: none;
+}
+.settings-dialog-overlay textarea { resize: vertical; }
+.settings-dialog-overlay input:focus, .settings-dialog-overlay textarea:focus { border-color: var(--accent-color); outline: 2px solid var(--accent-color-alpha); }
+.settings-dialog-overlay .input-help-text, .settings-dialog-overlay .settings-help { font-size: 14px; color: var(--text-secondary); line-height: 1.5; overflow-wrap: anywhere; }
+.settings-dialog-overlay .settings-help { margin: 12px 0; }
+.settings-dialog-overlay .settings-status { font-size: 14px; line-height: 1.5; margin: 10px 0 0; overflow-wrap: anywhere; }
+.settings-dialog-overlay .is-error { color: #e75c60; }
+.settings-dialog-overlay .is-success { color: var(--accent-color); }
+.settings-dialog-overlay .settings-action, .settings-dialog-overlay .invite-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-input);
+  color: var(--accent-color);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  white-space: normal;
+  cursor: pointer;
+  box-shadow: none;
+  width: auto;
+}
+.settings-dialog-overlay .settings-primary { color: #fff; background: var(--accent-color); border-color: var(--accent-color); }
+.settings-dialog-overlay .settings-danger { color: #e75c60; }
+.settings-dialog-overlay button:disabled, .settings-dialog-overlay input:disabled { opacity: 0.55; cursor: default; }
+.settings-dialog-overlay button:focus-visible, .settings-dialog-overlay summary:focus-visible { outline: 2px solid var(--accent-color); outline-offset: -2px; }
+.settings-dialog-overlay button:not(:disabled):hover { filter: brightness(1.08); }
+.settings-dialog-overlay .settings-nav-item:hover, .settings-dialog-overlay .settings-sidebar-profile:hover,
+.settings-dialog-overlay .settings-close-btn:hover, .settings-dialog-overlay .settings-back-btn:hover { background: var(--bg-hover); }
+.settings-dialog-overlay .settings-actions-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.settings-dialog-overlay .invite-link-wrapper { display: flex; gap: 8px; flex-wrap: wrap; border: 0; background: none; padding: 0; }
+.settings-dialog-overlay .invite-link-input { flex: 1 1 180px; }
+.settings-dialog-overlay .themes-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px; }
+.settings-dialog-overlay .theme-selection-btn {
+  display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 10px 12px;
+  border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-input); color: var(--text-primary);
+  font-size: 14px; text-align: left; min-width: 0; position: relative;
+}
+.settings-dialog-overlay .theme-selection-btn.active { border-color: var(--accent-color); background: var(--accent-color-alpha); }
+.settings-dialog-overlay .theme-color-dot { width: 22px; height: 22px; flex: 0 0 22px; background: var(--theme-color); border-radius: 50%; box-shadow: none; }
+.settings-dialog-overlay .theme-color-name { flex: 1; font-size: 14px; min-width: 0; overflow-wrap: anywhere; }
+.settings-dialog-overlay .theme-check-icon { position: static; flex-shrink: 0; color: var(--accent-color); }
+.settings-dialog-overlay .settings-wallpaper-preview {
+  height: 160px; position: relative; display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border-color); border-radius: 10px; overflow: hidden; background: var(--bg-primary);
+}
+.settings-dialog-overlay .wallpaper-preview-img { width: 100%; height: 100%; object-fit: cover; }
+.settings-dialog-overlay .settings-wallpaper-bubble {
+  position: absolute; right: 16px; bottom: 16px; max-width: calc(100% - 32px);
+  padding: 10px 14px; font-size: 14px; border-radius: 16px 16px 4px 16px; background: var(--bubble-me); color: var(--text-primary);
+}
+.settings-dialog-overlay .settings-switch-row { display: flex; align-items: center; gap: 16px; justify-content: space-between; min-height: 68px; cursor: pointer; padding: 12px 0; }
+.settings-dialog-overlay .settings-switch-row + * { margin-top: 0; }
+.settings-dialog-overlay .settings-row-text { display: flex; flex-direction: column; gap: 5px; min-width: 0; font-size: 15px; }
+.settings-dialog-overlay .settings-row-text small { font-size: 14px; line-height: 1.4; color: var(--text-secondary); }
+.settings-dialog-overlay .settings-switch { width: 44px; height: 28px; flex: 0 0 44px; position: relative; }
+.settings-dialog-overlay .settings-switch input { position: absolute; inset: -8px 0; opacity: 0; width: 44px; height: 44px; z-index: 1; cursor: pointer; }
+.settings-dialog-overlay .settings-switch-track { display: block; height: 28px; border-radius: 20px; background: var(--text-secondary); opacity: 0.7; transition: background-color 150ms ease; }
+.settings-dialog-overlay .settings-switch-track::after { content: ''; position: absolute; top: 4px; left: 4px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform 150ms ease; }
+.settings-dialog-overlay .settings-switch input:checked + .settings-switch-track { background: var(--accent-color); opacity: 1; }
+.settings-dialog-overlay .settings-switch input:checked + .settings-switch-track::after { transform: translateX(16px); }
+.settings-dialog-overlay .settings-switch input:focus-visible + .settings-switch-track { outline: 2px solid var(--accent-color); outline-offset: 3px; }
+.settings-dialog-overlay .settings-switch input:disabled + .settings-switch-track { opacity: 0.4; }
+.settings-dialog-overlay .settings-data-list { margin: 0 0 16px; }
+.settings-dialog-overlay .settings-data-list > div { display: flex; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--border-color); }
+.settings-dialog-overlay dt { color: var(--text-secondary); min-width: 0; }
+.settings-dialog-overlay dd { margin: 0; text-align: right; min-width: 0; overflow-wrap: anywhere; }
+.settings-dialog-overlay .settings-uuid { font-size: 14px; }
+.settings-dialog-overlay .settings-fingerprint { display: flex; align-items: center; gap: 8px; background: var(--bg-input); border-radius: 8px; padding: 8px 12px; }
+.settings-dialog-overlay .settings-fingerprint code { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
+.settings-dialog-overlay .settings-technical-info summary { cursor: pointer; padding: 12px 0; color: var(--text-secondary); }
+.settings-dialog-overlay .settings-discard-overlay { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.6); display: grid; place-items: center; padding: 20px; z-index: 2; }
+.settings-dialog-overlay .settings-discard-dialog { width: min(400px, 100%); background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 24px; }
+.settings-dialog-overlay .settings-discard-dialog h3 { font-size: 18px; margin: 0 0 12px; }
+.settings-dialog-overlay .settings-discard-dialog p { font-size: 15px; color: var(--text-secondary); line-height: 1.5; }
+.settings-dialog-overlay .settings-discard-dialog button { width: 100%; margin-top: 8px; }
+.settings-dialog-overlay .settings-mobile-home { display: none; }
+.settings-dialog-overlay .settings-sticker-pack { display: flex; align-items: center; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--border-color); }
+.settings-dialog-overlay .settings-sticker-pack > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.settings-dialog-overlay .settings-sticker-pack span { overflow-wrap: anywhere; }
+.settings-dialog-overlay .settings-sticker-pack small { font-size: 14px; color: var(--text-secondary); }
+
+@media (max-width: 768px) {
+  .settings-dialog-overlay { padding: 0 !important; align-items: stretch; }
+  .settings-dialog-overlay.settings-modal-overlay .settings-dialog.settings-container {
+    width: 100% !important; max-width: none !important;
+    height: min(100dvh, var(--settings-viewport-height)) !important;
+    max-height: min(100dvh, var(--settings-viewport-height)) !important;
+    border: 0; border-radius: 0 !important;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+  .settings-dialog-overlay .settings-sidebar { display: none; }
+  .settings-dialog-overlay .settings-header { padding: 6px 12px !important; min-height: 56px; }
+  .settings-dialog-overlay .settings-header h2 { font-size: 18px; }
+  .settings-dialog-overlay .settings-body { padding: 20px 16px calc(20px + env(safe-area-inset-bottom, 0px)) !important; }
+  .settings-dialog-overlay .settings-mobile-home { display: block; }
+  .settings-dialog-overlay .settings-mobile-home .settings-sidebar-profile { padding: 12px 8px 20px; border-bottom: 1px solid var(--border-color); border-radius: 0; }
+  .settings-dialog-overlay .settings-mobile-home .settings-sidebar-avatar { width: 56px; height: 56px; }
+  .settings-dialog-overlay .settings-home-logout { margin-top: 20px; border-top: 1px solid var(--border-color); padding-top: 12px; }
+  .settings-dialog-overlay .settings-mobile-home .settings-nav-list { gap: 0; }
+  .settings-dialog-overlay .settings-mobile-home .settings-nav-item { min-height: 56px; border-radius: 0; padding: 12px 8px; }
+  .settings-dialog-overlay .themes-grid { gap: 6px; }
+  .settings-dialog-overlay .theme-selection-btn { gap: 8px; padding: 10px; }
+  .settings-dialog-overlay .settings-wallpaper-preview { height: 144px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-dialog-overlay .settings-switch-track, .settings-dialog-overlay .settings-switch-track::after { transition: none; }
+}

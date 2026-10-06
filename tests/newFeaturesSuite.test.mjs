@@ -25,8 +25,8 @@ const useMessageTouchCode = await readFile(
   new URL('../src/hooks/useMessageTouch.js', import.meta.url),
   'utf8'
 );
-const appearanceTabCode = await readFile(
-  new URL('../src/components/settings/AppearanceTab.jsx', import.meta.url),
+const notificationsTabCode = await readFile(
+  new URL('../src/components/settings/NotificationsTab.jsx', import.meta.url),
   'utf8'
 );
 
@@ -72,9 +72,9 @@ test('notificationService safely handles non-browser / node environments without
   assert.equal(notif, null);
 });
 
-test('AppearanceTab requests notification permissions on toggle', () => {
-  assert.match(appearanceTabCode, /requestNotificationPermission/);
-  assert.match(appearanceTabCode, /Звуковые и push-уведомления/);
+test('NotificationsTab requests notification permissions on toggle', () => {
+  assert.match(notificationsTabCode, /requestNotificationPermission/);
+  assert.match(notificationsTabCode, /Звуковые и push-уведомления/);
 });
 
 test('Video message metadata is placed at top right to prevent collision with bottom seek timeline', async () => {
@@ -212,7 +212,7 @@ test('Mobile Tactility: multi-tier haptics engine, user settings toggle, and act
   const sidebarCode = await readFile(new URL('../src/components/Sidebar.jsx', import.meta.url), 'utf8');
   const chatHeaderCode = await readFile(new URL('../src/components/chat/ChatHeader.jsx', import.meta.url), 'utf8');
   const mediaPickerCode = await readFile(new URL('../src/components/chat/MediaPickerPanel.jsx', import.meta.url), 'utf8');
-  const appearanceTabCode = await readFile(new URL('../src/components/settings/AppearanceTab.jsx', import.meta.url), 'utf8');
+  const notificationsTabCode = await readFile(new URL('../src/components/settings/NotificationsTab.jsx', import.meta.url), 'utf8');
   const swipeGestureCode = await readFile(new URL('../src/hooks/useSwipeGesture.js', import.meta.url), 'utf8');
   const indexCss = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
 
@@ -221,7 +221,7 @@ test('Mobile Tactility: multi-tier haptics engine, user settings toggle, and act
   assert.match(sidebarCode, /triggerHaptic\(8\)/, 'Sidebar dispatches haptic on chat click');
   assert.match(chatHeaderCode, /triggerHaptic\(10\)/, 'ChatHeader dispatches haptic on back click');
   assert.match(mediaPickerCode, /triggerHaptic\(6\)/, 'MediaPickerPanel dispatches haptic on emoji click');
-  assert.match(appearanceTabCode, /Тактильный отклик/, 'AppearanceTab has Tactility/Haptics toggle');
+  assert.match(notificationsTabCode, /Тактильный отклик/, 'NotificationsTab has Tactility/Haptics toggle');
   assert.match(swipeGestureCode, /triggerHaptic\(12\)/, 'Edge swipe back dispatches haptic');
   assert.match(indexCss, /touch-action:\s*manipulation/, 'CSS enforces touch-action: manipulation');
   assert.match(indexCss, /\.chat-item:active/, 'CSS defines active press scaling for chat items');
