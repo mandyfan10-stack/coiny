@@ -112,6 +112,22 @@ test('keyboard navigation releases the bottom pin while reading older messages',
   await expectAnchor(page, saved);
 });
 
+test('a small first upward scroll does not reattach the bottom pin', async ({ page }) => {
+  const before = await position(page);
+  await readHistory(page, before.top - 5);
+  // Continue the same gesture without another input event. Native keyboard
+  // and wheel animations often begin with a frame only a few pixels away.
+  const nextTop = before.top - 400;
+  await page.locator('.chat-body').evaluate((body, top) => { body.scrollTop = top; }, nextTop);
+  await page.waitForFunction(top => {
+    const saved = JSON.parse(localStorage.getItem('coingram_chat_scroll_a') || '{}');
+    return Math.abs(saved.scrollTop - top) < 2;
+  }, nextTop);
+  const saved = await position(page);
+  await page.evaluate(() => window.__scrollTest.append('a'));
+  await expectAnchor(page, saved);
+});
+
 test('prepending older history preserves the current anchor', async ({ page }) => {
   const saved = await readHistory(page, 1);
   await pending(page, 'a');

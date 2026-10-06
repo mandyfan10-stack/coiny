@@ -712,10 +712,14 @@ function formatDateDivider(timestamp) {
         // Keep the existing bottom pin when media or the composer changes size.
         // The distance after resizing no longer describes the user's intent.
         chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
+        lastScrollTopRef.current = chatBodyRef.current.scrollTop;
       } else if (anchorMessageIdRef.current) {
         const targetMsg = chatBodyRef.current.querySelector(`.message-row[data-message-id="${anchorMessageIdRef.current}"]`);
         if (targetMsg) {
           chatBodyRef.current.scrollTop = targetMsg.offsetTop - anchorOffsetRef.current;
+          // Restoration can round by a pixel. Its scroll event must not look
+          // like the user moving down and reattach a recently released pin.
+          lastScrollTopRef.current = chatBodyRef.current.scrollTop;
         }
       }
     });
@@ -1262,6 +1266,7 @@ function formatDateDivider(timestamp) {
     // user input should release an existing bottom pin in that case.
     const wasPinnedToBottom = shouldAutoScrollRef.current && !userScrolledManuallyRef.current && !isPointerDownRef.current;
     const isScrollingUp = scrollTop < (lastScrollTopRef.current || 0);
+    const isScrollingDown = scrollTop > (lastScrollTopRef.current || 0);
     lastScrollTopRef.current = scrollTop;
 
     if (isScrollingUp && isScrollingToBottomRef.current) {
@@ -1311,12 +1316,14 @@ function formatDateDivider(timestamp) {
 
     if (userScrolledManuallyRef.current || (isScrollingUp && !wasPinnedToBottom)) {
       isInitialChatLoadRef.current = false;
-      if (effectiveDistance > 20) {
+      // Repeated scroll events may have zero delta while a gesture is in progress.
+      // Keep reading intent even when its first frame is only a few pixels up.
+      if (isScrollingUp || effectiveDistance > 0) {
         shouldAutoScrollRef.current = false;
       }
     }
 
-    if (effectiveDistance <= 15) {
+    if (effectiveDistance <= 15 && !isScrollingUp && (isScrollingDown || !userScrolledManuallyRef.current)) {
       userScrolledManuallyRef.current = false;
       shouldAutoScrollRef.current = true;
       setShowScrollBottom(false);
@@ -1629,7 +1636,10 @@ function formatDateDivider(timestamp) {
         onKeyDown={(event) => {
           if (event.target !== event.currentTarget || !['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) return;
           userScrolledManuallyRef.current = true;
-          shouldAutoScrollRef.current = false;
+          lastScrollTopRef.current = event.currentTarget.scrollTop;
+          if (['ArrowUp', 'PageUp', 'Home'].includes(event.key) || (event.key === ' ' && event.shiftKey)) {
+            shouldAutoScrollRef.current = false;
+          }
           isScrollingToBottomRef.current = false;
           if (scrollTimeoutRef.current) {
             clearTimeout(scrollTimeoutRef.current);
@@ -1638,6 +1648,7 @@ function formatDateDivider(timestamp) {
         }}
         onWheel={(e) => {
           userScrolledManuallyRef.current = true;
+          lastScrollTopRef.current = e.currentTarget.scrollTop;
           isScrollingToBottomRef.current = false;
           if (e.deltaY < 0) {
             shouldAutoScrollRef.current = false;
@@ -1652,6 +1663,7 @@ function formatDateDivider(timestamp) {
         }}
         onTouchStart={() => {
           userScrolledManuallyRef.current = true;
+          lastScrollTopRef.current = chatBodyRef.current?.scrollTop || 0;
           isScrollingToBottomRef.current = false;
           if (typeof chatBodyRef.current?.scrollTo === 'function') {
             chatBodyRef.current.scrollTo({ top: chatBodyRef.current.scrollTop, behavior: 'auto' });
@@ -1665,6 +1677,7 @@ function formatDateDivider(timestamp) {
         onTouchEnd={() => { isPointerDownRef.current = false; }}
         onPointerDown={() => {
           userScrolledManuallyRef.current = true;
+          lastScrollTopRef.current = chatBodyRef.current?.scrollTop || 0;
           isScrollingToBottomRef.current = false;
           if (typeof chatBodyRef.current?.scrollTo === 'function') {
             chatBodyRef.current.scrollTo({ top: chatBodyRef.current.scrollTop, behavior: 'auto' });
