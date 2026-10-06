@@ -663,6 +663,18 @@ html.theme-light .reply-preview-sender {
   pointer-events: auto;
 }
 
+/* Keep the existing controls outside bubble clip-path and row paint containment. */
+.message-hover-actions.message-hover-actions-fixed {
+  position: fixed;
+  left: auto;
+  right: auto;
+  top: auto;
+  margin: 0;
+  transform: none;
+  z-index: 10040;
+  transition: opacity 0.15s ease;
+}
+
 .reply-media-svg {
   display: inline-block;
   vertical-align: -1.5px;

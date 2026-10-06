@@ -54,7 +54,7 @@ test('MobileActionSheet contains required actions, quick reaction bar, and DOM m
   // Accessibility and Dismissal
   assert.match(sheetCode, /e\.key === 'Escape'/);
   assert.match(sheetCode, /className="mobile-action-sheet-backdrop"/);
-  assert.match(sheetCode, /onClick=\{onClose\}/);
+  assert.match(sheetCode, /if \(event\.target === event\.currentTarget && backdropPointerDownRef\.current\)/);
   assert.match(sheetCode, /e\.stopPropagation\(\)/);
   assert.match(sheetCode, /data-test="mobile-action-sheet-backdrop"/);
   assert.match(sheetCode, /data-test="mobile-action-sheet"/);

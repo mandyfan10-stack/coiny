@@ -56,6 +56,8 @@ export default function MessageBubble({
   renderAvatar,
   showMsgActionsId,
   setShowMsgActionsId,
+  hoveredMessageId,
+  setHoveredMessageId,
   retryMenuMsgId,
   setRetryMenuMsgId,
   setReplyingTo,
@@ -165,7 +167,11 @@ export default function MessageBubble({
   }, [openUserProfile, senderMember, msg.senderId, msg.sender_id, senderDisplayName, senderAvatar, currentUser?.id]);
 
   const smileBtnRef = useRef(null);
+  const hoverActionsRef = useRef(null);
+  const hoverLeaveTimerRef = useRef(null);
   const drawerRef = useRef(null);
+  const [hoverActionsStyle, setHoverActionsStyle] = useState(null);
+  const [canHover, setCanHover] = useState(() => window.matchMedia('(min-width: 769px) and (hover: hover) and (pointer: fine)').matches);
   const [drawerStyle, setDrawerStyle] = useState(null);
   const isReactionOpen = showMsgActionsId === msg.id;
 
@@ -184,6 +190,88 @@ export default function MessageBubble({
   const bubbleRef = useRef(null);
   const [isHovered, setIsHovered] = useState(false);
   const [isPressed, setIsPressed] = useState(false);
+  const showHoverActions = canHover && (showMsgActionsId ? isReactionOpen : hoveredMessageId === msg.id);
+
+  const revealHoverActions = useCallback(() => {
+    clearTimeout(hoverLeaveTimerRef.current);
+    setHoveredMessageId(msg.id);
+  }, [msg.id, setHoveredMessageId]);
+
+  const hideHoverActions = useCallback(() => {
+    clearTimeout(hoverLeaveTimerRef.current);
+    // Allow the pointer to cross the gap between the bubble and its portaled controls.
+    hoverLeaveTimerRef.current = setTimeout(() => {
+      if (!bubbleRef.current?.matches(':hover') && !hoverActionsRef.current?.matches(':hover') &&
+          !hoverActionsRef.current?.contains(document.activeElement) && !drawerRef.current?.contains(document.activeElement)) {
+        setHoveredMessageId(previous => previous === msg.id ? null : previous);
+      }
+    }, 150);
+  }, [msg.id, setHoveredMessageId]);
+
+  useEffect(() => {
+    const query = window.matchMedia('(min-width: 769px) and (hover: hover) and (pointer: fine)');
+    const update = () => {
+      setCanHover(query.matches);
+      if (!query.matches) setHoveredMessageId(previous => previous === msg.id ? null : previous);
+    };
+    query.addEventListener('change', update);
+    return () => {
+      query.removeEventListener('change', update);
+      clearTimeout(hoverLeaveTimerRef.current);
+    };
+  }, [msg.id, setHoveredMessageId]);
+
+  const repositionHoverActions = useCallback(() => {
+    const bubble = bubbleRef.current;
+    const actions = hoverActionsRef.current;
+    if (!bubble || !actions) return;
+    const rect = bubble.getBoundingClientRect();
+    const chatRect = bubble.closest('.chat-body')?.getBoundingClientRect();
+    const leftBound = Math.max(8, (chatRect?.left ?? 0) + 8);
+    const rightBound = Math.min(window.innerWidth - 8, (chatRect?.right ?? window.innerWidth) - 8);
+    const topBound = Math.max(8, (chatRect?.top ?? 0) + 4);
+    const bottomBound = Math.min(window.innerHeight - 8, (chatRect?.bottom ?? window.innerHeight) - 4);
+    if (rect.bottom <= topBound || rect.top >= bottomBound) {
+      setHoveredMessageId(previous => previous === msg.id ? null : previous);
+      setShowMsgActionsId(previous => previous === msg.id ? null : previous);
+      return;
+    }
+    const width = actions.offsetWidth;
+    const height = actions.offsetHeight;
+    const before = rect.left - width - 8;
+    const after = rect.right + 8;
+    let left = isMe ? before : after;
+    if (left < leftBound || left + width > rightBound) left = isMe ? after : before;
+    left = Math.max(leftBound, Math.min(left, rightBound - width));
+    const top = Math.max(topBound, Math.min(rect.top + (rect.height - height) / 2, bottomBound - height));
+    setHoverActionsStyle({ left, top, visibility: 'visible' });
+  }, [isMe, msg.id, setShowMsgActionsId, setHoveredMessageId]);
+
+  useLayoutEffect(() => {
+    if (!showHoverActions) return undefined;
+    repositionHoverActions();
+    const raf = requestAnimationFrame(repositionHoverActions);
+    return () => cancelAnimationFrame(raf);
+  }, [showHoverActions, repositionHoverActions]);
+
+  useEffect(() => {
+    if (!showHoverActions) return undefined;
+    let raf = null;
+    const reposition = () => {
+      if (raf !== null) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(repositionHoverActions);
+    };
+    window.addEventListener('resize', reposition);
+    document.addEventListener('scroll', reposition, true);
+    const observer = new ResizeObserver(reposition);
+    if (bubbleRef.current) observer.observe(bubbleRef.current);
+    return () => {
+      if (raf !== null) cancelAnimationFrame(raf);
+      window.removeEventListener('resize', reposition);
+      document.removeEventListener('scroll', reposition, true);
+      observer.disconnect();
+    };
+  }, [showHoverActions, repositionHoverActions]);
 
   const handleBubblePointerDown = useCallback((e) => {
     setIsPressed(true);
@@ -277,7 +365,7 @@ export default function MessageBubble({
     repositionDrawer();
     const raf = requestAnimationFrame(() => repositionDrawer());
     return () => cancelAnimationFrame(raf);
-  }, [isReactionOpen, repositionDrawer]);
+  }, [isReactionOpen, repositionDrawer, hoverActionsStyle]);
 
   useEffect(() => {
     if (!isReactionOpen) return undefined;
@@ -365,8 +453,8 @@ export default function MessageBubble({
         onPointerUp={handleBubblePointerUp}
         onPointerCancel={clearLongPress}
         onContextMenu={handleContextMenu}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
+        onMouseEnter={() => { setIsHovered(true); revealHoverActions(); }}
+        onMouseLeave={() => { setIsHovered(false); hideHoverActions(); }}
       >
         {svgClipElement}
         {swipeOffset !== 0 && (
@@ -537,7 +625,18 @@ export default function MessageBubble({
         )}
 
         {/* Action hover tools */}
-        <div className={`message-hover-actions ${showMsgActionsId === msg.id ? 'active' : ''}`}>
+        {showHoverActions && createPortal(<div
+          ref={hoverActionsRef}
+          className="message-hover-actions message-hover-actions-fixed active"
+          data-message-actions-for={msg.id}
+          style={hoverActionsStyle || { visibility: 'hidden' }}
+          role="toolbar"
+          aria-label="Действия сообщения"
+          onMouseEnter={revealHoverActions}
+          onMouseLeave={hideHoverActions}
+          onFocus={revealHoverActions}
+          onBlur={hideHoverActions}
+        >
           <button
             className="hover-action-btn"
             onClick={() => setReplyingTo(msg)}
@@ -550,6 +649,7 @@ export default function MessageBubble({
             type="button"
             className="hover-action-btn"
             title="Реакция"
+            aria-expanded={isReactionOpen}
             onClick={() => {
               if (showMsgActionsId === msg.id) {
                 setShowMsgActionsId(null);
@@ -594,22 +694,24 @@ export default function MessageBubble({
                 onMouseDown={(e) => e.stopPropagation()}
               >
                 {emojis.slice(0, 8).map(emo => (
-                  <span
+                  <button
                     key={emo}
+                    type="button"
                     role="option"
                     className="reaction-drawer-item"
                     onClick={() => {
                       toggleReaction(activeChat.id, msg.id, emo);
                       setShowMsgActionsId(null);
+                      hideHoverActions();
                     }}
                   >
                     {emo}
-                  </span>
+                  </button>
                 ))}
               </div>,
               document.body
             )}
-        </div>
+        </div>, document.body)}
         
         {retryMenuMsgId === msg.id && (
           <div className="failed-message-menu">

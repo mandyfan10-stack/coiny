@@ -30,7 +30,7 @@ test('MobileActionSheet contains required actions: reactions, reply, copy, delet
 test('MobileActionSheet handles escape key and backdrop dismissals', () => {
   assert.match(mobileActionSheetCode, /e\.key === 'Escape'/);
   assert.match(mobileActionSheetCode, /className="mobile-action-sheet-backdrop"/);
-  assert.match(mobileActionSheetCode, /onClick=\{onClose\}/);
+  assert.match(mobileActionSheetCode, /if \(event\.target === event\.currentTarget && backdropPointerDownRef\.current\)/);
   assert.match(mobileActionSheetCode, /e\.stopPropagation\(\)/);
 });
 

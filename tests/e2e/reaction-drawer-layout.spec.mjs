@@ -67,15 +67,11 @@ test('reaction drawer stays wide and fully visible at chat top', async ({ page }
   });
   await page.waitForTimeout(200);
 
-  // Hover actions sit outside the bubble and are often covered by adjacent rows.
-  // Native el.click() still runs React onClick; force avoids hit-test intercept.
-  const smileBtn = targetRow.locator('.hover-action-btn[title="Реакция"]').first();
-  await targetRow.locator('.message-hover-actions').evaluate((el) => {
-    el.classList.add('active');
-    el.style.opacity = '1';
-    el.style.pointerEvents = 'auto';
-  });
-  await smileBtn.evaluate((el) => el.click());
+  // Exercise the actual mouse path so clipped or unreachable controls fail the test.
+  await targetRow.locator('.message-bubble').hover();
+  const smileBtn = page.locator('.hover-action-btn[title="Реакция"]').first();
+  await expect(smileBtn).toBeVisible();
+  await smileBtn.click();
 
   const drawer = page.locator('.reaction-drawer').first();
   await expect(drawer).toBeAttached({ timeout: 8_000 });
@@ -150,7 +146,9 @@ test('reaction drawer stays wide and fully visible at chat top', async ({ page }
     return getComputedStyle(el).visibility === 'visible' && r.width > 100;
   }).catch(() => false);
   if (!stillOpen) {
-    await smileBtn.evaluate((el) => el.click());
+    await targetRow.scrollIntoViewIfNeeded();
+    await targetRow.locator('.message-bubble').hover();
+    await smileBtn.click();
     await expect
       .poll(async () => drawer.evaluate((el) => el.getBoundingClientRect().width > 100), { timeout: 5_000 })
       .toBe(true);

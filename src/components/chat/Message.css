@@ -46,6 +46,10 @@
   .reaction-drawer {
     display: none !important;
   }
+
+  .message-hover-actions-fixed {
+    display: none !important;
+  }
 }
 
 /* ==========================================================================
@@ -106,4 +110,3 @@ mark.search-match-highlight {
     box-shadow: 0 0 0 2.5px var(--accent-color, #2481cc), 0 4px 16px rgba(36, 129, 204, 0.35);
   }
 }
-

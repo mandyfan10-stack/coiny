@@ -212,6 +212,11 @@ export default function ChatArea() {
   const videoPreviewRef = useRef(null);
 
   const emojis = ['😀', '😂', '😍', '👍', '🔥', '🎉', '👏', '❤️', '🤔', '👀', '✨', '🚀', '💯', '😎'];
+  const [hoveredMessageId, setHoveredMessageId] = useState(null);
+  useEffect(() => {
+    setHoveredMessageId(null);
+    setShowMsgActionsId(null);
+  }, [activeChat?.id]);
 
   const uploadFileDirectly = async (file, mediaInfo = validateChatMedia(file)) => {
     setUploading(true);
@@ -1788,6 +1793,8 @@ function formatDateDivider(timestamp) {
                     renderAvatar={renderAvatar}
                     showMsgActionsId={showMsgActionsId}
                     setShowMsgActionsId={setShowMsgActionsId}
+                    hoveredMessageId={hoveredMessageId}
+                    setHoveredMessageId={setHoveredMessageId}
                     retryMenuMsgId={retryMenuMsgId}
                     setRetryMenuMsgId={setRetryMenuMsgId}
                     setReplyingTo={setReplyingTo}

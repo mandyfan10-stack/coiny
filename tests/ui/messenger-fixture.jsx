@@ -21,6 +21,7 @@ const makeChat = id => ({ id, name: `Chat ${id}`, type: 'group', members: [self]
 const requests = [];
 const controller = {
   requests,
+  reactionCalls: [],
   cache: {
     seed: (messages, chatId = 'a', userId = self.id) => saveCachedMessagesBatch(chatId, messages, userId),
     read: (chatId = 'a', userId = self.id) => getCachedMessagesForChat(chatId, userId),
@@ -59,9 +60,22 @@ function Harness() {
   Object.assign(controller, { select: setActiveChatId, user: setCurrentUser, load: loader.loadActiveChatMessages, older: loader.loadOlderMessages,
     state: { chats, status: loader.historyLoadStatus, loading: loader.isChatLoading, syncing: loader.isSyncing, pagination: loader.messagePagination } });
   const dialogs = new URLSearchParams(location.search).has('dialogs');
+  const toggleReaction = (chatId, messageId, emoji) => {
+    controller.reactionCalls.push({ chatId, messageId, emoji });
+    setChats(previous => previous.map(chat => chat.id !== chatId ? chat : {
+      ...chat,
+      messages: chat.messages.map(message => {
+        if (message.id !== messageId) return message;
+        const existing = message.reactions?.find(reaction => reaction.emoji === emoji);
+        const reactions = (message.reactions || []).filter(reaction => reaction.emoji !== emoji);
+        if (!existing) reactions.push({ emoji, count: 1, users: [currentUser.id] });
+        return { ...message, reactions };
+      })
+    }));
+  };
   const value = { ...ui, ...loader, currentUser, chats, activeChat: chats.find(chat => chat.id === activeChatId),
     setActiveChatId, getChatStatus: () => 'Тестовая история', renderAvatar: () => '👤', wallpaper: 'classic',
-    sendMessage: noop, deleteMessage: noop, toggleReaction: noop, typingStatuses: {}, sendTypingStatus: noop,
+    sendMessage: noop, deleteMessage: noop, toggleReaction, typingStatuses: {}, sendTypingStatus: noop,
     retrySendMessage: noop, deleteFailedMessage: noop, isOnline: true, installedStickers: [], createChat: async () => {}, publishStory: async () => {} };
   return <AuthContext.Provider value={{ currentUser }}><E2EEContext.Provider value={{ sharedKeysCache: {}, setSharedKeysCache: noop, e2eePrivateKey: null }}><ChatContext.Provider value={value}>
     {dialogs ? <div style={{ width: '100%', height: '100%' }}>

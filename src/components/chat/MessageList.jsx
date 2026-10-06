@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { ArrowDown } from 'lucide-react';
 import MessageBubble from './MessageBubble';
 
@@ -50,6 +50,11 @@ export default function MessageList({
   deleteFailedMessage,
   emojis
 }) {
+  const [hoveredMessageId, setHoveredMessageId] = useState(null);
+  useEffect(() => {
+    setHoveredMessageId(null);
+    setShowMsgActionsId(null);
+  }, [activeChat.id, setShowMsgActionsId]);
   return (
     <>
       <div
@@ -80,6 +85,8 @@ export default function MessageList({
                   renderAvatar={renderAvatar}
                   showMsgActionsId={showMsgActionsId}
                   setShowMsgActionsId={setShowMsgActionsId}
+                  hoveredMessageId={hoveredMessageId}
+                  setHoveredMessageId={setHoveredMessageId}
                   retryMenuMsgId={retryMenuMsgId}
                   setRetryMenuMsgId={setRetryMenuMsgId}
                   setReplyingTo={setReplyingTo}

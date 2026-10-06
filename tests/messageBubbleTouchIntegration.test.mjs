@@ -392,8 +392,8 @@ test('Message Type 6 [Forwarded / Reply Messages & Reaction Badges]: preview hea
 test('Desktop Parity: MessageBubble renders .message-hover-actions containing Reply, Smile, and Delete', () => {
   assert.match(
     messageBubbleJsx,
-    /<div\s+className=\{`message-hover-actions\s+\$\{showMsgActionsId === msg\.id \? 'active' : ''\}`\}>/,
-    'MessageBubble must render .message-hover-actions with active modifier'
+    /<div[^>]*className="message-hover-actions message-hover-actions-fixed active"/s,
+    'MessageBubble must render the visible action toolbar outside bubble clipping'
   );
   assert.match(
     messageBubbleJsx,

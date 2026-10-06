@@ -752,6 +752,10 @@ html.theme-light .seen-check.blue {
 }
 
 .reaction-drawer-item {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
@@ -767,6 +771,12 @@ html.theme-light .seen-check.blue {
 
 .reaction-drawer-item:hover {
   transform: scale(1.3);
+}
+
+.hover-action-btn:focus-visible,
+.reaction-drawer-item:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
 }
 
 /* Floating scroll down button */

@@ -10,7 +10,8 @@ test(`bubble geometry ${strategy} renders without invalid React WebKit style war
   page.on('console', item => { if (/Unsupported style property|Invalid value.*clip/i.test(item.text())) styleWarnings.push(item.text()); });
   const pageErrors = [];
   page.on('pageerror', error => pageErrors.push(error.message));
-  await page.goto('/tests/ui/messenger-fixture.html');
+  await page.goto('/tests/ui/messenger-fixture.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => Boolean(window.__messengerTest?.select));
   await page.evaluate(() => window.__messengerTest.select('a'));
   await expect.poll(() => page.evaluate(() => window.__messengerTest.requests.length)).toBe(2);
   await page.evaluate(() => {
