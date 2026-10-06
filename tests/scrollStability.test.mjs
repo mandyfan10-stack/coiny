@@ -66,8 +66,8 @@ test('ChatArea contains guard preventing scroll jumps on message deletion and re
   );
   assert.match(
     chatAreaSource,
-    /shouldAutoScrollRef\.current\s*=\s*distanceFromBottom\s*<\s*120/,
-    'ChatArea must use 120px threshold for auto-scroll pin'
+    /distanceFromBottom\s*<\s*120/,
+    'ChatArea must use a 120px threshold when returning to the bottom pin'
   );
   assert.match(
     chatAreaSource,

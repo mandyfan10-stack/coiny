@@ -166,8 +166,8 @@ html.theme-light[data-wallpaper="classic"] .chat-body {
   width: 100%;
   margin-bottom: 3px;
   position: relative;
-  content-visibility: auto;
-  contain-intrinsic-size: auto 60px;
+  /* Measure every row while retaining containment for bubble action overlays. */
+  contain: layout style paint;
 }
 
 .message-row.group-first {
@@ -1161,4 +1161,3 @@ html.theme-light .reply-preview-sender {
     cursor: pointer;
   }
 }
-

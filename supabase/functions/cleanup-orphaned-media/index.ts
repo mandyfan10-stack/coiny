@@ -76,16 +76,18 @@ Deno.serve(async (request: Request) => {
 
   try {
     const chatFiles = await listFiles("chat-attachments");
-    const chatCandidates = chatFiles.filter(file => /^.+\/.+\/msg_([0-9a-f-]{36})\.[a-z0-9]+$/i.test(file.path) && isOlderThan(file, CHAT_GRACE_MS));
-    const messageIds = chatCandidates.map(file => file.path.match(/\/msg_([0-9a-f-]{36})\./i)?.[1]).filter(Boolean) as string[];
-    const existingIds = new Set<string>();
-    for (let index = 0; index < messageIds.length; index += 100) {
-      const { data, error } = await supabase.from("messages").select("id").in("id", messageIds.slice(index, index + 100));
-      if (error) throw error;
-      for (const row of data || []) existingIds.add(row.id);
+    const chatCandidates = chatFiles.filter(file => /^.+\/.+\/(msg|record)_[0-9a-f-]{36}\.[a-z0-9]+$/i.test(file.path) && isOlderThan(file, CHAT_GRACE_MS));
+    const { data: messageRows, error: messageError } = await supabase.from("messages").select("id,media,media_path");
+    if (messageError) throw messageError;
+    const referencedChatPaths = new Set<string>();
+    for (const row of messageRows || []) {
+      const mediaPath = referencedPath(row.media_path, "chat-attachments");
+      const mediaUrlPath = referencedPath(row.media, "chat-attachments");
+      if (mediaPath) referencedChatPaths.add(mediaPath);
+      if (mediaUrlPath) referencedChatPaths.add(mediaUrlPath);
     }
     const orphanChatPaths = chatCandidates
-      .filter(file => !existingIds.has(file.path.match(/\/msg_([0-9a-f-]{36})\./i)?.[1] || ""))
+      .filter(file => !referencedChatPaths.has(file.path))
       .map(file => file.path);
 
     const [profiles, chats, stories] = await Promise.all([

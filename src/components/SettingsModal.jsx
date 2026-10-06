@@ -316,13 +316,17 @@ export default function SettingsModal() {
         setEmailStatus({ text: 'Письмо для подтверждения нового email отправлено.', type: 'success' });
       }
 
-      await updateProfile({
+      const profileResult = await updateProfile({
         name,
         bio,
         notificationsEnabled: notif,
         theme,
         wallpaper
       });
+      if (profileResult?.error) {
+        setEmailStatus({ text: profileResult.error.message || 'Не удалось сохранить профиль.', type: 'error' });
+        return;
+      }
       setIsSettingsOpen(false);
     } finally {
       setSettingsSaving(false);

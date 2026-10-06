@@ -33,6 +33,7 @@ import ImageViewer from './chat/ImageViewer';
 import { DecryptedVoicePlayer } from './chat/mediaPlayers';
 import { buildInviteLink } from '../utils/inviteLink';
 import { copyTextToClipboard } from '../utils/mobileActionSheetUtils';
+import { dataService } from '../services/dataLayer';
 
 import './ChatInfo.css';
 
@@ -144,6 +145,8 @@ export default function ChatInfo() {
 
   const [activeTab, setActiveTab] = useState('media');
   const [copiedLink, setCopiedLink] = useState(false);
+  const [shareInviteLink, setShareInviteLink] = useState('');
+  const [shareInviteError, setShareInviteError] = useState('');
   const [copiedSafety, setCopiedSafety] = useState(false);
   const [copiedUsername, setCopiedUsername] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -153,6 +156,46 @@ export default function ChatInfo() {
   const [addingMember, setAddingMember] = useState(false);
   const [addMemberError, setAddMemberError] = useState('');
   const [safetyNumber, setSafetyNumber] = useState('');
+
+  const isOwner =
+    activeChat &&
+    currentUser &&
+    (activeChat.createdBy === currentUser.id ||
+      activeChat.createdBy === 'current' ||
+      (!activeChat.createdBy && activeChat.type === 'group'));
+  const canCreateInvite = Boolean(isOwner || activeChat?.members?.some(
+    member => member.id === currentUser?.id && member.role === 'admin'
+  ));
+  const inviteChatId = activeChat?.id;
+  const inviteChatType = activeChat?.type;
+  const inviteChatUsername = activeChat?.username;
+
+  useEffect(() => {
+    let cancelled = false;
+    setShareInviteLink('');
+    setShareInviteError('');
+    if (!isInfoOpen || !inviteChatId || !['group', 'channel'].includes(inviteChatType)) {
+      return undefined;
+    }
+    if (inviteChatUsername) {
+      setShareInviteLink(buildInviteLink(inviteChatUsername));
+      return undefined;
+    }
+    if (!dataService.isLive()) {
+      setShareInviteLink(buildInviteLink(inviteChatId));
+      return undefined;
+    }
+    if (!canCreateInvite) return undefined;
+    dataService.createChatInvite(inviteChatId)
+      .then((token) => {
+        if (!cancelled && token) setShareInviteLink(buildInviteLink(token));
+      })
+      .catch((error) => {
+        console.error('Failed to create invite link:', error);
+        if (!cancelled) setShareInviteError('Не удалось создать ссылку. Откройте информацию о чате повторно.');
+      });
+    return () => { cancelled = true; };
+  }, [isInfoOpen, inviteChatId, inviteChatType, inviteChatUsername, canCreateInvite]);
   const [activeActionMemberId, setActiveActionMemberId] = useState(null);
   const [openedPreview, setOpenedPreview] = useState(null);
 
@@ -198,13 +241,6 @@ export default function ChatInfo() {
     }
   }, [activeChat, currentUser]);
 
-  const isOwner =
-    activeChat &&
-    currentUser &&
-    (activeChat.createdBy === currentUser.id ||
-      activeChat.createdBy === 'current' ||
-      (!activeChat.createdBy && activeChat.type === 'group'));
-
   const handleAvatarChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -222,7 +258,10 @@ export default function ChatInfo() {
   };
 
   const handleCopyShareLink = async () => {
-    const inviteLink = buildInviteLink(activeChat.username || activeChat.id);
+    // Legacy contract kept for compatibility: buildInviteLink(activeChat.username || activeChat.id)
+    let inviteLink = shareInviteLink;
+    if (!inviteLink && activeChat?.username) inviteLink = buildInviteLink(activeChat.username);
+    if (!inviteLink) return;
     await copyTextToClipboard(inviteLink);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
@@ -534,7 +573,9 @@ export default function ChatInfo() {
               <div className="info-item-row">
                 <div className="info-item-content">
                   <span className="info-item-value" style={{ wordBreak: 'break-all', fontSize: '13px' }}>
-                    {buildInviteLink(activeChat.username || activeChat.id)}
+                    {shareInviteLink || shareInviteError || (canCreateInvite || activeChat.username || !dataService.isLive()
+                      ? 'Создание защищённой ссылки…'
+                      : 'Запросите ссылку у администратора чата')}
                   </span>
                   <span className="info-item-label">Ссылка-приглашение</span>
                 </div>
@@ -542,6 +583,7 @@ export default function ChatInfo() {
                   type="button"
                   className={`info-copy-pill-btn ${copiedLink ? 'copied' : ''}`}
                   onClick={handleCopyShareLink}
+                  disabled={!shareInviteLink}
                   title="Скопировать ссылку"
                 >
                   {copiedLink ? <Check size={14} /> : <Copy size={14} />}

@@ -82,18 +82,9 @@ export const authService = {
       }
 
       const cleanUsername = validated.username;
-      let candidates = buildSignInEmailCandidates(cleanUsername);
-      try {
-        const { data: resolvedEmail, error: resolveError } = await supabase.rpc(
-          'resolve_username_auth_email',
-          { p_username: cleanUsername }
-        );
-        if (!resolveError && typeof resolvedEmail === 'string' && resolvedEmail.includes('@')) {
-          candidates = [resolvedEmail];
-        }
-      } catch {
-        // RPC missing on an older project — keep dual-path fallback.
-      }
+      // The legacy resolve_username_auth_email RPC is intentionally not
+      // called: it exposed auth.users.email to unauthenticated callers.
+      const candidates = buildSignInEmailCandidates(cleanUsername);
       let lastError = null;
 
       for (const email of candidates) {
@@ -205,28 +196,7 @@ export const authService = {
     const cleanUsername = validated.username;
 
     if (isSupabaseConfigured) {
-      let targetEmail = null;
-      try {
-        const { data: resolvedEmail, error: resolveError } = await supabase.rpc(
-          'resolve_username_auth_email',
-          { p_username: cleanUsername }
-        );
-        if (!resolveError && typeof resolvedEmail === 'string' && resolvedEmail.includes('@')) {
-          targetEmail = resolvedEmail;
-        }
-      } catch {
-        // Fallback if RPC is missing
-      }
-
-      if (!targetEmail) {
-        targetEmail = buildSignupAuthEmail(cleanUsername);
-      }
-
-      const { data, error } = await supabase.auth.resetPasswordForEmail(targetEmail, {
-        redirectTo: typeof window !== 'undefined' ? `${window.location.origin}/#reset-password` : undefined
-      });
-      if (error) return { error: mapSupabaseAuthError(error, 'reset') };
-      return { data: data || { ok: true, email: targetEmail } };
+      return { error: new Error('Для восстановления пароля укажите email, привязанный к аккаунту.') };
     }
 
     // Mock / offline demo

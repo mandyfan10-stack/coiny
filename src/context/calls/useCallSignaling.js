@@ -57,8 +57,10 @@ export function useCallSignaling({
             callerAvatar,
             callerAvatarColor,
             chatId
-          } = payload.payload;
-          if (callerId === currentUserId) return;
+          } = payload.payload || {};
+          const chatRecord = chatsRef.current.find((candidate) => candidate.id === chat.id);
+          const caller = chatRecord?.members?.find((member) => member.id === callerId);
+          if (!chatId || chatId !== chat.id || !caller || callerId === currentUserId) return;
           // Busy guard: never clobber an active call (C2).
           setCallState((prev) => {
             if (BUSY_CALL_STATUSES.has(prev.status)) return prev;
@@ -69,9 +71,9 @@ export function useCallSignaling({
               muted: false,
               isOutgoing: false,
               callerInfo: {
-                name: callerName,
-                avatar: callerAvatar,
-                avatarColor: callerAvatarColor
+                name: caller.name || callerName,
+                avatar: caller.avatar || callerAvatar,
+                avatarColor: caller.avatarColor || callerAvatarColor
               },
               otherUserId: callerId,
               webrtcState: 'disconnected',
@@ -83,7 +85,8 @@ export function useCallSignaling({
         })
         .on('broadcast', { event: 'call-accepted' }, (payload) => {
           const { responderId } = payload.payload || {};
-          if (responderId === currentUserId) return;
+          const chatRecord = chatsRef.current.find((candidate) => candidate.id === chat.id);
+          if (!chatRecord?.members?.some((member) => member.id === responderId) || responderId === currentUserId) return;
           setCallState((prev) => (prev.status === 'calling'
             ? { ...prev, status: 'connected', otherUserId: responderId || prev.otherUserId }
             : prev));

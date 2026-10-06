@@ -151,6 +151,9 @@ jobs:
       - name: Build mock client
         run: npm run build
 
+      - name: Test chat scroll restoration and pagination
+        run: npm run test:scroll
+
       - name: Run mock UI E2E
         run: npx playwright test tests/e2e/lazy-loading.spec.mjs tests/e2e/profile-rewards.spec.mjs tests/e2e/message-send.spec.mjs tests/e2e/mobile-recording.spec.mjs
 

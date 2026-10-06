@@ -80,6 +80,7 @@ export const ChatProvider = ({ children }) => {
 
   useChatRealtime({
     currentUser,
+    chats,
     realtimeChatIds: chats.map((chat) => chat.id).sort().join(','),
     setChats,
     fetchChats: loader.fetchChats,

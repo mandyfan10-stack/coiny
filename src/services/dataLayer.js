@@ -40,6 +40,7 @@ export const dataService = {
   updateChatAvatar: chatService.updateChatAvatar,
   updateChatSettings: chatService.updateChatSettings,
   joinChatByInvite: chatService.joinChatByInvite,
+  createChatInvite: chatService.createChatInvite,
 
   // Messages
   loadChatMessages: messageService.loadChatMessages,

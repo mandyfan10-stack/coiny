@@ -9,7 +9,7 @@ const chatAreaCss = readFileSync(new URL('../src/components/ChatArea.css', impor
 const chatSources = [chatArea, mediaPlayers, imageViewer].join('\n');
 
 test('incoming messages preserve the reader scroll position away from the bottom', () => {
-  assert.match(chatArea, /shouldAutoScrollRef\.current = distanceFromBottom < 120/);
+  assert.match(chatArea, /distanceFromBottom < 120/);
   assert.match(chatArea, /shouldAutoScrollRef\.current \|\| isOwnMessage/);
 });
 

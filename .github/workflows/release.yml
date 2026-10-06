@@ -83,6 +83,9 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
+      - name: Test chat scroll restoration and pagination
+        run: npm run test:scroll
+
       - name: Run mandatory live E2E
         run: |
           npx playwright test \

@@ -512,7 +512,7 @@ export const chatService = {
       const isCreator = createdBy === userId;
       const isPersonal = chatType === 'personal';
 
-      if (isPersonal || isCreator) {
+      if (isCreator && !isPersonal) {
         const { error } = await supabase
           .from('chats')
           .delete()
@@ -679,6 +679,12 @@ export const chatService = {
       name: cleanInvite,
       status: 'personal_created'
     };
+  },
+
+  createChatInvite: async (chatId) => {
+    if (!isSupabaseConfigured) return null;
+    const { data, error } = await supabase.rpc('create_chat_invite', { p_chat_id: chatId });
+    if (error) throw error;
+    return data;
   }
 };
-

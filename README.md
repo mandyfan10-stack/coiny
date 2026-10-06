@@ -116,6 +116,7 @@ npm run lint
 npm run typecheck
 npm test              # E2EE + unit/contracts (offline, auth, …)
 npm run test:e2e      # live two-user (нужны E2E_* secrets, см. docs/live-e2e.md)
+npm run test:scroll   # прокрутка длинной истории и гонки пагинации, desktop + mobile, без Supabase
 ```
 
 ---

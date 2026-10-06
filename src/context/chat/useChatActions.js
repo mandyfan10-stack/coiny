@@ -200,14 +200,18 @@ export function useChatActions({
   const clearChatMessages = useCallback(async (chatId) => {
     try {
       await dataService.clearChatMessages(chatId);
-      setChats((prevChats) => prevChats.map((c) => (c.id === chatId ? { ...c, messages: [] } : c)));
+      if (dataService.isLive()) {
+        await fetchChats();
+      } else {
+        setChats((prevChats) => prevChats.map((c) => (c.id === chatId ? { ...c, messages: [] } : c)));
+      }
       return true;
     } catch (e) {
       console.error(e);
       alert(`Не удалось очистить историю: ${e.message}`);
       return false;
     }
-  }, [setChats]);
+  }, [fetchChats, setChats]);
 
   const sendMessage = useCallback(async (text, replyToId = null, media = null, offlineMediaBlob = null, offlineMediaType = null, customMessageId = null) => {
     const cleanText = typeof text === 'string' ? text.trim() : '';

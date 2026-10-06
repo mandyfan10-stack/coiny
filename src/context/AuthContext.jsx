@@ -188,7 +188,9 @@ export const AuthProvider = ({ children }) => {
       setCurrentUser(prev => ({ ...prev, ...fields }));
     } catch (e) {
       console.error("Profile update failed", e);
+      return { error: e };
     }
+    return { data: true };
   };
 
   return (

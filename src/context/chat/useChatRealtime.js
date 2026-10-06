@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { supabase } from '../../supabaseClient';
 import { dataService } from '../../services/dataLayer';
 import {
@@ -19,6 +19,7 @@ import {
  */
 export function useChatRealtime({
   currentUser,
+  chats,
   realtimeChatIds,
   setChats,
   fetchChats,
@@ -35,6 +36,8 @@ export function useChatRealtime({
   typingTimeoutsRef
 }) {
   const currentUserId = currentUser?.id;
+  const chatsRef = useRef(chats);
+  chatsRef.current = chats;
   // Load the sidebar once per signed-in user. Do not tie this to
   // realtimeChatIds — that string changes after the first fetch and would
   // refetch + tear down every realtime channel on startup.
@@ -304,7 +307,11 @@ export function useChatRealtime({
           });
 
         const handleTyping = (payload) => {
-            const { userId, chatId, isTyping, userName } = payload.payload;
+            const { userId, chatId, isTyping } = payload.payload || {};
+            const chat = chatsRef.current.find((candidate) => candidate.id === chatId);
+            const member = chat?.members?.find((candidate) => candidate.id === userId);
+            if (!chat || !member || userId === currentUserId) return;
+            const userName = member.name || member.username || 'Пользователь';
             const timeoutKey = `${chatId}:${userId}`;
             if (typingTimeoutsRef.current[timeoutKey]) {
               clearTimeout(typingTimeoutsRef.current[timeoutKey]);
@@ -362,6 +369,7 @@ export function useChatRealtime({
     }
   }, [
     currentUser,
+    currentUserId,
     realtimeChatIds,
     fetchChats,
     fetchStories,
