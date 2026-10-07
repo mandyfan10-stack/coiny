@@ -58,6 +58,8 @@ function Harness() {
     setSharedKeysCache: noop, activeChatId, e2eePrivateKey: null, readCachedMessages });
   const ui = useChatUiState(currentUser);
   Object.assign(controller, { select: setActiveChatId, user: setCurrentUser, load: loader.loadActiveChatMessages, older: loader.loadOlderMessages,
+    replaceMessages: (chatId, messages) => setChats(previous => previous.map(chat => chat.id === chatId ? { ...chat, messages } : chat)),
+    configureChat: (chatId, changes) => setChats(previous => previous.map(chat => chat.id === chatId ? { ...chat, ...changes } : chat)),
     state: { chats, status: loader.historyLoadStatus, loading: loader.isChatLoading, syncing: loader.isSyncing, pagination: loader.messagePagination } });
   const dialogs = new URLSearchParams(location.search).has('dialogs');
   const toggleReaction = (chatId, messageId, emoji) => {

@@ -6,6 +6,8 @@ const state = page => page.evaluate(() => window.__messengerTest.state);
 const complete = (page, kind, id, messages = [], error = null) => page.evaluate(args => window.__messengerTest.complete(...args), [kind, id, messages, error]);
 const completeIndex = (page, index, messages = []) => page.evaluate(args => window.__messengerTest.completeIndex(...args), [index, messages]);
 async function openChat(page, id = 'a') {
+  await page.route('https://fonts.googleapis.com/**', route => route.abort());
+  await page.route('https://fonts.gstatic.com/**', route => route.abort());
   await page.goto(fixture);
   await page.evaluate(id => window.__messengerTest.select(id), id);
   await expect.poll(() => page.evaluate(() => window.__messengerTest.requests.length)).toBe(2);
@@ -187,7 +189,9 @@ test('a refresh failure preserves the reading anchor in a cached history', async
   await complete(page, 'cache', 'a', Array.from({ length: 100 }, (_, index) => message(`row-${index}`, `Строка ${index}\n` + 'Текст сообщения\n'.repeat(4), index)));
   const body = page.locator('.chat-body');
   await expect(page.locator('.message-row')).toHaveCount(100);
+  await body.dispatchEvent('wheel', { deltaY: -1000 });
   await body.evaluate(node => { node.scrollTop = 1200; });
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('coingram_chat_scroll_a') || '{}').scrollTop)).toBe(1200);
   const anchor = await body.evaluate(node => {
     const top = node.getBoundingClientRect().top;
     const row = [...node.querySelectorAll('.message-row')].find(row => row.getBoundingClientRect().bottom > top);

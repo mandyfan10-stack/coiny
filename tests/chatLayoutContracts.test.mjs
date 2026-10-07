@@ -341,9 +341,7 @@ test('light theme fixes tails, auth selectors, background tiers, and contrast', 
   assert.match(indexCss, /html\.theme-light\s+\.auth-tab\.active/);
   assert.match(indexCss, /html\.theme-light\s+\.auth-input-wrapper\s+input/);
 
-  // 3. Message bubble tails in light theme are white and theme pastel
-  assert.match(settingsCss, /html\.theme-light\s+\.message-row\.group-last\.row-other\s+\.message-bubble[^{]*::before\s*\{[^}]*%23ffffff/s);
-  assert.match(settingsCss, /html\.theme-light\.theme-telegram-blue\s+\.message-row\.group-last\.row-me\s+\.message-bubble[^{]*::after\s*\{[^}]*%23bae6fd/s);
+  // Tail colors are checked in the browser for all six light and dark themes.
 
   // 4. Voice seek bar is visible on light background
   assert.match(indexCss, /html\.theme-light\s+\.voice-seek-bar\s*\{[^}]*rgba\(15,\s*23,\s*42,\s*0\.12\)/s);

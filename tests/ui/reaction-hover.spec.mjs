@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 
 async function loadMessages(page, historyLength = 0) {
+  await page.route('https://fonts.googleapis.com/**', route => route.abort());
+  await page.route('https://fonts.gstatic.com/**', route => route.abort());
   await page.goto('/tests/ui/messenger-fixture.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => Boolean(window.__messengerTest?.select));
   await page.evaluate(() => window.__messengerTest.select('a'));
@@ -16,19 +18,15 @@ async function loadMessages(page, historyLength = 0) {
   await expect(page.locator('.message-row')).toHaveCount(historyLength + 2);
 }
 
-for (const strategy of ['path', 'svg', 'legacy']) {
-  test(`mouse hover opens reachable reaction controls with ${strategy} bubbles`, async ({ page, isMobile }) => {
+for (const legacyPreference of [null, 'true', 'false']) {
+  test(`mouse hover opens reachable reaction controls with legacy preference ${legacyPreference}`, async ({ page, isMobile }) => {
     test.skip(isMobile, 'Desktop mouse interaction');
-    if (strategy === 'legacy') await page.addInitScript(() => localStorage.setItem('coiny_custom_bubble_geometry', 'false'));
-    if (strategy === 'svg') await page.addInitScript(() => {
-      const supports = CSS.supports.bind(CSS);
-      CSS.supports = (...args) => args.some(arg => String(arg).includes('path(')) ? false : supports(...args);
-    });
+    if (legacyPreference !== null) await page.addInitScript(value => localStorage.setItem('coiny_custom_bubble_geometry', value), legacyPreference);
     await loadMessages(page);
     for (const id of ['incoming', 'outgoing']) {
       const bubble = page.locator(`[data-message-id="${id}"] .message-bubble`);
-      if (strategy === 'legacy') await expect(bubble).not.toHaveClass(/custom-geometry-active/);
-      else await expect(bubble).toHaveClass(/custom-geometry-active/);
+      await expect(bubble).not.toHaveClass(/custom-geometry-active/);
+      await expect(bubble).toHaveCSS('clip-path', 'none');
       await bubble.hover();
       const button = page.locator(`[data-message-id="${id}"] .hover-action-btn[title="Реакция"], .message-hover-actions[data-message-actions-for="${id}"] .hover-action-btn[title="Реакция"]`);
       await expect(button).toHaveCount(1);
@@ -60,7 +58,9 @@ test('desktop reaction controls stay reachable at the viewport edges and close n
   for (const width of [769, 1024, 1920]) {
     await page.setViewportSize({ width, height: 600 });
     const row = page.locator('[data-message-id="older-15"]');
-    await row.evaluate(node => node.scrollIntoView({ block: 'start' }));
+    await page.locator('.chat-body').dispatchEvent('wheel', { deltaY: -1000 });
+    await row.evaluate(node => node.scrollIntoView({ block: 'start', behavior: 'instant' }));
+    await expect.poll(() => row.evaluate(node => Math.abs(node.getBoundingClientRect().top - node.closest('.chat-body').getBoundingClientRect().top))).toBeLessThan(2);
     await row.locator('.message-bubble').hover();
     const actions = page.getByRole('toolbar', { name: 'Действия сообщения' });
     await expect(actions).toBeVisible();

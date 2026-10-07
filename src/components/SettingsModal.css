@@ -5,6 +5,7 @@ html.theme-telegram-blue {
   --accent-color-alpha: rgba(36, 129, 204, 0.15);
   --accent-gradient: linear-gradient(135deg, #2481cc 0%, #1c6199 100%);
   --bubble-me: linear-gradient(135deg, #2b5278 0%, #203f5e 100%);
+  --bubble-tail-me: #203f5e;
 }
 
 html.theme-emerald-green {
@@ -13,6 +14,7 @@ html.theme-emerald-green {
   --accent-color-alpha: rgba(15, 157, 88, 0.15);
   --accent-gradient: linear-gradient(135deg, #0f9d58 0%, #0c7a45 100%);
   --bubble-me: linear-gradient(135deg, #166239 0%, #0f4427 100%);
+  --bubble-tail-me: #0f4427;
 }
 
 html.theme-sakura-pink {
@@ -21,6 +23,7 @@ html.theme-sakura-pink {
   --accent-color-alpha: rgba(224, 122, 95, 0.15);
   --accent-gradient: linear-gradient(135deg, #e07a5f 0%, #c45b3f 100%);
   --bubble-me: linear-gradient(135deg, #964a36 0%, #703323 100%);
+  --bubble-tail-me: #703323;
 }
 
 html.theme-electric-purple {
@@ -29,6 +32,7 @@ html.theme-electric-purple {
   --accent-color-alpha: rgba(138, 43, 226, 0.15);
   --accent-gradient: linear-gradient(135deg, #8a2be2 0%, #691fae 100%);
   --bubble-me: linear-gradient(135deg, #58189c 0%, #3e0e70 100%);
+  --bubble-tail-me: #3e0e70;
 }
 
 html.theme-sunset-amber {
@@ -37,11 +41,13 @@ html.theme-sunset-amber {
   --accent-color-alpha: rgba(217, 119, 6, 0.15);
   --accent-gradient: linear-gradient(135deg, #d97706 0%, #a15203 100%);
   --bubble-me: linear-gradient(135deg, #914d03 0%, #693701 100%);
+  --bubble-tail-me: #693701;
 }
 
 /* --- Light Mode Bubble Overrides per Accent Theme --- */
 html.theme-light.theme-telegram-blue {
   --bubble-me: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+  --bubble-tail-me: #bae6fd;
 }
 
 html.theme-light.theme-telegram-blue .message-bubble.bubble-me {
@@ -54,6 +60,7 @@ html.theme-light.theme-telegram-blue .message-bubble.bubble-me .message-text {
 
 html.theme-light.theme-emerald-green {
   --bubble-me: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+  --bubble-tail-me: #bbf7d0;
 }
 
 html.theme-light.theme-emerald-green .message-bubble.bubble-me {
@@ -66,6 +73,7 @@ html.theme-light.theme-emerald-green .message-bubble.bubble-me .message-text {
 
 html.theme-light.theme-sakura-pink {
   --bubble-me: linear-gradient(135deg, #ffe4e6 0%, #fecdd3 100%);
+  --bubble-tail-me: #fecdd3;
 }
 
 html.theme-light.theme-sakura-pink .message-bubble.bubble-me {
@@ -78,6 +86,7 @@ html.theme-light.theme-sakura-pink .message-bubble.bubble-me .message-text {
 
 html.theme-light.theme-electric-purple {
   --bubble-me: linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%);
+  --bubble-tail-me: #e9d5ff;
 }
 
 html.theme-light.theme-electric-purple .message-bubble.bubble-me {
@@ -90,6 +99,7 @@ html.theme-light.theme-electric-purple .message-bubble.bubble-me .message-text {
 
 html.theme-light.theme-sunset-amber {
   --bubble-me: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  --bubble-tail-me: #fde68a;
 }
 
 html.theme-light.theme-sunset-amber .message-bubble.bubble-me {
@@ -106,8 +116,10 @@ html:not(.theme-light).theme-rainbow-pearl {
   --accent-color-hover: #c020d9;
   --accent-color-alpha: rgba(224, 64, 251, 0.2);
   --accent-gradient: linear-gradient(135deg, #ff0080, #ff8c00, #40e0d0, #8a2be2, #ff0080);
-  --bubble-me: linear-gradient(135deg, rgba(255, 0, 128, 0.45), rgba(138, 43, 226, 0.45), rgba(0, 200, 255, 0.4));
-  --bubble-other: linear-gradient(135deg, rgba(30, 0, 60, 0.7), rgba(0, 40, 80, 0.6));
+  --bubble-me: linear-gradient(135deg, rgba(255, 0, 128, 0.35), rgba(255, 140, 0, 0.25), rgba(138, 43, 226, 0.35), rgba(0, 200, 255, 0.3));
+  --bubble-other: linear-gradient(135deg, rgba(20, 0, 50, 0.8), rgba(0, 30, 60, 0.7), rgba(30, 0, 40, 0.75));
+  --bubble-tail-me: rgba(0, 200, 255, 0.3);
+  --bubble-tail-other: rgba(30, 0, 40, 0.75);
   --bg-primary: #0a0014;
   --bg-secondary: #0d0018;
   --bg-active: #1a0030;
@@ -126,6 +138,8 @@ html.theme-light.theme-rainbow-pearl {
   --accent-gradient: linear-gradient(135deg, #ec4899, #f97316, #06b6d4, #a855f7, #ec4899);
   --bubble-me: linear-gradient(135deg, #fce7f3 0%, #f3e8ff 50%, #e0f2fe 100%);
   --bubble-other: #ffffff;
+  --bubble-tail-me: #e0f2fe;
+  --bubble-tail-other: #ffffff;
   --bg-primary: #fdfbff;
   --bg-secondary: #ffffff;
   --bg-active: #f5eeff;
@@ -383,35 +397,17 @@ html.theme-light.theme-rainbow-pearl .chat-body > * {
 }
 
 /* ===== MESSAGE BUBBLES ===== */
-html:not(.theme-light).theme-rainbow-pearl .message-bubble.bubble-me {
-  background: linear-gradient(135deg,
-    rgba(255, 0, 128, 0.35),
-    rgba(255, 140, 0, 0.25),
-    rgba(138, 43, 226, 0.35),
-    rgba(0, 200, 255, 0.3)) !important;
-  background-size: 300% 300% !important;
-  animation: rainbowShift 5s ease infinite !important;
+html:not(.theme-light).theme-rainbow-pearl .message-bubble.bubble-me:not(.bubble-sticker):not(.bubble-video) {
   border: 1px solid rgba(255, 0, 255, 0.15) !important;
-  box-shadow: 0 2px 12px rgba(255, 0, 128, 0.15), 0 2px 8px rgba(138, 43, 226, 0.1) !important;
 }
 
-html:not(.theme-light).theme-rainbow-pearl .message-bubble.bubble-other {
-  background: linear-gradient(135deg,
-    rgba(20, 0, 50, 0.8),
-    rgba(0, 30, 60, 0.7),
-    rgba(30, 0, 40, 0.75)) !important;
+html:not(.theme-light).theme-rainbow-pearl .message-bubble.bubble-other:not(.bubble-sticker):not(.bubble-video) {
   border: 1px solid rgba(138, 43, 226, 0.15) !important;
-  box-shadow: 0 2px 8px rgba(138, 43, 226, 0.1) !important;
 }
 
-html.theme-light.theme-rainbow-pearl .message-bubble.bubble-me {
-  background: linear-gradient(135deg,
-    #fce7f3 0%,
-    #f3e8ff 50%,
-    #e0f2fe 100%) !important;
+html.theme-light.theme-rainbow-pearl .message-bubble.bubble-me:not(.bubble-sticker):not(.bubble-video) {
   color: #3b0764 !important;
   border: 1px solid rgba(192, 38, 211, 0.22) !important;
-  box-shadow: 0 1px 4px rgba(168, 85, 247, 0.1) !important;
 }
 
 html.theme-light.theme-rainbow-pearl .message-bubble.bubble-me .message-text {
@@ -422,11 +418,9 @@ html.theme-light.theme-rainbow-pearl .message-bubble.bubble-me .bubble-metadata 
   color: #7e22ce !important;
 }
 
-html.theme-light.theme-rainbow-pearl .message-bubble.bubble-other {
-  background: #ffffff !important;
+html.theme-light.theme-rainbow-pearl .message-bubble.bubble-other:not(.bubble-sticker):not(.bubble-video) {
   color: #1f1430 !important;
   border: 1px solid rgba(192, 38, 211, 0.15) !important;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05) !important;
 }
 
 html.theme-light.theme-rainbow-pearl .message-bubble.bubble-other .message-text {
@@ -1415,7 +1409,9 @@ html.theme-light {
   --border-color: #e2e8f0;
   
   --bubble-me: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
-  --bubble-other: #f1f5f9;
+  --bubble-other: #ffffff;
+  --bubble-tail-me: #bae6fd;
+  --bubble-tail-other: #ffffff;
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
   --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.12);
@@ -1542,7 +1538,6 @@ html.theme-light .message-bubble.bubble-me {
 
 html.theme-light .message-bubble.bubble-other {
   color: #0f172a;
-  background: #ffffff !important;
   box-shadow: 0 1px 2px rgba(0,0,0,0.08);
 }
 
@@ -1556,39 +1551,6 @@ html.theme-light .message-time {
 
 html.theme-light .sender-name {
   color: var(--accent-color);
-}
-
-/* Message bubble tails in light theme */
-html.theme-light .message-row.group-last.row-other .message-bubble:not(.bubble-sticker):not(.bubble-video):not(.bubble-media-only)::before {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='14' viewBox='0 0 9 14'%3E%3Cpath fill='%23ffffff' d='M9,0 C9,7 7,14 0,14 L9,14 Z'/%3E%3C/svg%3E");
-}
-
-html.theme-light .message-row.group-last.row-me .message-bubble:not(.bubble-sticker):not(.bubble-video):not(.bubble-media-only)::after {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='14' viewBox='0 0 9 14'%3E%3Cpath fill='%23bae6fd' d='M0,0 C0,7 2,14 9,14 L0,14 Z'/%3E%3C/svg%3E");
-}
-
-html.theme-light.theme-telegram-blue .message-row.group-last.row-me .message-bubble:not(.bubble-sticker):not(.bubble-video):not(.bubble-media-only)::after {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='14' viewBox='0 0 9 14'%3E%3Cpath fill='%23bae6fd' d='M0,0 C0,7 2,14 9,14 L0,14 Z'/%3E%3C/svg%3E");
-}
-
-html.theme-light.theme-emerald-green .message-row.group-last.row-me .message-bubble:not(.bubble-sticker):not(.bubble-video):not(.bubble-media-only)::after {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='14' viewBox='0 0 9 14'%3E%3Cpath fill='%23bbf7d0' d='M0,0 C0,7 2,14 9,14 L0,14 Z'/%3E%3C/svg%3E");
-}
-
-html.theme-light.theme-sakura-pink .message-row.group-last.row-me .message-bubble:not(.bubble-sticker):not(.bubble-video):not(.bubble-media-only)::after {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='14' viewBox='0 0 9 14'%3E%3Cpath fill='%23fecdd3' d='M0,0 C0,7 2,14 9,14 L0,14 Z'/%3E%3C/svg%3E");
-}
-
-html.theme-light.theme-electric-purple .message-row.group-last.row-me .message-bubble:not(.bubble-sticker):not(.bubble-video):not(.bubble-media-only)::after {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='14' viewBox='0 0 9 14'%3E%3Cpath fill='%23e9d5ff' d='M0,0 C0,7 2,14 9,14 L0,14 Z'/%3E%3C/svg%3E");
-}
-
-html.theme-light.theme-sunset-amber .message-row.group-last.row-me .message-bubble:not(.bubble-sticker):not(.bubble-video):not(.bubble-media-only)::after {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='14' viewBox='0 0 9 14'%3E%3Cpath fill='%23fde68a' d='M0,0 C0,7 2,14 9,14 L0,14 Z'/%3E%3C/svg%3E");
-}
-
-html.theme-light.theme-rainbow-pearl .message-row.group-last.row-me .message-bubble:not(.bubble-sticker):not(.bubble-video):not(.bubble-media-only)::after {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='14' viewBox='0 0 9 14'%3E%3Cpath fill='%23e0f2fe' d='M0,0 C0,7 2,14 9,14 L0,14 Z'/%3E%3C/svg%3E");
 }
 
 /* Message hover actions */

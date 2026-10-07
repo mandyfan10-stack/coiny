@@ -76,15 +76,6 @@ test('all themes have full CSS definitions for both dark (night) and light (norm
   assert.match(settingsCss, /html\.theme-light\.theme-rainbow-pearl\s+\.chat-footer-input/);
 });
 
-test('all themes have bubble tail SVGs in light mode', () => {
-  assert.match(settingsCss, /html\.theme-light\.theme-telegram-blue[\s\S]*?row-me[\s\S]*?background-image:\s*url\("data:image\/svg\+xml/);
-  assert.match(settingsCss, /html\.theme-light\.theme-emerald-green[\s\S]*?row-me[\s\S]*?background-image:\s*url\("data:image\/svg\+xml/);
-  assert.match(settingsCss, /html\.theme-light\.theme-sakura-pink[\s\S]*?row-me[\s\S]*?background-image:\s*url\("data:image\/svg\+xml/);
-  assert.match(settingsCss, /html\.theme-light\.theme-electric-purple[\s\S]*?row-me[\s\S]*?background-image:\s*url\("data:image\/svg\+xml/);
-  assert.match(settingsCss, /html\.theme-light\.theme-sunset-amber[\s\S]*?row-me[\s\S]*?background-image:\s*url\("data:image\/svg\+xml/);
-  assert.match(settingsCss, /html\.theme-light\.theme-rainbow-pearl[\s\S]*?row-me[\s\S]*?background-image:\s*url\("data:image\/svg\+xml/);
-});
-
 test('AppearanceTab provides toggle for night mode', () => {
   assert.match(appearanceTabCode, /isDarkMode/);
   assert.match(appearanceTabCode, /setIsDarkMode/);

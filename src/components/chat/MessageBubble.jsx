@@ -24,7 +24,7 @@ import {
 } from './mediaPlayers';
 import MobileActionSheet from './MobileActionSheet';
 import useMessageTouch from '../../hooks/useMessageTouch';
-import useBubbleGeometry from '../../hooks/useBubbleGeometry';
+import { getMessageGrouping } from '../../utils/messageGrouping';
 import { getReplyType } from '../../utils/mobileActionSheetUtils';
 import './Message.css';
 
@@ -77,33 +77,7 @@ export default function MessageBubble({
   const nextMsg = activeChat.messages[index + 1];
   const prevMsg = activeChat.messages[index - 1];
 
-  const getSenderKey = (m) => {
-    if (!m) return null;
-    return m.senderId || m.sender_id || m.senderName || null;
-  };
-
-  const currentSenderKey = getSenderKey(msg);
-  const prevSenderKey = getSenderKey(prevMsg);
-  const nextSenderKey = getSenderKey(nextMsg);
-
-  const isSameSenderAsPrev = Boolean(
-    prevMsg &&
-    prevSenderKey &&
-    currentSenderKey &&
-    prevSenderKey === currentSenderKey &&
-    Math.abs(new Date(msg.timestamp).getTime() - new Date(prevMsg.timestamp).getTime()) < 10 * 60 * 1000
-  );
-
-  const isSameSenderAsNext = Boolean(
-    nextMsg &&
-    nextSenderKey &&
-    currentSenderKey &&
-    nextSenderKey === currentSenderKey &&
-    Math.abs(new Date(nextMsg.timestamp).getTime() - new Date(msg.timestamp).getTime()) < 10 * 60 * 1000
-  );
-
-  const isFirstInGroup = !isSameSenderAsPrev;
-  const isLastInGroup = !isSameSenderAsNext;
+  const { isFirstInGroup, isLastInGroup } = getMessageGrouping(msg, prevMsg, nextMsg);
   const showSenderName = isGroupOther && isFirstInGroup;
 
   const isVoice = Boolean(msg.media && msg.text && (msg.text.startsWith('🎤 Голосовое сообщение') || msg.text.startsWith('Голосовое сообщение')));
@@ -188,8 +162,6 @@ export default function MessageBubble({
   });
 
   const bubbleRef = useRef(null);
-  const [isHovered, setIsHovered] = useState(false);
-  const [isPressed, setIsPressed] = useState(false);
   const showHoverActions = canHover && (showMsgActionsId ? isReactionOpen : hoveredMessageId === msg.id);
 
   const revealHoverActions = useCallback(() => {
@@ -273,47 +245,15 @@ export default function MessageBubble({
     };
   }, [showHoverActions, repositionHoverActions]);
 
-  const handleBubblePointerDown = useCallback((e) => {
-    setIsPressed(true);
-    touchHandlers.handleBubblePointerDown(e);
-  }, [touchHandlers]);
+  const handleBubblePointerDown = touchHandlers.handleBubblePointerDown;
   const handleBubblePointerMove = touchHandlers.handleBubblePointerMove;
-  const handleBubblePointerUp = useCallback((e) => {
-    setIsPressed(false);
-    touchHandlers.handleBubblePointerUp(e);
-  }, [touchHandlers]);
-  const clearLongPress = useCallback((e) => {
-    setIsPressed(false);
-    touchHandlers.clearLongPress(e);
-  }, [touchHandlers]);
+  const handleBubblePointerUp = touchHandlers.handleBubblePointerUp;
+  const clearLongPress = touchHandlers.clearLongPress;
   const handleContextMenu = touchHandlers.onContextMenu;
   const swipeOffset = touchHandlers.swipeOffset;
   const isSwiping = touchHandlers.isSwiping;
 
-  const seriesPosition = !isSameSenderAsPrev && !isSameSenderAsNext
-    ? 'single'
-    : !isSameSenderAsPrev && isSameSenderAsNext
-    ? 'first'
-    : isSameSenderAsPrev && isSameSenderAsNext
-    ? 'middle'
-    : 'last';
-
   const hasTail = isLastInGroup && !isSticker && !isVideoNote && !isPureImage && !isPureVideo;
-
-  const { isCustomActive, bubbleStyle, svgClipElement } = useBubbleGeometry(bubbleRef, {
-    side: isMe ? 'out' : 'in',
-    seriesPosition,
-    hasTail,
-    isHovered,
-    isPressed,
-    swipeOffset,
-    isPending: Boolean(msg.isPending),
-    hasReactions: Boolean(msg.reactions && msg.reactions.length > 0),
-    reactionsCount: msg.reactions?.length ?? 0,
-    denseNext: isSameSenderAsNext,
-    densePrev: isSameSenderAsPrev,
-    disabled: isSticker || isVideoNote
-  });
 
   const repositionDrawer = useCallback(() => {
     if (!isReactionOpen || !smileBtnRef.current) return;
@@ -408,6 +348,15 @@ export default function MessageBubble({
     </span>
   );
 
+  // An invisible inline copy reserves the actual time width, including the receipt.
+  // The visible metadata can then sit at the right edge of the final text line.
+  const renderMetadataSpacer = () => (
+    <span className="bubble-metadata-spacer" aria-hidden="true">
+      <span>{getFormatTime(msg.timestamp)}</span>
+      {isMe && <span style={{ width: msg.isFailed ? 12 : 10 }} />}
+    </span>
+  );
+
   return (
     <div
       key={msg.id}
@@ -442,9 +391,8 @@ export default function MessageBubble({
       {/* Bubble */}
       <div
         ref={bubbleRef}
-        className={`message-bubble ${isMe ? 'bubble-me' : 'bubble-other'} ${isVideoNote ? 'bubble-video' : ''} ${isSticker ? 'bubble-sticker' : ''} ${isPureImage || isPureVideo ? 'bubble-media-only' : ''} ${showSenderName ? 'has-sender-name' : ''} ${isImageWithCaption || isVideoWithCaption ? 'bubble-media-with-caption' : ''} ${isCustomActive ? 'custom-geometry-active' : ''} ${hasTail ? 'has-tail' : ''} ${isSearchMatchTarget ? 'search-match-target' : ''}`}
+        className={`message-bubble ${isMe ? 'bubble-me' : 'bubble-other'} ${isVideoNote ? 'bubble-video' : ''} ${isRegularVideo ? 'bubble-regular-video' : ''} ${isSticker ? 'bubble-sticker' : ''} ${isPureImage || isPureVideo ? 'bubble-media-only' : ''} ${showSenderName ? 'has-sender-name' : ''} ${isImageWithCaption || isVideoWithCaption ? 'bubble-media-with-caption' : ''} ${hasTail ? 'has-tail' : ''} ${isSearchMatchTarget ? 'search-match-target' : ''}`}
         style={{
-          ...bubbleStyle,
           transform: swipeOffset ? `translateX(${swipeOffset}px)` : undefined,
           transition: isSwiping ? 'none' : 'transform 0.22s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
         }}
@@ -453,10 +401,9 @@ export default function MessageBubble({
         onPointerUp={handleBubblePointerUp}
         onPointerCancel={clearLongPress}
         onContextMenu={handleContextMenu}
-        onMouseEnter={() => { setIsHovered(true); revealHoverActions(); }}
-        onMouseLeave={() => { setIsHovered(false); hideHoverActions(); }}
+        onMouseEnter={revealHoverActions}
+        onMouseLeave={hideHoverActions}
       >
-        {svgClipElement}
         {swipeOffset !== 0 && (
           <div
             className="message-swipe-reply-indicator"
@@ -533,7 +480,8 @@ export default function MessageBubble({
             <div className="bubble-caption">
               <p className="message-text">
                 {msg.isLocked && <Lock size={13} style={{ color: 'var(--text-secondary)', opacity: 0.8, marginRight: 4 }} />}
-                <span>{renderMessageTextWithLinks(msg.text, searchQuery)}</span>
+                <span dir="auto">{renderMessageTextWithLinks(msg.text, searchQuery)}</span>
+                {renderMetadataSpacer()}
                 {renderMetadata()}
               </p>
             </div>
@@ -559,7 +507,8 @@ export default function MessageBubble({
             <div className="bubble-caption">
               <p className="message-text">
                 {msg.isLocked && <Lock size={13} style={{ color: 'var(--text-secondary)', opacity: 0.8, marginRight: 4 }} />}
-                <span>{renderMessageTextWithLinks(msg.text, searchQuery)}</span>
+                <span dir="auto">{renderMessageTextWithLinks(msg.text, searchQuery)}</span>
+                {renderMetadataSpacer()}
                 {renderMetadata()}
               </p>
             </div>
@@ -578,7 +527,7 @@ export default function MessageBubble({
           /* Text / Voice content */
           <div className="bubble-content">
             {isVoice ? (
-              <div style={{ display: 'flex', alignItems: 'center' }}>
+              <div className="bubble-voice-content">
                 <DecryptedVoicePlayer
                   mediaUrl={msg.media}
                   chatId={activeChat.id}
@@ -590,7 +539,7 @@ export default function MessageBubble({
                 {renderMetadata()}
               </div>
             ) : (msg.text && msg.text.startsWith('```')) ? (
-              <div>
+              <div className="bubble-code-content">
                 <pre className="code-block">
                   <code>{msg.text.replace(/```/g, '')}</code>
                 </pre>
@@ -599,7 +548,8 @@ export default function MessageBubble({
             ) : (
               <p className="message-text">
                 {msg.isLocked && <Lock size={13} style={{ color: 'var(--text-secondary)', opacity: 0.8, marginRight: 4 }} />}
-                <span>{renderMessageTextWithLinks(msg.text, searchQuery)}</span>
+                <span dir="auto">{renderMessageTextWithLinks(msg.text, searchQuery)}</span>
+                {renderMetadataSpacer()}
                 {renderMetadata()}
               </p>
             )}

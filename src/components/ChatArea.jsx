@@ -348,6 +348,17 @@ function formatDateDivider(timestamp) {
   const lastScrollTopRef = useRef(0);
   const [footerHeight, setFooterHeight] = useState(0);
 
+  const restoreReadingAnchor = useCallback((element) => {
+    if (!anchorMessageIdRef.current) return;
+    const anchor = element.querySelector(`.message-row[data-message-id="${anchorMessageIdRef.current}"]`);
+    if (!anchor) return;
+    // offsetTop rounds fractional row positions in WebKit. Restore by the
+    // visible delta so repeated resizes cannot accumulate that rounding.
+    const delta = anchor.getBoundingClientRect().top - element.getBoundingClientRect().top - anchorOffsetRef.current;
+    if (Math.abs(delta) > 0.5) element.scrollTop += delta;
+    lastScrollTopRef.current = element.scrollTop;
+  }, []);
+
   useEffect(() => () => {
     paginationRequestRef.current = null;
     historyRestoreRequestRef.current = null;
@@ -632,7 +643,16 @@ function formatDateDivider(timestamp) {
     const messageCount = activeChat?.messages?.length || 0;
     if (messageCount === 0) return;
 
-    if (!isInitialChatLoadRef.current) return;
+    if (!isInitialChatLoadRef.current) {
+      // React updates can change rows before an earlier restoration's scroll
+      // event is delivered. Restore synchronously so it cannot save a shifted
+      // anchor between rapid reaction or history updates.
+      if (!shouldAutoScrollRef.current && !isScrollingToBottomRef.current &&
+        !isLoadingOlderRef.current && !isPointerDownRef.current && anchorMessageIdRef.current) {
+        restoreReadingAnchor(element);
+      }
+      return;
+    }
     if (userScrolledManuallyRef.current) {
       isInitialChatLoadRef.current = false;
       initialMountTickRef.current = false;
@@ -717,7 +737,7 @@ function formatDateDivider(timestamp) {
     } else {
       initialMountTickRef.current = false;
     }
-  }, [activeChat?.id, activeChat?.messages, activeChat?.unread_count, isInitialLoading, isChatLoading, isSyncing, messagePagination, historyRestoreRevision, currentUser?.id, persistSettledScroll]);
+  }, [activeChat?.id, activeChat?.messages, activeChat?.unread_count, isInitialLoading, isChatLoading, isSyncing, messagePagination, historyRestoreRevision, currentUser?.id, persistSettledScroll, restoreReadingAnchor]);
 
   useEffect(() => {
     if (!activeChat?.id || !isInitialChatLoadRef.current || userScrolledManuallyRef.current ||
@@ -775,6 +795,8 @@ function formatDateDivider(timestamp) {
     const element = chatBodyRef.current;
     if (!element || typeof ResizeObserver === 'undefined') return;
 
+    // Loading replaces the list with a skeleton, so observe its new node when
+    // cached or server messages arrive instead of retaining a detached list.
     const listElement = element.querySelector('.messages-list') || element;
 
     const observer = new ResizeObserver(() => {
@@ -789,20 +811,14 @@ function formatDateDivider(timestamp) {
         chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
         lastScrollTopRef.current = chatBodyRef.current.scrollTop;
       } else if (anchorMessageIdRef.current) {
-        const targetMsg = chatBodyRef.current.querySelector(`.message-row[data-message-id="${anchorMessageIdRef.current}"]`);
-        if (targetMsg) {
-          chatBodyRef.current.scrollTop = targetMsg.offsetTop - anchorOffsetRef.current;
-          // Restoration can round by a pixel. Its scroll event must not look
-          // like the user moving down and reattach a recently released pin.
-          lastScrollTopRef.current = chatBodyRef.current.scrollTop;
-        }
+        restoreReadingAnchor(chatBodyRef.current);
       }
     });
 
     observer.observe(listElement);
     if (listElement !== element) observer.observe(element);
     return () => observer.disconnect();
-  }, [activeChat?.id]);
+  }, [activeChat?.id, isInitialLoading, restoreReadingAnchor]);
 
   useEffect(() => {
     setReplyingTo(null);

@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Check, Image as ImageIcon, Upload, Trash2 } from 'lucide-react';
 import { SETTINGS_THEMES as themes } from './themesData';
-import { isCustomBubbleGeometryEnabled, setCustomBubbleGeometryEnabled } from '../../utils/bubbleGeometrySupport';
 import useResolvedMedia from '../../hooks/useResolvedMedia';
 import SettingSwitch from './SettingSwitch';
 import SettingStatus from './SettingStatus';
@@ -11,7 +10,6 @@ export default function AppearanceTab({
   wallpaperInputRef, handleWallpaperUpload, isUploadingWallpaper,
   themePending, themeError, wallpaperError
 }) {
-  const [customGeometry, setCustomGeometry] = useState(() => isCustomBubbleGeometryEnabled());
   const effectiveCustomUrl = wallpaper && !['classic', 'default', 'sunset', 'space', 'mint', 'cyber'].includes(wallpaper) ? wallpaper : '';
   const hasCustomWallpaper = Boolean(effectiveCustomUrl);
   const { url: resolvedPreviewUrl } = useResolvedMedia(hasCustomWallpaper ? effectiveCustomUrl : null);
@@ -54,11 +52,6 @@ export default function AppearanceTab({
       </div>
       <p className="settings-help">PNG, JPG, WebP</p>
       <SettingStatus error={wallpaperError} />
-    </div>
-    <div className="settings-section">
-      <h3 className="section-title">Форма сообщений</h3>
-      <SettingSwitch id="settings-bubble-geometry" title="Плавные скругления" description="Параметрические суперэллипсы"
-        checked={customGeometry} onChange={value => { setCustomGeometry(value); setCustomBubbleGeometryEnabled(value); }} />
     </div>
   </div>;
 }

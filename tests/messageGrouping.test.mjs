@@ -1,183 +1,49 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { getMessageGrouping } from '../src/utils/messageGrouping.ts';
 
-const messageBubbleSource = readFileSync(
-  new URL('../src/components/chat/MessageBubble.jsx', import.meta.url),
-  'utf8'
-);
+const start = new Date(2026, 9, 6, 12).getTime();
+const message = (minutes = 0, fields = {}) => ({ senderId: 'alice', timestamp: start + minutes * 60_000, ...fields });
+const single = { isFirstInGroup: true, isLastInGroup: true };
 
-const TELEGRAM_SENDER_COLORS = [
-  '#e17076', '#faa774', '#a695e7', '#7bc862',
-  '#6ec9cb', '#65aadd', '#ee7aae', '#e5a55d'
-];
+test('consecutive messages classify the first, middle and last rows', () => {
+  const [first, middle, last] = [message(0), message(1), message(2)];
+  assert.deepEqual(getMessageGrouping(first, null, middle), { isFirstInGroup: true, isLastInGroup: false });
+  assert.deepEqual(getMessageGrouping(middle, first, last), { isFirstInGroup: false, isLastInGroup: false });
+  assert.deepEqual(getMessageGrouping(last, middle, null), { isFirstInGroup: false, isLastInGroup: true });
+  assert.deepEqual(getMessageGrouping(first), single);
+});
 
-function getSenderColor(idOrName) {
-  if (!idOrName) return '#65aadd';
-  let hash = 0;
-  for (let i = 0; i < idOrName.length; i++) {
-    hash = (hash * 31 + idOrName.charCodeAt(i)) >>> 0;
+test('the ten-minute boundary starts a separate series', () => {
+  assert.equal(getMessageGrouping(message(0), null, message(9.999)).isLastInGroup, false);
+  assert.deepEqual(getMessageGrouping(message(0), null, message(10)), single);
+  assert.deepEqual(getMessageGrouping(message(11), message(0), null), single);
+});
+
+test('a local date divider breaks a series even two minutes apart', () => {
+  const before = message(0, { timestamp: new Date(2026, 9, 6, 23, 59).toISOString() });
+  const after = message(0, { timestamp: new Date(2026, 9, 7, 0, 1).toISOString() });
+  assert.deepEqual(getMessageGrouping(before, null, after), single);
+  assert.deepEqual(getMessageGrouping(after, before, null), single);
+});
+
+test('different or absent sender identities never connect', () => {
+  assert.deepEqual(getMessageGrouping(message(0), null, message(1, { senderId: 'bob' })), single);
+  assert.deepEqual(getMessageGrouping(message(0, { senderId: undefined }), null, message(1, { senderId: undefined })), single);
+});
+
+test('legacy sender fields keep their existing grouping compatibility', () => {
+  const legacy = message(1, { senderId: undefined, sender_id: 'alice' });
+  const named = message(2, { senderId: undefined, senderName: 'alice' });
+  assert.deepEqual(getMessageGrouping(legacy, message(0), named), { isFirstInGroup: false, isLastInGroup: false });
+});
+
+test('invalid or missing timestamps do not join neighboring messages', () => {
+  for (const timestamp of [undefined, null, 'invalid']) {
+    assert.deepEqual(getMessageGrouping(message(0, { timestamp }), message(0), message(1)), single);
   }
-  return TELEGRAM_SENDER_COLORS[hash % TELEGRAM_SENDER_COLORS.length];
-}
-
-function computeGrouping({ messages, index, currentUser, activeChat }) {
-  const msg = messages[index];
-  const isMe = msg.senderId === currentUser?.id || msg.senderId === 'current';
-  const isGroupOther = activeChat?.type === 'group' && !isMe;
-
-  const nextMsg = messages[index + 1];
-  const prevMsg = messages[index - 1];
-
-  const getSenderKey = (m) => {
-    if (!m) return null;
-    return m.senderId || m.sender_id || m.senderName || null;
-  };
-
-  const currentSenderKey = getSenderKey(msg);
-  const prevSenderKey = getSenderKey(prevMsg);
-  const nextSenderKey = getSenderKey(nextMsg);
-
-  const isSameSenderAsPrev = Boolean(
-    prevMsg &&
-    prevSenderKey &&
-    currentSenderKey &&
-    prevSenderKey === currentSenderKey &&
-    Math.abs(new Date(msg.timestamp).getTime() - new Date(prevMsg.timestamp).getTime()) < 10 * 60 * 1000
-  );
-
-  const isSameSenderAsNext = Boolean(
-    nextMsg &&
-    nextSenderKey &&
-    currentSenderKey &&
-    nextSenderKey === currentSenderKey &&
-    Math.abs(new Date(nextMsg.timestamp).getTime() - new Date(msg.timestamp).getTime()) < 10 * 60 * 1000
-  );
-
-  const isFirstInGroup = !isSameSenderAsPrev;
-  const isLastInGroup = !isSameSenderAsNext;
-  const showSenderName = isGroupOther && isFirstInGroup;
-
-  return {
-    isMe,
-    isGroupOther,
-    isFirstInGroup,
-    isLastInGroup,
-    showSenderName,
-    senderColor: getSenderColor(msg.senderId || msg.sender_id || msg.senderName)
-  };
-}
-
-test('MessageBubble source defines 8-color Telegram palette and 10-minute threshold', () => {
-  assert.match(
-    messageBubbleSource,
-    /TELEGRAM_SENDER_COLORS\s*=\s*\[\s*['"]#e17076['"],\s*['"]#faa774['"],\s*['"]#a695e7['"],\s*['"]#7bc862['"],\s*['"]#6ec9cb['"],\s*['"]#65aadd['"],\s*['"]#ee7aae['"],\s*['"]#e5a55d['"]\s*\]/,
-    'MessageBubble must include exact 8-color Telegram palette'
-  );
-  assert.match(
-    messageBubbleSource,
-    /10\s*\*\s*60\s*\*\s*1000/,
-    'Grouping time threshold must be 10 minutes (600000 ms)'
-  );
-  assert.match(
-    messageBubbleSource,
-    /isFirstInGroup\s*=\s*!isSameSenderAsPrev/,
-    'First in group must be derived from !isSameSenderAsPrev'
-  );
-  assert.match(
-    messageBubbleSource,
-    /isLastInGroup\s*=\s*!isSameSenderAsNext/,
-    'Last in group must be derived from !isSameSenderAsNext'
-  );
-  assert.match(
-    messageBubbleSource,
-    /showSenderName\s*=\s*isGroupOther\s*&&\s*isFirstInGroup/,
-    'Sender name should only be shown on first-in-group for other senders in group chat'
-  );
 });
 
-test('Sender color hashing is deterministic and spans the 8 colors', () => {
-  const testSenders = ['alice_123', 'bob_456', 'carol_789', 'dave_999', 'eve_111', 'frank_222', 'grace_333', 'heidi_444'];
-  const colors = testSenders.map(s => getSenderColor(s));
-  
-  for (const c of colors) {
-    assert.ok(TELEGRAM_SENDER_COLORS.includes(c), `Color ${c} must be in palette`);
-  }
-  // Deterministic
-  assert.equal(getSenderColor('alice_123'), getSenderColor('alice_123'));
-  assert.equal(getSenderColor(''), '#65aadd');
-});
-
-test('Consecutive messages from same sender within 10 minutes form a cluster', () => {
-  const baseTime = new Date('2026-08-20T12:00:00Z').getTime();
-  const messages = [
-    { id: 'm1', senderId: 'user_bob', senderName: 'Bob', timestamp: new Date(baseTime).toISOString() },
-    { id: 'm2', senderId: 'user_bob', senderName: 'Bob', timestamp: new Date(baseTime + 2 * 60 * 1000).toISOString() },
-    { id: 'm3', senderId: 'user_bob', senderName: 'Bob', timestamp: new Date(baseTime + 5 * 60 * 1000).toISOString() },
-  ];
-  const activeChat = { id: 'group_1', type: 'group' };
-  const currentUser = { id: 'user_alice' };
-
-  const r1 = computeGrouping({ messages, index: 0, currentUser, activeChat });
-  const r2 = computeGrouping({ messages, index: 1, currentUser, activeChat });
-  const r3 = computeGrouping({ messages, index: 2, currentUser, activeChat });
-
-  // First message: first-in-group, not last-in-group, shows sender name
-  assert.equal(r1.isFirstInGroup, true);
-  assert.equal(r1.isLastInGroup, false);
-  assert.equal(r1.showSenderName, true);
-
-  // Middle message: neither first nor last, no sender name
-  assert.equal(r2.isFirstInGroup, false);
-  assert.equal(r2.isLastInGroup, false);
-  assert.equal(r2.showSenderName, false);
-
-  // Last message: not first, is last-in-group (gets avatar), no sender name
-  assert.equal(r3.isFirstInGroup, false);
-  assert.equal(r3.isLastInGroup, true);
-  assert.equal(r3.showSenderName, false);
-});
-
-test('Messages exceeding 10-minute threshold break group clusters', () => {
-  const baseTime = new Date('2026-08-20T12:00:00Z').getTime();
-  const messages = [
-    { id: 'm1', senderId: 'user_bob', senderName: 'Bob', timestamp: new Date(baseTime).toISOString() },
-    { id: 'm2', senderId: 'user_bob', senderName: 'Bob', timestamp: new Date(baseTime + 11 * 60 * 1000).toISOString() },
-  ];
-  const activeChat = { id: 'group_1', type: 'group' };
-  const currentUser = { id: 'user_alice' };
-
-  const r1 = computeGrouping({ messages, index: 0, currentUser, activeChat });
-  const r2 = computeGrouping({ messages, index: 1, currentUser, activeChat });
-
-  // m1 is both first and last in its own 1-message group
-  assert.equal(r1.isFirstInGroup, true);
-  assert.equal(r1.isLastInGroup, true);
-  assert.equal(r1.showSenderName, true);
-
-  // m2 is both first and last in its own 1-message group (>10 mins later)
-  assert.equal(r2.isFirstInGroup, true);
-  assert.equal(r2.isLastInGroup, true);
-  assert.equal(r2.showSenderName, true);
-});
-
-test('Different senders never group together', () => {
-  const baseTime = new Date('2026-08-20T12:00:00Z').getTime();
-  const messages = [
-    { id: 'm1', senderId: 'user_bob', senderName: 'Bob', timestamp: new Date(baseTime).toISOString() },
-    { id: 'm2', senderId: 'user_carol', senderName: 'Carol', timestamp: new Date(baseTime + 1000).toISOString() },
-  ];
-  const activeChat = { id: 'group_1', type: 'group' };
-  const currentUser = { id: 'user_alice' };
-
-  const r1 = computeGrouping({ messages, index: 0, currentUser, activeChat });
-  const r2 = computeGrouping({ messages, index: 1, currentUser, activeChat });
-
-  assert.equal(r1.isFirstInGroup, true);
-  assert.equal(r1.isLastInGroup, true);
-  assert.equal(r1.showSenderName, true);
-
-  assert.equal(r2.isFirstInGroup, true);
-  assert.equal(r2.isLastInGroup, true);
-  assert.equal(r2.showSenderName, true);
+test('numeric, Date and ISO timestamps use the same grouping', () => {
+  assert.deepEqual(getMessageGrouping(message(1, { timestamp: new Date(start + 60_000) }), message(0), message(2, { timestamp: new Date(start + 120_000).toISOString() })), { isFirstInGroup: false, isLastInGroup: false });
 });

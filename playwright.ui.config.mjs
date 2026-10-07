@@ -7,7 +7,7 @@ export default defineConfig({
   projects: [
     { name: 'desktop', use: { viewport: { width: 1440, height: 900 } } },
     { name: 'mobile', use: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } },
-    { name: 'webkit-desktop', testMatch: /reaction-hover\.spec\.mjs/, use: { browserName: 'webkit', viewport: { width: 1440, height: 900 } } },
+    { name: 'webkit-desktop', testMatch: /(reaction-hover|bubble-webkit)\.spec\.mjs/, use: { browserName: 'webkit', viewport: { width: 1440, height: 900 } } },
     { name: 'webkit', testMatch: /bubble-webkit\.spec\.mjs/, use: { browserName: 'webkit', viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } }
   ],
   webServer: {

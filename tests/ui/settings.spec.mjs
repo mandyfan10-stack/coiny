@@ -193,11 +193,12 @@ test('all six colors work in light and dark modes, local switches survive naviga
       await noOverflow(page);
     }
   }
-  await page.getByRole('switch', { name: 'Плавные скругления' }).uncheck();
+  await expect(page.getByRole('switch', { name: 'Плавные скругления' })).toHaveCount(0);
   await navigate(page, 'notifications');
   await page.getByRole('switch', { name: 'Тактильный отклик' }).uncheck();
   await navigate(page, 'appearance');
-  await expect(page.getByRole('switch', { name: 'Плавные скругления' })).not.toBeChecked();
+  await expect(page.getByRole('switch', { name: 'Плавные скругления' })).toHaveCount(0);
+  await expect(page.getByRole('switch', { name: 'Тёмный режим' })).not.toBeChecked();
   await navigate(page, 'notifications');
   await expect(page.getByRole('switch', { name: 'Тактильный отклик' })).not.toBeChecked();
 });
