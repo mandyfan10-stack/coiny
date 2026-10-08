@@ -14,7 +14,7 @@ const indexCss = await readFile(new URL('../src/index.css', import.meta.url), 'u
 const stableExport = await readFile(new URL('../src/components/CallOverlay.jsx', import.meta.url), 'utf8');
 
 test('ChatHeader has info action only — call entry stays in ChatInfo', () => {
-  assert.match(chatHeader, /title="Информация"/);
+  assert.match(chatHeader, /label="Информация"/);
   assert.doesNotMatch(chatHeader, /title="Звонок"/);
   assert.doesNotMatch(chatHeader, /startCall/);
   assert.doesNotMatch(chatHeader, /useCalls/);

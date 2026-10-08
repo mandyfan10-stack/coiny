@@ -12,7 +12,7 @@ import { useE2EE } from '../E2EEContext';
 import { secureCallChannel } from './secureCallChannel';
 import { CALL_AUDIO_CONSTRAINTS, VoiceEnhancementPipeline } from './voiceEnhancement';
 
-const CallContext = createContext();
+export const CallContext = createContext();
 
 /** Outgoing/incoming ring auto-end (C8). */
 export const CALL_RING_TIMEOUT_MS = 60_000;

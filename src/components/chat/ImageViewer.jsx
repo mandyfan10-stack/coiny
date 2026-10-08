@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { VoiceMessagePlayer } from './mediaPlayers';
 import { prepareFiniteMediaDuration } from '../../utils/mediaDuration';
+import IconButton from '../ui/IconButton';
+import './ImageViewer.css';
 
 function isAudioUrl(url) {
   if (!url || typeof url !== 'string') return false;
@@ -36,6 +38,7 @@ function isVideoUrl(url) {
 
 export default function ImageViewer({ imageUrl, isVideo: isVideoProp, onClose }) {
   const videoRef = useRef(null);
+  const closeButtonRef = useRef(null);
   const [videoReady, setVideoReady] = useState(false);
   const [renderType, setRenderType] = useState(() => {
     if (isAudioUrl(imageUrl)) return 'audio';
@@ -108,6 +111,15 @@ export default function ImageViewer({ imageUrl, isVideo: isVideoProp, onClose })
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [imageUrl, onClose]);
 
+  useEffect(() => {
+    if (!imageUrl) return undefined;
+    const returnFocus = document.activeElement;
+    closeButtonRef.current?.focus();
+    return () => {
+      if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
+    };
+  }, [imageUrl]);
+
   if (!imageUrl) return null;
 
   const content = (
@@ -118,26 +130,18 @@ export default function ImageViewer({ imageUrl, isVideo: isVideoProp, onClose })
       aria-label={renderType === 'audio' ? 'Аудио' : renderType === 'video' ? 'Просмотр видео' : 'Просмотр изображения'}
       onClick={onClose}
     >
-      <button
-        type="button"
+      <IconButton
+        ref={closeButtonRef}
         className="chat-image-viewer-close"
         onClick={onClose}
-        aria-label="Закрыть просмотр"
+        label="Закрыть просмотр"
       >
         <X size={26} />
-      </button>
+      </IconButton>
       {renderType === 'audio' ? (
         <div
           className="chat-image-viewer-audio-container"
           onClick={(event) => event.stopPropagation()}
-          style={{
-            background: 'var(--bg-secondary, #17212b)',
-            padding: '20px 24px',
-            borderRadius: '16px',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-            minWidth: '280px',
-            maxWidth: '90vw'
-          }}
         >
           <VoiceMessagePlayer audioUrl={imageUrl} />
         </div>

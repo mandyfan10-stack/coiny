@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 const chatArea = readFileSync(new URL('../src/components/ChatArea.jsx', import.meta.url), 'utf8');
 const mediaPlayers = readFileSync(new URL('../src/components/chat/mediaPlayers.jsx', import.meta.url), 'utf8');
 const imageViewer = readFileSync(new URL('../src/components/chat/ImageViewer.jsx', import.meta.url), 'utf8');
-const chatAreaCss = readFileSync(new URL('../src/components/ChatArea.css', import.meta.url), 'utf8');
+const chatAreaCss = readFileSync(new URL('../src/components/chat/ImageViewer.css', import.meta.url), 'utf8');
 const chatSources = [chatArea, mediaPlayers, imageViewer].join('\n');
 
 test('incoming messages preserve the reader scroll position away from the bottom', () => {

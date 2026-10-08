@@ -42,7 +42,6 @@
   justify-content: space-between;
   padding: 0 14px;
   background: var(--surface-glass);
-  backdrop-filter: blur(12px);
   z-index: 10;
 }
 
@@ -64,13 +63,16 @@
   border: none;
   color: var(--text-secondary);
   cursor: pointer;
-  width: 34px;
-  height: 34px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all var(--transition-fast);
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  flex-shrink: 0;
+  padding: 0;
 }
 
 .info-icon-btn:hover {
@@ -95,10 +97,10 @@
   align-items: center;
   text-align: center;
   padding: 24px 16px 16px;
-  background: linear-gradient(180deg, var(--surface-row) 0%, transparent 100%);
   border-bottom: 1px solid var(--border-color);
   position: relative;
   overflow: hidden;
+  background: var(--bg-secondary);
 }
 
 .info-hero-section.has-banner {
@@ -143,7 +145,7 @@
 
 .info-hero-section.has-banner .info-avatar-hero {
   border: 3px solid var(--bg-secondary);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  box-shadow: none;
 }
 
 .info-avatar-wrapper.editable {
@@ -159,15 +161,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
   overflow: hidden;
   user-select: none;
+  box-shadow: none;
 }
 
 .info-avatar-hero img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  box-shadow: none;
 }
 
 .avatar-edit-badge {
@@ -188,7 +191,6 @@
 }
 
 .info-avatar-wrapper.editable:hover .avatar-edit-badge {
-  transform: scale(1.1);
 }
 
 .info-name-hero {
@@ -203,7 +205,7 @@
 }
 
 .info-status-hero {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-secondary);
   font-weight: 400;
 }
@@ -242,26 +244,26 @@
 }
 
 .quick-action-icon-circle {
-  width: 40px;
-  height: 40px;
   border-radius: 50%;
-  background: var(--surface-chip);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--accent-color);
   transition: all var(--transition-fast);
+  width: 44px;
+  height: 44px;
+  background: var(--accent-color-alpha);
+  box-shadow: none;
 }
 
 .quick-action-item:hover .quick-action-icon-circle {
   background: var(--accent-color);
   color: #ffffff;
-  transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(36, 129, 204, 0.4);
 }
 
 .quick-action-label {
-  font-size: 11.5px;
+  font-size: 14px;
   font-weight: 500;
 }
 
@@ -294,14 +296,14 @@
 }
 
 .info-item-value {
-  font-size: 13.5px;
+  font-size: 14px;
   color: var(--text-primary);
   font-weight: 400;
   word-break: break-word;
 }
 
 .info-item-label {
-  font-size: 11.5px;
+  font-size: 14px;
   color: var(--text-secondary);
   margin-top: 2px;
 }
@@ -311,13 +313,17 @@
   border: none;
   color: var(--text-secondary);
   cursor: pointer;
-  padding: 4px;
   border-radius: 6px;
   margin-left: auto;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all var(--transition-fast);
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  flex-shrink: 0;
+  padding: 0;
 }
 
 .info-copy-pill-btn:hover {
@@ -342,7 +348,7 @@
 
 .info-safety-code {
   font-family: monospace;
-  font-size: 12.5px;
+  font-size: 14px;
   letter-spacing: 0.5px;
   color: var(--text-primary);
   background: var(--surface-inset);
@@ -366,19 +372,19 @@
 }
 
 .info-section-heading {
-  font-size: 12px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-secondary);
   margin: 0;
+  font-size: 14px;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--accent-color);
 }
 
 .info-add-member-trigger {
   background: none;
   border: none;
   color: var(--accent-color);
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   display: flex;
@@ -409,9 +415,11 @@
   border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 6px 10px;
-  font-size: 12.5px;
   color: var(--text-primary);
   outline: none;
+  font-size: 16px;
+  min-height: 44px;
+  min-width: 0;
 }
 
 .info-add-member-input:focus {
@@ -419,14 +427,15 @@
 }
 
 .info-add-submit-btn {
-  background: var(--accent-color);
   border: none;
   color: white;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
   padding: 0 12px;
   border-radius: 8px;
   cursor: pointer;
+  background: var(--accent-solid);
+  min-height: 44px;
 }
 
 .info-member-search-box {
@@ -440,7 +449,7 @@
   border: 1px solid transparent;
   border-radius: 16px;
   padding: 6px 12px 6px 30px;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--text-primary);
   outline: none;
 }
@@ -516,7 +525,7 @@
 }
 
 .info-member-name {
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--text-primary);
   white-space: nowrap;
@@ -525,7 +534,7 @@
 }
 
 .info-member-status-sub {
-  font-size: 11.5px;
+  font-size: 14px;
   color: var(--text-secondary);
   display: flex;
   align-items: center;
@@ -561,10 +570,14 @@
   border: none;
   color: var(--text-secondary);
   cursor: pointer;
-  padding: 4px;
   border-radius: 50%;
   opacity: 0.6;
   transition: all var(--transition-fast);
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  flex-shrink: 0;
+  padding: 0;
 }
 
 .info-member-row:hover .info-member-menu-btn {
@@ -595,7 +608,7 @@
   background: none;
   border: none;
   color: var(--text-primary);
-  font-size: 12.5px;
+  font-size: 14px;
   padding: 8px 10px;
   border-radius: 6px;
   cursor: pointer;
@@ -613,13 +626,15 @@
 /* Segmented Media Tabs */
 .info-segmented-tabs {
   display: flex;
-  background: var(--surface-muted);
   border-bottom: 1px solid var(--border-color);
   position: sticky;
   top: 0;
   z-index: 15;
-  padding: 4px;
   gap: 2px;
+  background: var(--surface-muted);
+  border-radius: 0;
+  margin: 0;
+  padding: 0;
 }
 
 .info-segment-tab {
@@ -627,16 +642,17 @@
   background: none;
   border: none;
   color: var(--text-secondary);
-  font-size: 12px;
   font-weight: 500;
   padding: 6px 0;
-  border-radius: 8px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
   transition: all var(--transition-fast);
+  min-height: 44px;
+  border-radius: 0;
+  font-size: 14px;
 }
 
 .info-segment-tab:hover {
@@ -645,9 +661,9 @@
 }
 
 .info-segment-tab.active {
-  color: #ffffff;
-  background: var(--accent-color);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  background: transparent;
+  box-shadow: inset 0 -3px var(--accent-color);
+  color: var(--accent-color);
 }
 
 .info-segment-count {
@@ -691,7 +707,6 @@
 
 .info-media-thumb-btn:hover {
   opacity: 0.88;
-  transform: scale(1.02);
 }
 
 .info-media-thumb-img {
@@ -757,7 +772,7 @@
 }
 
 .info-doc-title {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--text-primary);
   white-space: nowrap;
@@ -766,7 +781,7 @@
 }
 
 .info-doc-subtext {
-  font-size: 11px;
+  font-size: 14px;
   color: var(--text-secondary);
   margin-top: 2px;
 }
@@ -785,7 +800,7 @@
   padding: 10px 12px;
   background: var(--surface-row);
   border-radius: 8px;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-primary);
 }
 
@@ -807,7 +822,7 @@
   border: 1px solid rgba(235, 87, 87, 0.3);
   background: rgba(235, 87, 87, 0.08);
   color: #ff5959;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -816,9 +831,21 @@
 .info-danger-btn:hover {
   background: rgba(235, 87, 87, 0.18);
   border-color: rgba(235, 87, 87, 0.6);
-  transform: translateY(-1px);
 }
 
 .info-danger-btn:active {
-  transform: scale(0.98);
 }
+
+.chat-info button:focus-visible, .chat-info [role="button"]:focus-visible { outline: 2px solid var(--accent-color); outline-offset: -2px; }
+
+@media (max-width: 768px) {
+  .chat-info { position: fixed; inset: 0; width: 100%; max-width: none; border: 0; z-index: 100; visibility: hidden; pointer-events: none; transform: translateX(100%); transition: transform 200ms ease, visibility 200ms; }
+  .chat-info.open { width: 100%; border: 0; visibility: visible; pointer-events: auto; transform: none; }
+  .chat-info-inner { width: 100%; }
+  .chat-info .info-header { background: var(--mobile-header-bg); color: var(--mobile-header-text); }
+  .chat-info .info-header :is(.info-header-title, .info-icon-btn) { color: var(--mobile-header-text); }
+  .chat-info .info-header .info-icon-btn:hover { background: rgb(255 255 255 / 12%); }
+  .chat-info .info-header button:focus-visible { outline-color: var(--mobile-header-text); }
+}
+
+@media (prefers-reduced-motion: reduce) { .chat-info { transition: none; } }

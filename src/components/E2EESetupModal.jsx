@@ -1,3 +1,6 @@
+import Button from './ui/Button';
+import IconButton from './ui/IconButton';
+import './E2EESetupModal.css';
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useE2EE } from '../context/E2EEContext';
@@ -12,7 +15,7 @@ const getPasswordStrength = (pass) => {
   if (/[a-z]/.test(pass)) score += 1;
   if (/[0-9]/.test(pass)) score += 1;
   if (/[^A-Za-z0-9]/.test(pass)) score += 1;
-  
+
   if (score <= 2) return { text: 'Слабый', color: '#ff4d4f', width: '33%' };
   if (score <= 4) return { text: 'Средний', color: '#faad14', width: '66%' };
   return { text: 'Надежный', color: '#52c41a', width: '100%' };
@@ -21,9 +24,9 @@ const getPasswordStrength = (pass) => {
 export default function E2EESetupModal() {
   const { currentUser, authLoading } = useAuth();
   const {
-    isE2EESetupRequired, 
-    e2eePrivateKey, 
-    setupE2EE, 
+    isE2EESetupRequired,
+    e2eePrivateKey,
+    setupE2EE,
     unlockE2EE,
     resetE2EE
   } = useE2EE();
@@ -102,8 +105,8 @@ export default function E2EESetupModal() {
     setError('');
     setEmailSent(false);
     const emailCandidate = String(currentUser?.email || '').trim();
-    const isSynthetic = emailCandidate.endsWith('@coiny.users.local') || 
-                        emailCandidate.endsWith('@tg-clone.com') || 
+    const isSynthetic = emailCandidate.endsWith('@coiny.users.local') ||
+                        emailCandidate.endsWith('@tg-clone.com') ||
                         emailCandidate.endsWith('@demo.local');
     setRecoveryEmail(isSynthetic ? '' : emailCandidate);
   };
@@ -155,10 +158,10 @@ export default function E2EESetupModal() {
 
   return (
     <div className="e2ee-modal-overlay">
-      <div className="e2ee-modal-content glass-card">
+      <div className="e2ee-modal-content">
         {showResetConfirm ? (
           <div className="e2ee-reset-confirm-view animate-fade-in">
-            <div className="e2ee-icon-container warning-glow">
+            <div className="e2ee-icon-container">
               <AlertTriangle className="e2ee-header-icon reset-warn-icon" />
             </div>
             <h2>Сброс шифрования</h2>
@@ -170,17 +173,17 @@ export default function E2EESetupModal() {
               <span>Вы сможете продолжить общение, но доступ к старой истории переписки будет заблокирован.</span>
             </div>
             <div className="e2ee-actions-row">
-              <button 
-                type="button" 
-                className="e2ee-cancel-btn" 
+              <button
+                type="button"
+                className="e2ee-cancel-btn"
                 onClick={() => setShowResetConfirm(false)}
                 disabled={loading}
               >
                 Отмена
               </button>
-              <button 
-                type="button" 
-                className="e2ee-danger-confirm-btn" 
+              <button
+                type="button"
+                className="e2ee-danger-confirm-btn"
                 onClick={handleFullReset}
                 disabled={loading}
               >
@@ -192,7 +195,7 @@ export default function E2EESetupModal() {
           /* ========================================================
              1. SETUP FLOW (Single step - activates immediately)
              ======================================================== */
-          <div className="e2ee-setup-step-1 animate-scale-up">
+          <div className="e2ee-setup-step-1 animate-fade-in">
             <div className="e2ee-modal-header">
               <div className="e2ee-icon-container setup-glow">
                 <ShieldAlert className="e2ee-header-icon setup-icon" />
@@ -218,14 +221,14 @@ export default function E2EESetupModal() {
                     disabled={loading}
                     autoComplete="new-password"
                   />
-                  <button
+                  <IconButton
                     type="button"
                     className="password-toggle-btn"
                     onClick={() => setShowPassword(!showPassword)}
                     disabled={loading}
                   >
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
+                  </IconButton>
                 </div>
                 {password && (
                   <div className="password-strength-meter" style={{ marginTop: '8px' }}>
@@ -261,9 +264,9 @@ export default function E2EESetupModal() {
                 </span>
               </div>
 
-              <button type="submit" className="e2ee-submit-btn" disabled={loading}>
+              <Button type="submit" className="e2ee-submit-btn" disabled={loading}>
                 {loading ? <span className="spinner"></span> : 'Создать ключи шифрования'}
-              </button>
+              </Button>
             </form>
           </div>
         ) : (
@@ -271,9 +274,9 @@ export default function E2EESetupModal() {
              2. UNLOCK & RECOVERY FLOW
              ======================================================== */
           viewMode === 'password' ? (
-            <div className="e2ee-unlock-password animate-scale-up">
+            <div className="e2ee-unlock-password animate-fade-in">
               <div className="e2ee-modal-header">
-                <div className="e2ee-icon-container unlock-glow">
+                <div className="e2ee-icon-container">
                   <LockKeyhole className="e2ee-header-icon unlock-icon" />
                 </div>
                 <h2>Разблокировка шифрования</h2>
@@ -297,33 +300,33 @@ export default function E2EESetupModal() {
                       disabled={loading}
                       autoComplete="current-password"
                     />
-                    <button
+                    <IconButton
                       type="button"
                       className="password-toggle-btn"
                       onClick={() => setShowPassword(!showPassword)}
                       disabled={loading}
                     >
                       {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                    </button>
+                    </IconButton>
                   </div>
                 </div>
 
-                <button type="submit" className="e2ee-submit-btn" disabled={loading}>
+                <Button type="submit" className="e2ee-submit-btn" disabled={loading}>
                   {loading ? <span className="spinner"></span> : 'Разблокировать историю'}
-                </button>
+                </Button>
 
                 <div className="e2ee-alt-actions">
-                  <button 
-                    type="button" 
-                    className="e2ee-link-btn" 
+                  <button
+                    type="button"
+                    className="e2ee-link-btn"
                     onClick={handleOpenEmailRecovery}
                   >
                     Забыли пароль? Восстановить через Email
                   </button>
-                  
-                  <button 
-                    type="button" 
-                    className="e2ee-link-btn danger" 
+
+                  <button
+                    type="button"
+                    className="e2ee-link-btn danger"
                     onClick={() => setShowResetConfirm(true)}
                   >
                     Сбросить шифрование аккаунта
@@ -333,9 +336,9 @@ export default function E2EESetupModal() {
             </div>
           ) : (
             /* viewMode === 'email_recovery' */
-            <div className="e2ee-unlock-recovery animate-scale-up">
+            <div className="e2ee-unlock-recovery animate-fade-in">
               <div className="e2ee-modal-header">
-                <div className="e2ee-icon-container recovery-glow">
+                <div className="e2ee-icon-container">
                   <Mail className="e2ee-header-icon recovery-icon" />
                 </div>
                 <h2>Восстановление через Email</h2>
@@ -351,7 +354,7 @@ export default function E2EESetupModal() {
                     <span>Инструкции по восстановлению успешно отправлены на ваш email. Проверьте почтовый ящик.</span>
                   </div>
 
-                  <button
+                  <Button
                     type="button"
                     className="e2ee-submit-btn"
                     style={{ width: '100%' }}
@@ -359,12 +362,12 @@ export default function E2EESetupModal() {
                   >
                     <ArrowLeft size={16} />
                     <span>Вернуться к вводу пароля</span>
-                  </button>
+                  </Button>
 
                   <div className="e2ee-alt-actions" style={{ marginTop: '14px' }}>
-                    <button 
-                      type="button" 
-                      className="e2ee-link-btn danger" 
+                    <button
+                      type="button"
+                      className="e2ee-link-btn danger"
                       onClick={() => setShowResetConfirm(true)}
                     >
                       Сбросить шифрование аккаунта
@@ -390,23 +393,23 @@ export default function E2EESetupModal() {
                     />
                   </div>
 
-                  <button type="submit" className="e2ee-submit-btn" disabled={loading}>
+                  <Button type="submit" className="e2ee-submit-btn" disabled={loading}>
                     {loading ? <span className="spinner"></span> : 'Отправить инструкции'}
-                  </button>
+                  </Button>
 
                   <div className="e2ee-alt-actions">
-                    <button 
-                      type="button" 
-                      className="e2ee-link-btn" 
+                    <button
+                      type="button"
+                      className="e2ee-link-btn"
                       onClick={handleBackToPassword}
                       disabled={loading}
                     >
                       Вернуться к вводу пароля
                     </button>
 
-                    <button 
-                      type="button" 
-                      className="e2ee-link-btn danger" 
+                    <button
+                      type="button"
+                      className="e2ee-link-btn danger"
                       onClick={() => setShowResetConfirm(true)}
                       disabled={loading}
                     >

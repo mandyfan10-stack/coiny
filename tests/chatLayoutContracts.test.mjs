@@ -5,7 +5,7 @@ import test from 'node:test';
 const indexCss = fs.readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
 const chatAreaCss = fs.readFileSync(new URL('../src/components/ChatArea.css', import.meta.url), 'utf8');
 const chatInfoCss = fs.readFileSync(new URL('../src/components/ChatInfo.css', import.meta.url), 'utf8');
-const settingsCss = fs.readFileSync(new URL('../src/components/SettingsModal.css', import.meta.url), 'utf8');
+const tokensCss = fs.readFileSync(new URL('../src/styles/tokens.css', import.meta.url), 'utf8');
 
 test('desktop chat layout keeps the info panel at its full width beside media', () => {
   assert.match(
@@ -14,7 +14,7 @@ test('desktop chat layout keeps the info panel at its full width beside media', 
     'the central flex item must be allowed to shrink below media intrinsic width',
   );
   assert.match(
-    indexCss,
+    chatInfoCss,
     /\.chat-info\s*\{[^}]*\bflex:\s*0\s+0\s+auto\s*;/s,
     'the details panel must not shrink when the chat contains wide media',
   );
@@ -315,31 +315,28 @@ test('repositionDrawer geometry algorithm handles top, bottom, and side collisio
 });
 
 test('light theme swaps overlay surfaces so info/settings tabs are not dark stains', () => {
-  assert.match(indexCss, /--surface-glass:/);
-  assert.match(indexCss, /--surface-muted:/);
-  assert.match(settingsCss, /html\.theme-light\s*\{[^}]*--surface-glass:\s*#ffffff/s);
-  assert.match(settingsCss, /html\.theme-light\s*\{[^}]*--surface-muted:\s*#f1f5f9/s);
+  assert.match(tokensCss, /--surface-glass:\s*var\(--bg-secondary\)/);
+  assert.match(tokensCss, /--surface-muted:\s*var\(--bg-input\)/);
+  assert.match(tokensCss, /html\.theme-light\s*\{[^}]*--bg-secondary:\s*#ffffff/s);
 
   assert.match(chatInfoCss, /\.info-header\s*\{[^}]*background:\s*var\(--surface-glass\)/s);
   assert.match(chatInfoCss, /\.info-segmented-tabs\s*\{[^}]*background:\s*var\(--surface-muted\)/s);
   assert.doesNotMatch(chatInfoCss, /rgba\(14,\s*22,\s*33/);
 
-  assert.match(chatAreaCss, /html\.theme-light\[data-wallpaper="classic"\]\s+\.chat-body/);
+  assert.match(tokensCss, /html\.theme-light\s*\{[^}]*--chat-wallpaper:/s);
 });
 
 test('light theme fixes tails, auth selectors, background tiers, and contrast', () => {
   const mobileSheetCss = fs.readFileSync(new URL('../src/components/chat/MobileActionSheet.css', import.meta.url), 'utf8');
 
   // 1. --bg-tertiary exists in both :root and html.theme-light
-  assert.match(indexCss, /:root\s*\{[^}]*--bg-tertiary:\s*#24303f/s);
-  assert.match(settingsCss, /html\.theme-light\s*\{[^}]*--bg-tertiary:\s*#f1f5f9/s);
+  assert.match(tokensCss, /:root\s*\{[^}]*--bg-tertiary:\s*#[0-9a-f]{6}/s);
+  assert.match(tokensCss, /html\.theme-light\s*\{[^}]*--bg-tertiary:\s*#[0-9a-f]{6}/s);
 
-  // 2. Auth selectors include html.theme-light
-  assert.match(indexCss, /html\.theme-light\s+\.auth-showcase-panel/);
-  assert.match(indexCss, /html\.theme-light\s+\.auth-card/);
-  assert.match(indexCss, /html\.theme-light\s+\.auth-tabs/);
-  assert.match(indexCss, /html\.theme-light\s+\.auth-tab\.active/);
-  assert.match(indexCss, /html\.theme-light\s+\.auth-input-wrapper\s+input/);
+  // Auth now follows the same palette tokens instead of parallel light overrides.
+  const authCss = fs.readFileSync(new URL('../src/components/AuthScreen.css', import.meta.url), 'utf8');
+  assert.match(authCss, /background:\s*var\(--bg-secondary\)/);
+  assert.match(authCss, /color:\s*var\(--text-primary\)/);
 
   // Tail colors are checked in the browser for all six light and dark themes.
 

@@ -63,7 +63,6 @@ export default function CallOverlay() {
 
   const { chats, renderAvatar } = useChat();
 
-  const [pulseScale, setPulseScale] = useState(1);
   const [isCompact, setIsCompact] = useState(getIsCompactViewport);
   const [elapsed, setElapsed] = useState(0);
   const [isVideoContain, setIsVideoContain] = useState(false);
@@ -167,15 +166,10 @@ export default function CallOverlay() {
           setElapsed(0);
         }
         const timer = setInterval(() => setElapsed((s) => s + 1), 1000);
-        const pulseInterval = setInterval(() => {
-          setPulseScale(1 + Math.random() * 0.28);
-        }, 150);
         return () => {
           clearInterval(timer);
-          clearInterval(pulseInterval);
         };
       }
-      setPulseScale(1.0);
     } else if (callState.status === 'ended') {
       playCallDisconnect();
     }
@@ -240,7 +234,7 @@ export default function CallOverlay() {
         id: currentUserId,
         name: 'Вы',
         avatar: currentUser?.avatar || '👤',
-        avatarColor: currentUser?.avatar_color || currentUser?.avatarColor || 'linear-gradient(135deg, #a1c4fd, #c2e9fb)',
+        avatarColor: currentUser?.avatar_color || currentUser?.avatarColor || '#689fc2',
         muted: Boolean(callState.muted),
         videoStream: localVideoStream,
         speaking: Boolean(callState.isLocalSpeaking),
@@ -643,36 +637,11 @@ export default function CallOverlay() {
           )
         ) : (
           /* ========================================================
-             VOICE-ONLY STAGE (Discord-Style Active Speaker)
+             Voice participants
              ======================================================== */
           <div className="call-voice-stage-container">
-            {/* Active Speaker Dynamic Pulsing Hero */}
+            {/* Speaker avatar */}
             <div className="call-avatar-section">
-              {callState.status === 'connected' && callState.webrtcState === 'connected' && (
-                <>
-                  <div
-                    className="wave-pulse wave-1"
-                    style={{
-                      transform: `translate(-50%, -50%) scale(${pulseScale * 1.12})`,
-                      opacity: (activeSpeaker?.speaking || callState.isRemoteSpeaking) ? 0.45 : 0.12
-                    }}
-                  />
-                  <div
-                    className="wave-pulse wave-2"
-                    style={{
-                      transform: `translate(-50%, -50%) scale(${pulseScale * 1.28})`,
-                      opacity: (activeSpeaker?.speaking || callState.isRemoteSpeaking) ? 0.32 : 0.08
-                    }}
-                  />
-                  <div
-                    className="wave-pulse wave-3"
-                    style={{
-                      transform: `translate(-50%, -50%) scale(${pulseScale * 1.45})`,
-                      opacity: (activeSpeaker?.speaking || callState.isRemoteSpeaking) ? 0.2 : 0.04
-                    }}
-                  />
-                </>
-              )}
               <div className={`call-avatar-circle ${activeSpeaker?.speaking ? 'active-speaker-ring' : ''}`}>
                 {renderAvatar(
                   activeSpeaker?.avatar || avatarContent,

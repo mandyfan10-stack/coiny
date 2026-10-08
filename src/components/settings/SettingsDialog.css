@@ -66,7 +66,8 @@
 .settings-dialog-overlay .settings-nav-item.active svg { color: inherit; }
 .settings-dialog-overlay .settings-nav-item .nav-item-label { min-width: 0; width: auto; flex: 1; font-size: 15px; line-height: 1.4; white-space: normal; overflow-wrap: anywhere; }
 .settings-dialog-overlay .settings-sidebar-footer { display: block; margin-top: auto; padding-top: 12px; }
-.settings-dialog-overlay .logout-item, .settings-dialog-overlay .logout-item svg { color: #e75c60; }
+.settings-dialog-overlay .logout-item, .settings-dialog-overlay .logout-item svg {
+  color: var(--danger-color); }
 .settings-dialog-overlay .settings-main { min-width: 0; min-height: 0; background: var(--bg-secondary); }
 .settings-dialog-overlay .settings-header {
   display: flex;
@@ -116,7 +117,8 @@
 .settings-dialog-overlay .input-help-text, .settings-dialog-overlay .settings-help { font-size: 14px; color: var(--text-secondary); line-height: 1.5; overflow-wrap: anywhere; }
 .settings-dialog-overlay .settings-help { margin: 12px 0; }
 .settings-dialog-overlay .settings-status { font-size: 14px; line-height: 1.5; margin: 10px 0 0; overflow-wrap: anywhere; }
-.settings-dialog-overlay .is-error { color: #e75c60; }
+.settings-dialog-overlay .is-error {
+  color: var(--danger-color); }
 .settings-dialog-overlay .is-success { color: var(--accent-color); }
 .settings-dialog-overlay .settings-action, .settings-dialog-overlay .invite-copy-btn {
   display: inline-flex;
@@ -137,11 +139,11 @@
   box-shadow: none;
   width: auto;
 }
-.settings-dialog-overlay .settings-primary { color: #fff; background: var(--accent-color); border-color: var(--accent-color); }
-.settings-dialog-overlay .settings-danger { color: #e75c60; }
+.settings-dialog-overlay .settings-primary { color: #fff; background: var(--accent-solid); border-color: var(--accent-solid); }
+.settings-dialog-overlay .settings-danger {
+  color: var(--danger-color); }
 .settings-dialog-overlay button:disabled, .settings-dialog-overlay input:disabled { opacity: 0.55; cursor: default; }
 .settings-dialog-overlay button:focus-visible, .settings-dialog-overlay summary:focus-visible { outline: 2px solid var(--accent-color); outline-offset: -2px; }
-.settings-dialog-overlay button:not(:disabled):hover { filter: brightness(1.08); }
 .settings-dialog-overlay .settings-nav-item:hover, .settings-dialog-overlay .settings-sidebar-profile:hover,
 .settings-dialog-overlay .settings-close-btn:hover, .settings-dialog-overlay .settings-back-btn:hover { background: var(--bg-hover); }
 .settings-dialog-overlay .settings-actions-row { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -170,14 +172,6 @@
 .settings-dialog-overlay .settings-switch-row + * { margin-top: 0; }
 .settings-dialog-overlay .settings-row-text { display: flex; flex-direction: column; gap: 5px; min-width: 0; font-size: 15px; }
 .settings-dialog-overlay .settings-row-text small { font-size: 14px; line-height: 1.4; color: var(--text-secondary); }
-.settings-dialog-overlay .settings-switch { width: 44px; height: 28px; flex: 0 0 44px; position: relative; }
-.settings-dialog-overlay .settings-switch input { position: absolute; inset: -8px 0; opacity: 0; width: 44px; height: 44px; z-index: 1; cursor: pointer; }
-.settings-dialog-overlay .settings-switch-track { display: block; height: 28px; border-radius: 20px; background: var(--text-secondary); opacity: 0.7; transition: background-color 150ms ease; }
-.settings-dialog-overlay .settings-switch-track::after { content: ''; position: absolute; top: 4px; left: 4px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform 150ms ease; }
-.settings-dialog-overlay .settings-switch input:checked + .settings-switch-track { background: var(--accent-color); opacity: 1; }
-.settings-dialog-overlay .settings-switch input:checked + .settings-switch-track::after { transform: translateX(16px); }
-.settings-dialog-overlay .settings-switch input:focus-visible + .settings-switch-track { outline: 2px solid var(--accent-color); outline-offset: 3px; }
-.settings-dialog-overlay .settings-switch input:disabled + .settings-switch-track { opacity: 0.4; }
 .settings-dialog-overlay .settings-data-list { margin: 0 0 16px; }
 .settings-dialog-overlay .settings-data-list > div { display: flex; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--border-color); }
 .settings-dialog-overlay dt { color: var(--text-secondary); min-width: 0; }
@@ -222,6 +216,4 @@
   .settings-dialog-overlay .theme-selection-btn { gap: 8px; padding: 10px; }
   .settings-dialog-overlay .settings-wallpaper-preview { height: 144px; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .settings-dialog-overlay .settings-switch-track, .settings-dialog-overlay .settings-switch-track::after { transition: none; }
-}
+@media (max-width: 768px) { .settings-dialog-overlay .settings-dialog .settings-header { background: var(--mobile-header-bg); color: var(--mobile-header-text); }.settings-dialog-overlay .settings-dialog .settings-header :is(.settings-close-btn,.settings-back-btn) { color: var(--mobile-header-text); }.settings-dialog-overlay .settings-dialog .settings-header :is(.settings-close-btn,.settings-back-btn):hover { color: var(--mobile-header-text); background: rgb(255 255 255 / 12%); }.settings-dialog-overlay .settings-header button:focus-visible { outline-color: var(--mobile-header-text); } }

@@ -1,3 +1,6 @@
+import Switch from './ui/Switch';
+import SearchField from './ui/SearchField';
+import IconButton from './ui/IconButton';
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useChat } from '../context/ChatContext';
 import { formatLastSeen } from '../utils/formatLastSeen';
@@ -6,7 +9,6 @@ import { useAuth } from '../context/AuthContext';
 import {
   X,
   Phone,
-  Search,
   Bell,
   BellOff,
   Link,
@@ -441,14 +443,14 @@ export default function ChatInfo() {
         <div className="info-header">
           <h3 className="info-header-title">Информация</h3>
           <div className="info-header-actions">
-            <button
+            <IconButton label="Закрыть информацию"
               type="button"
               className="info-icon-btn"
               onClick={() => setIsInfoOpen(false)}
               title="Закрыть"
             >
               <X size={18} />
-            </button>
+            </IconButton>
           </div>
         </div>
 
@@ -664,16 +666,12 @@ export default function ChatInfo() {
 
               {/* Filter search if members > 4 */}
               {activeChat.members && activeChat.members.length > 4 && (
-                <div className="info-member-search-box">
-                  <Search size={12} className="info-member-search-icon" />
-                  <input
-                    type="text"
+                <SearchField label="Поиск участников" className="info-member-search-box"
                     placeholder="Поиск участников..."
                     value={memberSearchQuery}
                     onChange={(e) => setMemberSearchQuery(e.target.value)}
-                    className="info-member-search-input"
-                  />
-                </div>
+                    inputClassName="info-member-search-input"
+                />
               )}
 
               {/* Members List */}
@@ -931,93 +929,73 @@ export default function ChatInfo() {
                 {activeChat.type === 'group' && (
                   <label className="settings-row-item">
                     <span>Только администраторы могут писать</span>
-                    <div className="switch-wrapper">
-                      <input
-                        type="checkbox"
+                    <Switch
                         checked={Boolean(activeChat.settings?.only_admins_can_post)}
-                        onChange={(e) => {
+                        onChange={(checked) => {
                           const newSettings = {
                             ...activeChat.settings,
-                            only_admins_can_post: e.target.checked
+                            only_admins_can_post: checked
                           };
                           updateChatSettings(activeChat.id, newSettings);
                         }}
-                      />
-                      <span className="switch-slider" />
-                    </div>
+                    />
                   </label>
                 )}
 
                 <label className="settings-row-item">
                   <span>Разрешить отправку медиа</span>
-                  <div className="switch-wrapper">
-                    <input
-                      type="checkbox"
+                  <Switch
                       checked={activeChat.settings?.allow_media !== false}
-                      onChange={(e) => {
+                      onChange={(checked) => {
                         const newSettings = {
                           ...activeChat.settings,
-                          allow_media: e.target.checked
+                          allow_media: checked
                         };
                         updateChatSettings(activeChat.id, newSettings);
                       }}
                     />
-                    <span className="switch-slider" />
-                  </div>
                 </label>
 
                 <label className="settings-row-item">
                   <span>Разрешить отправку стикеров и GIF</span>
-                  <div className="switch-wrapper">
-                    <input
-                      type="checkbox"
+                  <Switch
                       checked={activeChat.settings?.allow_stickers_and_gifs !== false}
-                      onChange={(e) => {
+                      onChange={(checked) => {
                         const newSettings = {
                           ...activeChat.settings,
-                          allow_stickers_and_gifs: e.target.checked
+                          allow_stickers_and_gifs: checked
                         };
                         updateChatSettings(activeChat.id, newSettings);
                       }}
                     />
-                    <span className="switch-slider" />
-                  </div>
                 </label>
 
                 <label className="settings-row-item">
                   <span>Разрешить голосовые и видеосообщения</span>
-                  <div className="switch-wrapper">
-                    <input
-                      type="checkbox"
+                  <Switch
                       checked={activeChat.settings?.allow_voice_and_video_notes !== false}
-                      onChange={(e) => {
+                      onChange={(checked) => {
                         const newSettings = {
                           ...activeChat.settings,
-                          allow_voice_and_video_notes: e.target.checked
+                          allow_voice_and_video_notes: checked
                         };
                         updateChatSettings(activeChat.id, newSettings);
                       }}
                     />
-                    <span className="switch-slider" />
-                  </div>
                 </label>
 
                 <label className="settings-row-item">
                   <span>Разрешить добавление участников</span>
-                  <div className="switch-wrapper">
-                    <input
-                      type="checkbox"
+                  <Switch
                       checked={activeChat.settings?.allow_add_members !== false}
-                      onChange={(e) => {
+                      onChange={(checked) => {
                         const newSettings = {
                           ...activeChat.settings,
-                          allow_add_members: e.target.checked
+                          allow_add_members: checked
                         };
                         updateChatSettings(activeChat.id, newSettings);
                       }}
                     />
-                    <span className="switch-slider" />
-                  </div>
                 </label>
               </div>
             )}

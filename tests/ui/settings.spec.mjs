@@ -7,7 +7,7 @@ const resolve = (page, index, error = null) => page.evaluate(({ index, error }) 
 const open = async (page, section) => {
   await page.evaluate(section => window.__settingsTest.open(section), section);
   await expect(page.locator('.settings-dialog-overlay.open')).toBeVisible();
-  await expect.poll(() => dialog(page).evaluate(element => getComputedStyle(element).transform)).toBe('matrix(1, 0, 0, 1, 0, 0)');
+  await expect.poll(() => dialog(page).evaluate(element => getComputedStyle(element).transform)).toBe('none');
 };
 const navigate = async (page, section) => {
   const back = page.getByRole('button', { name: 'Назад к настройкам' });

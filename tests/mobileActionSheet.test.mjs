@@ -63,18 +63,17 @@ test('MobileActionSheet contains required actions, quick reaction bar, and DOM m
   assert.match(sheetCode, /data-test="mobile-action-delete"/);
 });
 
-test('MobileActionSheet.css enforces strict touch targets (>=44px), blurred backdrop, and safe-area insets', () => {
+test('MobileActionSheet.css enforces strict touch targets (>=44px), flat backdrop, and safe-area insets', () => {
   // Backdrop
   assert.match(sheetCssCode, /\.mobile-action-sheet-backdrop\s*\{/);
   assert.match(sheetCssCode, /position:\s*fixed/);
   assert.match(sheetCssCode, /inset:\s*0/);
-  assert.match(sheetCssCode, /backdrop-filter:\s*blur\(8px\)/);
-  assert.match(sheetCssCode, /-webkit-backdrop-filter:\s*blur\(8px\)/);
+  assert.doesNotMatch(sheetCssCode, /backdrop-filter:/);
   assert.match(sheetCssCode, /env\(safe-area-inset-bottom/);
 
   // Card container
   assert.match(sheetCssCode, /\.mobile-action-sheet\s*\{/);
-  assert.match(sheetCssCode, /border-radius:\s*24px/);
+  assert.match(sheetCssCode, /border-radius:\s*12px 12px 0 0/);
   assert.match(sheetCssCode, /max-width:\s*440px/);
 
   // Reaction carousel & pills (>=44px)
@@ -97,12 +96,12 @@ test('MobileActionSheet.css enforces strict touch targets (>=44px), blurred back
   assert.match(sheetCssCode, /@media \(prefers-reduced-motion: reduce\)/);
 });
 
-test('ChatArea.css contains touch-callout prevention and minimum 44px touch targets', () => {
+test('ChatArea prevents touch callouts and the sheet owns its 44px touch targets', () => {
   assert.match(chatAreaCssCode, /-webkit-touch-callout:\s*none/);
-  assert.match(chatAreaCssCode, /min-height:\s*48px/);
-  assert.match(chatAreaCssCode, /height:\s*44px/);
-  assert.match(chatAreaCssCode, /\.mobile-action-sheet-backdrop/);
-  assert.match(chatAreaCssCode, /\.mobile-action-sheet/);
+  assert.match(sheetCssCode, /min-height:\s*48px/);
+  assert.match(sheetCssCode, /height:\s*44px/);
+  assert.match(sheetCssCode, /\.mobile-action-sheet-backdrop/);
+  assert.match(sheetCssCode, /\.mobile-action-sheet/);
 });
 
 // ---------------------------------------------------------------------------

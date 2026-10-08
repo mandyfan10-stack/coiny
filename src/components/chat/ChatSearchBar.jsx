@@ -1,5 +1,7 @@
 import React, { useEffect, useRef } from 'react';
-import { Search, X, ChevronUp, ChevronDown } from 'lucide-react';
+import { X, ChevronUp, ChevronDown } from 'lucide-react';
+import IconButton from '../ui/IconButton';
+import SearchField from '../ui/SearchField';
 import './ChatSearchBar.css';
 
 export default function ChatSearchBar({
@@ -53,35 +55,31 @@ export default function ChatSearchBar({
       aria-label="Поиск сообщений"
       data-testid="chat-search-bar"
     >
-      <div className="chat-search-input-wrapper">
-        <Search size={16} className="chat-search-icon" aria-hidden="true" />
-        <input
-          ref={inputRef}
-          type="text"
-          className="chat-search-input"
+      <SearchField
+          inputRef={inputRef}
+          className="chat-search-input-wrapper"
+          inputClassName="chat-search-input"
           placeholder="Поиск в чате..."
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           onKeyDown={handleKeyDown}
-          aria-label="Поисковый запрос"
+          label="Поисковый запрос"
           data-testid="chat-search-input"
-        />
+      >
         {isQueryEntered && (
-          <button
-            type="button"
+          <IconButton
+            label="Очистить поиск"
             className="chat-search-clear-btn"
             onClick={() => {
               onSearchChange('');
               inputRef.current?.focus();
             }}
-            title="Очистить"
-            aria-label="Очистить поиск"
             data-testid="chat-search-clear-btn"
           >
-            <X size={14} />
-          </button>
+            <X size={18} />
+          </IconButton>
         )}
-      </div>
+      </SearchField>
 
       {isQueryEntered && (
         <span
@@ -94,40 +92,37 @@ export default function ChatSearchBar({
       )}
 
       <div className="chat-search-nav-btns">
-        <button
-          type="button"
+        <IconButton
+          label="Предыдущее совпадение"
           className="chat-search-nav-btn"
           onClick={onPrevMatch}
           disabled={!hasMatches}
           title="Предыдущее совпадение (Shift+Enter)"
-          aria-label="Предыдущее совпадение"
           data-testid="chat-search-prev-btn"
         >
           <ChevronUp size={18} />
-        </button>
-        <button
-          type="button"
+        </IconButton>
+        <IconButton
+          label="Следующее совпадение"
           className="chat-search-nav-btn"
           onClick={onNextMatch}
           disabled={!hasMatches}
           title="Следующее совпадение (Enter)"
-          aria-label="Следующее совпадение"
           data-testid="chat-search-next-btn"
         >
           <ChevronDown size={18} />
-        </button>
+        </IconButton>
       </div>
 
-      <button
-        type="button"
+      <IconButton
+        label="Закрыть поиск"
         className="chat-search-close-btn"
         onClick={onClose}
         title="Закрыть поиск (Esc)"
-        aria-label="Закрыть поиск"
         data-testid="chat-search-close-btn"
       >
         <X size={18} />
-      </button>
+      </IconButton>
     </div>
   );
 }

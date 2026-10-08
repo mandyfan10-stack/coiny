@@ -2,17 +2,20 @@ import React, { useRef, useEffect, useState } from 'react';
 import { useChat } from '../context/ChatContext';
 import { useAuth } from '../context/AuthContext';
 import { isSupabaseConfigured, supabase } from '../supabaseClient';
-import { 
-  UserCircle, 
-  Users, 
-  Megaphone, 
-  Bookmark, 
-  Settings, 
-  Moon, 
+import {
+  UserCircle,
+  Users,
+  Megaphone,
+  Bookmark,
+  Settings,
+  Moon,
   X
 } from 'lucide-react';
 import { uploadSanitizedPublicImage } from '../services/publicMediaService';
 import { personAvatarFallback } from '../context/chat/avatarFallback';
+import IconButton from './ui/IconButton';
+import Switch from './ui/Switch';
+import './MainMenuDrawer.css';
 
 export default function MainMenuDrawer() {
   const {
@@ -140,8 +143,8 @@ export default function MainMenuDrawer() {
 
   return (
     <div className={`drawer-overlay ${isDrawerOpen ? 'open' : ''}`} onClick={() => setIsDrawerOpen(false)}>
-      <div 
-        className={`drawer-container ${isDrawerOpen ? 'open' : ''}`} 
+      <div
+        className={`drawer-container ${isDrawerOpen ? 'open' : ''}`}
         onClick={(e) => e.stopPropagation()}
         ref={drawerRef}
         onTouchStart={handleDrawerTouchStart}
@@ -151,11 +154,13 @@ export default function MainMenuDrawer() {
         {/* Drawer Header */}
         <div className="drawer-header">
           <div className="drawer-header-top">
-            <div
+            <button
+              type="button"
               className="drawer-user-avatar"
-              style={{ cursor: 'pointer', position: 'relative' }}
               onClick={() => avatarInputRef.current?.click()}
               title="Загрузить фото профиля"
+              aria-label="Загрузить фото профиля"
+              disabled={isUploading}
             >
               {renderAvatar(currentUser.avatar, personAvatarFallback(currentUser))}
               {isUploading && (
@@ -163,18 +168,18 @@ export default function MainMenuDrawer() {
                   ...
                 </div>
               )}
-            </div>
-            <button className="drawer-close-btn" onClick={() => setIsDrawerOpen(false)}>
-              <X size={18} />
             </button>
+            <IconButton label="Закрыть меню" className="drawer-close-btn" onClick={() => setIsDrawerOpen(false)}>
+              <X size={18} />
+            </IconButton>
           </div>
-          
+
           <div className="drawer-user-info-row">
             <div className="drawer-user-meta">
               <span className="drawer-user-name">
                 {currentUser.name}
               </span>
-              <input 
+              <input
                 ref={avatarInputRef}
                 type="file"
                 accept="image/*"
@@ -187,9 +192,9 @@ export default function MainMenuDrawer() {
 
         {/* Drawer Menu List */}
         <div className="drawer-menu-list">
-          
+
           {/* My Profile */}
-          <button 
+          <button
             className="drawer-menu-item"
             onClick={() => handleItemClick(() => {
               openSettings('profile');
@@ -200,7 +205,7 @@ export default function MainMenuDrawer() {
           </button>
 
           {/* Create Group */}
-          <button 
+          <button
             className="drawer-menu-item"
             onClick={() => handleItemClick(() => {
               setNewChatModalTab('group');
@@ -212,7 +217,7 @@ export default function MainMenuDrawer() {
           </button>
 
           {/* Create Channel */}
-          <button 
+          <button
             className="drawer-menu-item"
             onClick={() => handleItemClick(() => {
               setNewChatModalTab('channel');
@@ -224,7 +229,7 @@ export default function MainMenuDrawer() {
           </button>
 
           {/* Saved Messages */}
-          <button 
+          <button
             className="drawer-menu-item"
             onClick={handleOpenSavedMessages}
           >
@@ -233,7 +238,7 @@ export default function MainMenuDrawer() {
           </button>
 
           {/* Settings */}
-          <button 
+          <button
             className="drawer-menu-item"
             onClick={() => handleItemClick(() => {
               openSettings();
@@ -244,20 +249,13 @@ export default function MainMenuDrawer() {
           </button>
 
           {/* Night Mode Toggle */}
-          <div className="drawer-menu-item no-hover-toggle">
+          <label className="drawer-menu-item no-hover-toggle" htmlFor="drawer-dark-mode">
             <div className="drawer-toggle-left">
               <Moon size={20} className="drawer-item-icon" />
               <span className="drawer-item-text">Ночной режим</span>
             </div>
-            <label className="switch-wrapper">
-              <input 
-                type="checkbox" 
-                checked={isDarkMode} 
-                onChange={(e) => setIsDarkMode(e.target.checked)}
-              />
-              <span className="switch-slider"></span>
-            </label>
-          </div>
+            <Switch id="drawer-dark-mode" checked={isDarkMode} onChange={setIsDarkMode} />
+          </label>
 
         </div>
 

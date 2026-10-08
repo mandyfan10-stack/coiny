@@ -3,20 +3,14 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const authScreen = await readFile(new URL('../src/components/AuthScreen.jsx', import.meta.url), 'utf8');
-const indexCss = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
+const indexCss = await readFile(new URL('../src/components/AuthScreen.css', import.meta.url), 'utf8');
 
-test('Variant A: Segmented switch with sliding pill indicator', () => {
-  // Verifies sliding pill indicator element
-  assert.match(authScreen, /auth-tabs-slider/);
-  assert.match(authScreen, /is-login/);
-  assert.match(authScreen, /is-register/);
+test('Auth tabs use the same underline pattern as chat folders', () => {
   assert.match(authScreen, /className="auth-tabs"/);
-  assert.match(authScreen, /className=\{`auth-tab \$\{isLogin \? 'active' : ''\}`\}/);
-
-  // Verifies CSS transitions and sliding pill mechanics
-  assert.match(indexCss, /\.auth-tabs-slider\s*\{/);
-  assert.match(indexCss, /\.auth-tabs-slider\.is-register\s*\{[^}]*transform:\s*translateX\(100%\)/);
-  assert.match(indexCss, /html\.theme-light\s+\.auth-tabs-slider/);
+  assert.match(authScreen, /aria-selected=\{isLogin\}/);
+  assert.match(authScreen, /aria-selected=\{!isLogin\}/);
+  assert.doesNotMatch(authScreen, /auth-tabs-slider|auth-glow|auth-logo-halo/);
+  assert.match(indexCss, /\.auth-tab\.active::after/);
 });
 
 test('Variant A: Password input with Caps Lock detector and focus retention', () => {
@@ -27,7 +21,7 @@ test('Variant A: Password input with Caps Lock detector and focus retention', ()
   assert.match(authScreen, /onClick=\{handlePasswordKey\}/);
 
   // Focus retention and dual mouse/keyboard/touch activation on show/hide toggle
-  assert.match(authScreen, /onMouseDown=\{handleTogglePassword\}/);
+  assert.match(authScreen, /onMouseDown=\{\(event\) => event\.preventDefault\(\)\}/);
   assert.match(authScreen, /onClick=\{handleTogglePassword\}/);
   assert.match(authScreen, /passwordInputRef\.current\.focus\(\)/);
   assert.match(authScreen, /e\.preventDefault\(\)/);
@@ -99,7 +93,6 @@ test('Variant A: Strictly zero emojis in AuthScreen component', () => {
 test('Variant A: Mobile & low-height screen responsiveness in index.css', () => {
   // Mobile responsive layout
   assert.match(indexCss, /@media\s*\(max-width:\s*768px\)/);
-  assert.match(indexCss, /@media\s*\(max-width:\s*860px\)/);
 
   // Small viewport height (down to 600px)
   assert.match(indexCss, /@media\s*\(max-height:\s*640px\)/);

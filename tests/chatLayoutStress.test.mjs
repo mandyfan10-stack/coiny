@@ -1,17 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
+import { messengerFixtureCss } from './messengerFixtureCss.mjs';
 import { chromium } from 'playwright';
 
-const indexCss = fs.readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
-const chatAreaCss = fs.readFileSync(new URL('../src/components/ChatArea.css', import.meta.url), 'utf8');
-const chatInfoCss = fs.readFileSync(new URL('../src/components/ChatInfo.css', import.meta.url), 'utf8');
-
-const combinedCss = `
-${indexCss}
-${chatAreaCss}
-${chatInfoCss}
-`;
+const combinedCss = messengerFixtureCss();
 
 function buildChatHtml(activeChat = true) {
   const ultraLongString = 'A'.repeat(500) + '_1234567890_' + 'B'.repeat(500);
@@ -34,7 +26,7 @@ function buildChatHtml(activeChat = true) {
     <div class="app-container ${activeChat ? 'active-chat-selected' : ''}">
       <div class="sidebar">
         <div class="sidebar-header">
-          <button class="menu-btn" title="Меню">☰</button>
+          <button class="iconButton menu-btn" title="Меню">☰</button>
           <div class="search-container">
             <span class="search-icon">🔍</span>
             <input type="text" placeholder="Поиск" />
@@ -71,7 +63,7 @@ function buildChatHtml(activeChat = true) {
             </div>
           </div>
           <div class="chat-header-actions">
-            <button class="chat-header-btn" aria-label="Info">ℹ️</button>
+            <button class="iconButton chat-header-btn" aria-label="Info">ℹ️</button>
           </div>
         </div>
 
@@ -242,7 +234,7 @@ function buildChatHtml(activeChat = true) {
             <div class="input-textarea-wrapper">
               <textarea placeholder="Сообщение..."></textarea>
             </div>
-            <button class="send-message-btn" aria-label="Send">➤</button>
+            <button class="iconButton send-message-btn" aria-label="Send">➤</button>
           </div>
         </div>
       </div>

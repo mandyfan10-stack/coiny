@@ -1,3 +1,4 @@
+import './Stories.css';
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useChat } from '../context/ChatContext';
 import {
@@ -383,10 +384,6 @@ export default function StoryViewer() {
       onPointerCancel={handlePointerCancel}
     >
       {/* Background glass blur */}
-      <div
-        className="story-viewer-blur-bg"
-        style={{ backgroundImage: storyMediaUrl ? 'url(' + storyMediaUrl + ')' : 'none' }}
-      />
 
       {/* Floating Reaction Animation */}
       {floatingReaction && (

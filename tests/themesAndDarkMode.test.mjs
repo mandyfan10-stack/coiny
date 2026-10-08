@@ -7,10 +7,6 @@ const useChatUiStateCode = await readFile(
   new URL('../src/context/chat/useChatUiState.js', import.meta.url),
   'utf8'
 );
-const settingsCss = await readFile(
-  new URL('../src/components/SettingsModal.css', import.meta.url),
-  'utf8'
-);
 const appearanceTabCode = await readFile(
   new URL('../src/components/settings/AppearanceTab.jsx', import.meta.url),
   'utf8'
@@ -20,7 +16,7 @@ const authScreenCode = await readFile(
   'utf8'
 );
 const indexCss = await readFile(
-  new URL('../src/index.css', import.meta.url),
+  new URL('../src/components/AuthScreen.css', import.meta.url),
   'utf8'
 );
 
@@ -33,17 +29,12 @@ test('preset wallpapers sunset, space, mint and cyber are excluded from selectab
   assert.deepEqual(wallpaperIds, ['classic']);
 
   const themeIds = SETTINGS_THEMES.map((t) => t.id);
+  assert.deepEqual(themeIds, ['telegram-blue', 'emerald-green', 'sakura-pink', 'electric-purple', 'sunset-amber', 'rainbow-pearl']);
   assert.equal(themeIds.includes('cyber'), false, 'cyber must not be in SETTINGS_THEMES');
 
   assert.match(useChatUiStateCode, /deprecatedPresets/);
 });
 
-test('rainbow-pearl theme respects custom wallpaper and hides rainbow background overlay', () => {
-  assert.match(settingsCss, /html:not\(\.theme-light\)\.theme-rainbow-pearl\s+\.chat-body:not\(\.has-custom-wallpaper\)/);
-  assert.match(settingsCss, /html\.theme-light\.theme-rainbow-pearl\s+\.chat-body:not\(\.has-custom-wallpaper\)/);
-  assert.match(settingsCss, /\.chat-body\.has-custom-wallpaper::before[\s\S]*?display:\s*none\s*!important/);
-  assert.match(settingsCss, /\.chat-body\.has-custom-wallpaper[\s\S]*?background-size:\s*cover\s*!important/);
-});
 
 test('useChatUiState does not strip theme-light for rainbow-pearl or any other theme', () => {
   // Should not contain the old suppression hack: || theme === 'rainbow-pearl'
@@ -55,26 +46,6 @@ test('useChatUiState does not strip theme-light for rainbow-pearl or any other t
   assert.match(useChatUiStateCode, /document\.documentElement\.classList\.remove\('theme-light'\)/);
 });
 
-test('all themes have full CSS definitions for both dark (night) and light (normal) modes', () => {
-  const themes = ['telegram-blue', 'emerald-green', 'sakura-pink', 'electric-purple', 'sunset-amber'];
-
-  // Base accent theme rules
-  for (const t of themes) {
-    assert.match(settingsCss, new RegExp(`html\\.theme-${t}\\s*\\{`));
-    assert.match(settingsCss, new RegExp(`html\\.theme-light\\.theme-${t}\\s*\\{`));
-  }
-
-  // Rainbow-pearl has dark mode and light mode rules
-  assert.match(settingsCss, /html:not\(\.theme-light\)\.theme-rainbow-pearl\s*\{/);
-  assert.match(settingsCss, /html\.theme-light\.theme-rainbow-pearl\s*\{/);
-
-  // Light mode rainbow pearl styles message bubbles, sidebar, header and inputs
-  assert.match(settingsCss, /html\.theme-light\.theme-rainbow-pearl\s+\.message-bubble\.bubble-me/);
-  assert.match(settingsCss, /html\.theme-light\.theme-rainbow-pearl\s+\.message-bubble\.bubble-other/);
-  assert.match(settingsCss, /html\.theme-light\.theme-rainbow-pearl\s+\.sidebar/);
-  assert.match(settingsCss, /html\.theme-light\.theme-rainbow-pearl\s+\.chat-header/);
-  assert.match(settingsCss, /html\.theme-light\.theme-rainbow-pearl\s+\.chat-footer-input/);
-});
 
 test('AppearanceTab provides toggle for night mode', () => {
   assert.match(appearanceTabCode, /isDarkMode/);
@@ -88,12 +59,8 @@ test('AuthScreen renders required contracts with modern presentation', () => {
   assert.match(authScreenCode, /className="auth-logo-img"/);
   assert.match(authScreenCode, /auth-footer-security/);
 
-  // Verify modern styling in index.css
   assert.match(indexCss, /\.auth-screen-container/);
-  assert.match(indexCss, /html\.theme-light\s+\.auth-screen-container/);
-  assert.match(indexCss, /html\.theme-light\s+\.auth-showcase-panel/);
-  assert.match(indexCss, /html\.theme-light\s+\.auth-card/);
-  assert.match(indexCss, /html\.theme-light\s+\.auth-tabs/);
-  assert.match(indexCss, /html\.theme-light\s+\.auth-tab\.active/);
-  assert.match(indexCss, /html\.theme-light\s+\.auth-input-wrapper\s+input/);
+  assert.match(indexCss, /background:\s*var\(--bg-secondary\)/);
+  assert.match(indexCss, /color:\s*var\(--text-primary\)/);
+  assert.doesNotMatch(indexCss, /gradient|backdrop-filter|glow/);
 });

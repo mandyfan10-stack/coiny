@@ -1,0 +1,11 @@
+.app-update-overlay { position: fixed; inset: 0; z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgb(0 0 0 / 48%); }
+.app-update-dialog { display: flex; flex-direction: column; width: min(400px, 100%); max-height: 100%; min-height: 0; overflow: hidden; border: 1px solid var(--border-color); border-radius: 12px; background: var(--bg-secondary); color: var(--text-primary); }
+.app-update-header { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 8px 8px 20px; border-bottom: 1px solid var(--border-color); }
+.app-update-header h3 { margin: 0; font-size: 18px; font-weight: 500; }
+.app-update-body { min-height: 0; overflow-y: auto; padding: 20px; font-size: 15px; line-height: 1.5; }
+.app-update-body h4 { margin: 0; font-size: 17px; font-weight: 500; }.app-update-body > p { margin: 4px 0 16px; color: var(--text-secondary); font-size: 14px; }
+.app-update-changelog { overflow-wrap: anywhere; }.app-update-changelog p { margin: 8px 0 0; white-space: pre-wrap; }
+.app-update-actions { display: flex; flex: 0 0 auto; flex-direction: column; gap: 8px; padding: 0 20px 20px; }
+.app-update-actions a { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 12px; border-radius: 8px; background: var(--accent-solid); color: white; font-size: 15px; text-decoration: none; }
+.app-update-actions a:hover { background: color-mix(in srgb, var(--accent-solid) 88%, black); }.app-update-actions a:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 3px; }
+@media (max-width: 768px) { .app-update-overlay { padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); } }

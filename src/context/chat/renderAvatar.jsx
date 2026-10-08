@@ -11,16 +11,16 @@ export {
 } from './avatarFallback';
 
 const TOKEN_VISUALS = Object.freeze({
-  group: { bg: 'linear-gradient(135deg, #3498db, #2980b9)', Icon: Users },
-  channel: { bg: 'linear-gradient(135deg, #b534fa, #e056fd)', Icon: Megaphone },
-  saved: { bg: 'linear-gradient(135deg, #34d399, #059669)', Icon: Bookmark, iconProps: { fill: 'currentColor' } },
-  user: { bg: 'linear-gradient(135deg, #74b9ff, #0984e3)', Icon: User },
-  coin: { bg: 'linear-gradient(135deg, #f6d365, #fda085)', Icon: User },
-  bot: { bg: 'linear-gradient(135deg, #ff7675, #d63031)', Icon: Bot },
-  weather: { bg: 'linear-gradient(135deg, #fdeb82, #f39c12)', Icon: CloudSun },
-  quiz: { bg: 'linear-gradient(135deg, #ff9ff3, #f368e0)', Icon: Brain },
-  spy: { bg: 'linear-gradient(135deg, #57606f, #2f3542)', Icon: User },
-  zap: { bg: 'linear-gradient(135deg, #ffeaa7, #fdcb6e)', Icon: Zap },
+  group: { bg: '#6499c2', Icon: Users },
+  channel: { bg: '#a18ac5', Icon: Megaphone },
+  saved: { bg: '#6499c2', Icon: Bookmark, iconProps: { fill: 'currentColor' } },
+  user: { bg: '#6499c2', Icon: User },
+  coin: { bg: '#c59b6c', Icon: User },
+  bot: { bg: '#c58282', Icon: Bot },
+  weather: { bg: '#bba067', Icon: CloudSun },
+  quiz: { bg: '#a18ac5', Icon: Brain },
+  spy: { bg: '#84929e', Icon: User },
+  zap: { bg: '#bba067', Icon: Zap },
 });
 
 function tokenVisual(token) {
@@ -35,8 +35,10 @@ function tokenVisual(token) {
 }
 
 function letterAvatar(letter) {
+  const colors = ['#6b93c1', '#a58ac5', '#76a883', '#c68c72', '#6ca9ae', '#b79a63'];
+  const color = colors[(letter.codePointAt(0) || 0) % colors.length];
   return (
-    <div className="premium-avatar-container letter-avatar" style={{ background: 'linear-gradient(135deg, #a1c4fd, #c2e9fb)' }}>
+    <div className="premium-avatar-container letter-avatar" style={{ background: color }}>
       <span className="avatar-text">{letter}</span>
     </div>
   );

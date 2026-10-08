@@ -1,24 +1,12 @@
-import React from 'react';
-import {
-  Send,
-  Paperclip,
-  Smile,
-  Mic,
-  X,
-  Play,
-  Pause,
-  Lock,
-  Trash2,
-  CornerUpLeft
-} from 'lucide-react';
+import { Send, Paperclip, Smile, Mic, X, Play, Pause, Lock, Trash2, CornerUpLeft, Camera, Video } from 'lucide-react';
 import { CHAT_MEDIA_ACCEPT } from '../../utils/mediaValidation';
+import { getReplyType } from '../../utils/mobileActionSheetUtils';
 import MediaPickerPanel from './MediaPickerPanel';
+import IconButton from '../ui/IconButton';
 import { triggerHaptic } from '../../hooks/useMessageTouch';
+import './ChatComposer.css';
 
-/**
- * Presentational chat footer: reply bar, text input, emoji/sticker picker,
- * attachment, voice/video record controls. All state/handlers come from ChatArea.
- */
+/** Presentational composer; ChatArea retains messaging, recording and scroll state. */
 export default function ChatComposer({
   activeChat,
   canPost,
@@ -41,6 +29,7 @@ export default function ChatComposer({
   handleFileChange,
   uploading,
   isRecording,
+  isRecordingStarting,
   isRecordingLocked,
   isRecordingPaused,
   isLockActive,
@@ -51,22 +40,28 @@ export default function ChatComposer({
   pauseRecording,
   resumeRecording,
   handlePointerDown,
+  handlePointerMove,
   handlePointerUp,
-  videoPreviewRef
+  handlePointerCancel,
+  videoPreviewRef,
+  footerRef,
+  textareaRef,
+  openSettings
 }) {
-  if (!canPost) {
-    return (
-      <footer className="chat-footer-input restricted" style={{ padding: '8px 16px' }}>
-        <div className="restricted-input-bar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px', color: 'var(--text-secondary)', fontSize: '13px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', border: '1px solid var(--border-color)', width: '100%', textAlign: 'center', boxSizing: 'border-box' }}>
-          <span>{activeChat?.type === 'channel' ? 'Только администраторы могут отправлять сообщения в этот канал' : 'Только администраторы могут отправлять сообщения в эту группу'}</span>
-        </div>
-      </footer>
-    );
-  }
-
-  return (
-    <>
-      <footer className="chat-footer-input">
+  return <>
+      {/* Input Area */}
+      {!canPost ? (
+        <footer className="chat-footer-input restricted" ref={footerRef}>
+          <div className="restricted-input-bar">
+            <span>{activeChat?.requiresUpdate
+              ? 'Для этого чата требуется версия Coiny с поддержкой E2EE v2. Отправка заблокирована.'
+              : activeChat?.type === 'channel'
+                ? 'Только администраторы могут отправлять сообщения в этот канал'
+                : 'Только администраторы могут отправлять сообщения в эту группу'}</span>
+          </div>
+        </footer>
+      ) : (
+        <footer className="chat-footer-input" ref={footerRef}>
         {recipientMissingE2EE && (
           <div className="e2ee-waiting-banner">
             <Lock size={14} className="e2ee-banner-icon" />
@@ -74,16 +69,27 @@ export default function ChatComposer({
           </div>
         )}
 
+        {/* Reply Bar Overlay */}
         {replyingTo && (
           <div className="reply-indicator-bar">
             <CornerUpLeft size={16} className="reply-bar-icon" />
             <div className="reply-bar-meta">
               <span className="reply-bar-title">Ответ пользователю {replyingTo.senderName}</span>
-              <p className="reply-bar-desc">{replyingTo.text}</p>
+              <p className="reply-bar-desc">
+                {(() => {
+                  const info = getReplyType(replyingTo);
+                  if (info.type === 'image') return <><Camera size={13} className="reply-media-svg" /> Фото</>;
+                  if (info.type === 'video') return <><Video size={13} className="reply-media-svg" /> Видео</>;
+                  if (info.type === 'video_note') return <><Video size={13} className="reply-media-svg" /> Видеосообщение</>;
+                  if (info.type === 'voice') return <><Mic size={13} className="reply-media-svg" /> Голосовое сообщение</>;
+                  if (info.type === 'sticker') return <><Smile size={13} className="reply-media-svg" /> Стикер</>;
+                  return info.text;
+                })()}
+              </p>
             </div>
-            <button className="reply-bar-close" onClick={() => setReplyingTo(null)}>
+            <IconButton label="Отменить ответ" className="reply-bar-close" onClick={() => setReplyingTo(null)}>
               <X size={16} />
-            </button>
+            </IconButton>
           </div>
         )}
 
@@ -111,43 +117,38 @@ export default function ChatComposer({
                 </>
               ) : (
                 <div className="record-locked-controls">
-                  <button
+                  <IconButton
                     type="button"
                     className="record-control-btn btn-trash"
-                    onClick={() => {
-                      triggerHaptic(12);
-                      stopRecordingAndSend(true);
-                    }}
-                    title="Удалить запись"
+                    onClick={() => stopRecordingAndSend(true)}
+                    label="Удалить запись"
                   >
                     <Trash2 size={18} />
-                  </button>
+                  </IconButton>
 
-                  <button
+                  <IconButton
                     type="button"
                     className="record-control-btn btn-pause-resume"
                     onClick={isRecordingPaused ? resumeRecording : pauseRecording}
-                    title={isRecordingPaused ? 'Продолжить запись' : 'Приостановить запись'}
+                    label={isRecordingPaused ? "Продолжить запись" : "Приостановить запись"}
                   >
                     {isRecordingPaused ? <Play size={18} fill="currentColor" /> : <Pause size={18} fill="currentColor" />}
-                  </button>
+                  </IconButton>
 
-                  <button
+                  <IconButton
                     type="button"
                     className="record-control-btn btn-send"
-                    onClick={() => {
-                      triggerHaptic(18);
-                      stopRecordingAndSend(false);
-                    }}
-                    title="Отправить"
+                    onClick={() => stopRecordingAndSend(false)}
+                    label="Отправить"
                   >
                     <Send size={18} />
-                  </button>
+                  </IconButton>
                 </div>
               )}
             </div>
           ) : (
             <>
+              {/* Attachment button */}
               {canSendMedia && !recipientMissingE2EE && (
                 <div className="attach-wrapper">
                   <input
@@ -158,10 +159,11 @@ export default function ChatComposer({
                     style={{ display: 'none' }}
                     disabled={uploading}
                   />
-                  <button
+                  <IconButton
+                    type="button"
                     className="input-action-btn"
                     onClick={() => fileInputRef.current?.click()}
-                    title="Прикрепить изображение"
+                    label="Прикрепить изображение или файл"
                     disabled={uploading}
                   >
                     {uploading ? (
@@ -169,13 +171,16 @@ export default function ChatComposer({
                     ) : (
                       <Paperclip size={22} />
                     )}
-                  </button>
+                  </IconButton>
                 </div>
               )}
 
+              {/* Text Area */}
               <div className="input-textarea-wrapper">
                 <textarea
-                  placeholder={recipientMissingE2EE ? 'Шифрование недоступно...' : 'Напишите сообщение...'}
+                  ref={textareaRef}
+                  aria-label="Сообщение"
+                  placeholder={recipientMissingE2EE ? "Шифрование недоступно..." : "Напишите сообщение..."}
                   value={inputVal}
                   onChange={handleInputChange}
                   onKeyDown={handleKeyPress}
@@ -184,17 +189,17 @@ export default function ChatComposer({
                   disabled={recipientMissingE2EE}
                 />
 
+                {/* Emoji / Sticker / GIF picker */}
                 <div className="emoji-wrapper" ref={emojiRef} onMouseDown={(e) => e.stopPropagation()}>
-                  <button
+                  <IconButton
                     type="button"
                     className={`input-action-btn emoji-trigger ${showEmojiPicker ? 'active' : ''}`}
-                    onClick={() => {
-                      triggerHaptic(8);
-                      setShowEmojiPicker(!showEmojiPicker);
-                    }}
+                    active={showEmojiPicker}
+                    onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                    label="Смайлы, стикеры и GIF"
                   >
                     <Smile size={22} />
-                  </button>
+                  </IconButton>
 
                   <MediaPickerPanel
                     isOpen={showEmojiPicker}
@@ -209,23 +214,24 @@ export default function ChatComposer({
                       setReplyingTo(null);
                     }}
                     installedStickers={installedStickers}
+                    onOpenStickerSettings={() => {
+                      openSettings('stickers');
+                    }}
                   />
                 </div>
               </div>
             </>
           )}
 
+          {/* Send Action */}
           {inputVal.trim() && !recipientMissingE2EE ? (
-            <button
+            <IconButton
               className="send-message-btn"
-              onClick={(e) => {
-                triggerHaptic(15);
-                handleSend(e);
-              }}
-              title="Отправить"
+              onClick={(event) => { triggerHaptic(15); handleSend(event); }}
+              label="Отправить"
             >
               <Send size={20} />
-            </button>
+            </IconButton>
           ) : canSendMedia && !recipientMissingE2EE ? (
             <div style={{ position: 'relative' }}>
               {isRecording && !isRecordingLocked && (
@@ -236,41 +242,46 @@ export default function ChatComposer({
                   </div>
                 </div>
               )}
-              <button
+              <IconButton
                 type="button"
-                className={`send-message-btn record-message-btn ${isRecording ? 'recording' : ''}`}
-                onPointerDown={(e) => {
-                  triggerHaptic(25);
-                  handlePointerDown(e);
-                }}
+                className={`send-message-btn record-message-btn ${isRecording ? 'recording' : ''} ${isRecordingStarting ? 'recording-starting' : ''}`}
+                onPointerDown={(event) => { triggerHaptic(25); handlePointerDown(event); }}
+                onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
+                onPointerCancel={handlePointerCancel}
                 onContextMenu={(event) => event.preventDefault()}
-                title={recordMode === 'voice' ? 'Голосовое сообщение' : 'Видеосообщение'}
-                aria-label={recordMode === 'voice' ? 'Голосовое сообщение' : 'Видеосообщение'}
-                aria-pressed={isRecording}
+                label={isRecordingStarting
+                  ? 'Подготовка записи…'
+                  : recordMode === 'voice' ? 'Голосовое сообщение' : 'Видеосообщение'}
+                aria-label={isRecordingStarting
+                  ? 'Подготовка записи'
+                  : recordMode === 'voice' ? 'Голосовое сообщение' : 'Видеосообщение'}
+                aria-pressed={isRecording || isRecordingStarting}
                 disabled={uploading || isRecordingLocked}
               >
                 {recordMode === 'voice' ? <Mic size={20} /> : (
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-                    <circle cx="12" cy="13" r="4" />
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                    <circle cx="12" cy="13" r="4"/>
                   </svg>
                 )}
-              </button>
+              </IconButton>
             </div>
           ) : (
-            <button
+            <IconButton
               className="send-message-btn"
               disabled
-              title={recipientMissingE2EE ? 'Ожидание настройки собеседником' : 'Отправка медиа ограничена'}
+              label={recipientMissingE2EE ? "Ожидание настройки собеседником" : "Отправка медиа ограничена"}
               style={{ opacity: 0.4, cursor: 'not-allowed' }}
             >
               <Send size={20} />
-            </button>
+            </IconButton>
           )}
         </div>
       </footer>
+      )}
 
+      {/* Video Recording Live Preview Overlay */}
       {isRecording && recordMode === 'video' && (
         <div className={`video-record-preview-overlay ${isRecordingPaused ? 'paused' : ''}`}>
           <div className="video-record-circle">
@@ -295,6 +306,5 @@ export default function ChatComposer({
           </div>
         </div>
       )}
-    </>
-  );
+  </>;
 }

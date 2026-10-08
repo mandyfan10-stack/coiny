@@ -14,6 +14,10 @@ const chatAreaCssCode = await readFile(
   new URL('../src/components/ChatArea.css', import.meta.url),
   'utf8'
 );
+const sheetCssCode = await readFile(
+  new URL('../src/components/chat/MobileActionSheet.css', import.meta.url),
+  'utf8'
+);
 const chatAreaCode = await readFile(
   new URL('../src/components/ChatArea.jsx', import.meta.url),
   'utf8'
@@ -56,10 +60,10 @@ test('ChatArea includes mobile action sheet in click-outside dismiss logic', () 
   assert.match(chatAreaCode, /document\.addEventListener\('pointerdown', handleOutsideClick\)/);
 });
 
-test('ChatArea.css contains touch-callout prevention and minimum 44px touch targets', () => {
+test('ChatArea prevents touch callouts and the sheet owns its 44px touch targets', () => {
   assert.match(chatAreaCssCode, /-webkit-touch-callout:\s*none/);
-  assert.match(chatAreaCssCode, /min-height:\s*48px/);
-  assert.match(chatAreaCssCode, /height:\s*44px/);
-  assert.match(chatAreaCssCode, /\.mobile-action-sheet-backdrop/);
-  assert.match(chatAreaCssCode, /\.mobile-action-sheet/);
+  assert.match(sheetCssCode, /min-height:\s*48px/);
+  assert.match(sheetCssCode, /height:\s*44px/);
+  assert.match(sheetCssCode, /\.mobile-action-sheet-backdrop/);
+  assert.match(sheetCssCode, /\.mobile-action-sheet/);
 });

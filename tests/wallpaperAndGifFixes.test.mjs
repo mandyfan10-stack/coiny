@@ -32,8 +32,8 @@ const appearanceTabCode = await readFile(
   new URL('../src/components/settings/AppearanceTab.jsx', import.meta.url),
   'utf8'
 );
-const settingsCss = await readFile(
-  new URL('../src/components/SettingsModal.css', import.meta.url),
+const chatAreaCss = await readFile(
+  new URL('../src/components/ChatArea.css', import.meta.url),
   'utf8'
 );
 
@@ -70,13 +70,13 @@ test('settings wallpapers only has classic and preset wallpapers are removed', a
     'utf8'
   );
 
-  assert.match(themesData, /id: 'classic'[\s\S]*?#0b141a/);
+  assert.match(themesData, /id: 'classic'[\s\S]*?var\(--chat-wallpaper\)/);
   assert.doesNotMatch(themesData, /id: 'sunset'/);
   assert.doesNotMatch(themesData, /id: 'space'/);
   assert.doesNotMatch(themesData, /id: 'mint'/);
   assert.doesNotMatch(themesData, /id: 'cyber'/);
 
-  assert.match(chatAreaCss, /\[data-wallpaper="classic"\][\s\S]*?#0b141a/);
+  assert.match(chatAreaCss, /\[data-wallpaper="classic"\][\s\S]*?var\(--chat-wallpaper\)/);
 });
 
 test('Tenor GIF service does not hardcode Google API keys', () => {
@@ -132,9 +132,8 @@ test('custom wallpaper is correctly applied and prioritized over themes', () => 
   assert.match(chatAreaCode, /isCustomWallpaper\s*=\s*Boolean\(wallpaper\s*&&\s*wallpaper\s*!==\s*'classic'\s*&&\s*wallpaper\s*!==\s*'default'\)/);
   assert.match(chatAreaCode, /className=\{`chat-body\s*\$\{isCustomWallpaper\s*\?\s*'has-custom-wallpaper'\s*:\s*''\}`\}/);
 
-  assert.match(settingsCss, /\.chat-body\.has-custom-wallpaper[\s\S]*?background-size:\s*cover\s*!important/);
-  assert.match(settingsCss, /\.chat-body\.has-custom-wallpaper::before[\s\S]*?display:\s*none\s*!important/);
-  assert.match(settingsCss, /html:not\(\.theme-light\)\.theme-rainbow-pearl\s+\.chat-body:not\(\.has-custom-wallpaper\)/);
+  assert.match(chatAreaCss, /\.chat-body\.has-custom-wallpaper[\s\S]*?background-size:\s*cover\s*!important/);
+  assert.match(chatAreaCss, /\.chat-body\.has-custom-wallpaper::before[\s\S]*?display:\s*none\s*!important/);
 
   assert.doesNotMatch(appearanceTabCode, /wallpapers-grid/);
   assert.match(appearanceTabCode, /PNG,\s*JPG,\s*WebP/);
@@ -161,4 +160,3 @@ test('AppearanceTab guards preview image against raw storage references and clea
   assert.match(appearanceTabCode, /displayPreview\s*=\s*resolvedPreviewUrl\s*\|\|\s*\(isDirectUrl\s*\?\s*effectiveCustomUrl\s*:\s*null\)/);
   assert.match(appearanceTabCode, /wallpaperInputRef\.current\.value\s*=\s*''/);
 });
-

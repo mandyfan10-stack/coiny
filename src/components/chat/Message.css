@@ -95,18 +95,6 @@ mark.search-match-highlight {
 }
 
 .message-bubble.search-match-target {
-  animation: searchBubblePulse 1.8s ease-in-out;
-  box-shadow: 0 0 0 2.5px var(--accent-color, #2481cc), 0 4px 16px rgba(36, 129, 204, 0.35) !important;
-}
-
-@keyframes searchBubblePulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(36, 129, 204, 0.7);
-  }
-  35% {
-    box-shadow: 0 0 0 4px var(--accent-color, #2481cc), 0 4px 20px rgba(36, 129, 204, 0.5);
-  }
-  100% {
-    box-shadow: 0 0 0 2.5px var(--accent-color, #2481cc), 0 4px 16px rgba(36, 129, 204, 0.35);
-  }
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
 }

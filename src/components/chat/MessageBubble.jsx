@@ -29,18 +29,15 @@ import { getReplyType } from '../../utils/mobileActionSheetUtils';
 import './Message.css';
 
 
-const TELEGRAM_SENDER_COLORS = [
-  '#e17076', '#faa774', '#a695e7', '#7bc862',
-  '#6ec9cb', '#65aadd', '#ee7aae', '#e5a55d'
-];
+const SENDER_COLOR_COUNT = 8;
 
 function getSenderColor(idOrName) {
-  if (!idOrName) return '#65aadd';
+  if (!idOrName) return 'var(--accent-color)';
   let hash = 0;
   for (let i = 0; i < idOrName.length; i++) {
     hash = (hash * 31 + idOrName.charCodeAt(i)) >>> 0;
   }
-  return TELEGRAM_SENDER_COLORS[hash % TELEGRAM_SENDER_COLORS.length];
+  return `var(--sender-color-${hash % SENDER_COLOR_COUNT})`;
 }
 
 function getFormatTime(dateObj) {
@@ -662,7 +659,7 @@ export default function MessageBubble({
               document.body
             )}
         </div>, document.body)}
-        
+
         {retryMenuMsgId === msg.id && (
           <div className="failed-message-menu">
             <button className="failed-menu-btn retry" onClick={(e) => {

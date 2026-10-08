@@ -1,0 +1,186 @@
+/* Shared palettes. Theme IDs stay compatible with saved profile preferences. */
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --bg-primary: #0e1621;
+  --bg-secondary: #17212b;
+  --bg-active: #202e3c;
+  --bg-input: #242f3d;
+  --bg-tertiary: #242f3d;
+  --text-primary: #f5f5f5;
+  --text-secondary: #92a4b5;
+  --border-color: #101a24;
+  --accent-color: #6ab3f3;
+  --accent-color-hover: #86c4f7;
+  --accent-solid: #2878ad;
+  --accent-color-alpha: #233d53;
+  --accent-gradient: var(--accent-solid);
+  --bubble-me: #2b5278;
+  --bubble-other: #182533;
+  --bubble-tail-me: var(--bubble-me);
+  --bubble-tail-other: var(--bubble-other);
+  --bubble-meta-me: #b5cfe5;
+  --bubble-meta-other: #9caebf;
+  --chat-wallpaper: #0e1621;
+  --chat-selection-bg: #2b5278;
+  --chat-selection-text: #ffffff;
+  --mobile-header-bg: var(--bg-secondary);
+  --mobile-header-text: var(--text-primary);
+  --mobile-header-muted: #bfccd8;
+  --date-label-bg: #293b4a;
+  --date-label-text: #e3eaf0;
+  --surface-glass: var(--bg-secondary);
+  --surface-muted: var(--bg-input);
+  --surface-inset: var(--bg-input);
+  --surface-row: var(--bg-secondary);
+  --surface-hover: var(--bg-active);
+  --surface-chip: var(--bg-active);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 15%);
+  --shadow-md: 0 4px 16px rgb(0 0 0 / 18%);
+  --shadow-lg: 0 8px 24px rgb(0 0 0 / 22%);
+  --transition-fast: 160ms ease;
+  --transition-normal: 200ms ease;
+  --control-size: 44px;
+  --bg-hover: var(--bg-active);
+  --danger-color: #e47474;
+  --danger-solid: #b8444b;
+  --success-color: #75bb83;
+  --sender-color-0: #e17076;
+  --sender-color-1: #faa774;
+  --sender-color-2: #a695e7;
+  --sender-color-3: #7bc862;
+  --sender-color-4: #6ec9cb;
+  --sender-color-5: #65aadd;
+  --sender-color-6: #ee7aae;
+  --sender-color-7: #e5a55d;
+}
+
+html.theme-light {
+  --danger-color: #bb3d43;
+  --success-color: #397a49;
+  --bg-primary: #f1f3f5;
+  --bg-secondary: #ffffff;
+  --bg-active: #eef1f3;
+  --bg-input: #f1f3f5;
+  --bg-tertiary: #f1f3f5;
+  --text-primary: #18222d;
+  --text-secondary: #627583;
+  --border-color: #e3e7eb;
+  --accent-color: #2878ad;
+  --accent-color-hover: #20658f;
+  --accent-color-alpha: #e5f0f7;
+  --bubble-me: #e3f3d8;
+  --bubble-other: #ffffff;
+  --bubble-meta-me: #46623e;
+  --bubble-meta-other: #627583;
+  --chat-wallpaper: #e6ebdf;
+  --chat-selection-bg: #2878ad;
+  --mobile-header-bg: var(--accent-solid);
+  --mobile-header-text: #ffffff;
+  --mobile-header-muted: #e3eff7;
+  --date-label-bg: #6b8170;
+  --date-label-text: #ffffff;
+  --sender-color-0: #b64651;
+  --sender-color-1: #a75b25;
+  --sender-color-2: #7458ab;
+  --sender-color-3: #397a2e;
+  --sender-color-4: #277b80;
+  --sender-color-5: #2b78a7;
+  --sender-color-6: #ad4781;
+  --sender-color-7: #916313;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 10%);
+  --shadow-md: 0 4px 16px rgb(0 0 0 / 12%);
+  --shadow-lg: 0 8px 24px rgb(0 0 0 / 16%);
+}
+
+html.theme-telegram-blue {
+  --accent-color: #6ab3f3;
+  --accent-color-hover: #86c4f7;
+  --accent-solid: #2878ad;
+  --accent-color-alpha: #233d53;
+  --bubble-me: #2b5278;
+}
+html.theme-light.theme-telegram-blue {
+  --accent-color: #2878ad;
+  --accent-color-hover: #20658f;
+  --accent-color-alpha: #e5f0f7;
+  --bubble-me: #e3f3d8;
+}
+
+html.theme-emerald-green {
+  --accent-color: #77cba2;
+  --accent-color-hover: #96dbb8;
+  --accent-solid: #267b52;
+  --accent-color-alpha: #224539;
+  --bubble-me: #285542;
+}
+html.theme-light.theme-emerald-green {
+  --accent-color: #267b52;
+  --accent-color-hover: #1f6242;
+  --accent-color-alpha: #e4f1e9;
+  --bubble-me: #ddf1e3;
+  --chat-selection-bg: #267b52;
+}
+
+html.theme-sakura-pink {
+  --accent-color: #e5a7a4;
+  --accent-color-hover: #f0bbb8;
+  --accent-solid: #ad5858;
+  --accent-color-alpha: #493137;
+  --bubble-me: #633e45;
+}
+html.theme-light.theme-sakura-pink {
+  --accent-color: #ad5858;
+  --accent-color-hover: #954b4b;
+  --accent-color-alpha: #f8e9e8;
+  --bubble-me: #f9e4e2;
+  --chat-selection-bg: #ad5858;
+}
+
+html.theme-electric-purple {
+  --accent-color: #bba3e6;
+  --accent-color-hover: #ccb9ef;
+  --accent-solid: #7852ae;
+  --accent-color-alpha: #3a3150;
+  --bubble-me: #493d63;
+}
+html.theme-light.theme-electric-purple {
+  --accent-color: #7852ae;
+  --accent-color-hover: #62438f;
+  --accent-color-alpha: #f0eaf7;
+  --bubble-me: #eee4f7;
+  --chat-selection-bg: #7852ae;
+}
+
+html.theme-sunset-amber {
+  --accent-color: #dfb477;
+  --accent-color-hover: #ebc794;
+  --accent-solid: #9a650c;
+  --accent-color-alpha: #493d2c;
+  --bubble-me: #594a32;
+}
+html.theme-light.theme-sunset-amber {
+  --accent-color: #9a650c;
+  --accent-color-hover: #805309;
+  --accent-color-alpha: #f7efdf;
+  --bubble-me: #f8edda;
+  --chat-selection-bg: #9a650c;
+}
+
+html.theme-rainbow-pearl {
+  --accent-color: #b9aed5;
+  --accent-color-hover: #cec4e3;
+  --accent-solid: #76618f;
+  --accent-color-alpha: #3a3548;
+  --bubble-me: #494359;
+}
+html.theme-light.theme-rainbow-pearl {
+  --accent-color: #76618f;
+  --accent-color-hover: #615075;
+  --accent-color-alpha: #f0edf5;
+  --bubble-me: #eeeaf5;
+  --chat-selection-bg: #76618f;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --transition-fast: 0ms; --transition-normal: 0ms; }
+}

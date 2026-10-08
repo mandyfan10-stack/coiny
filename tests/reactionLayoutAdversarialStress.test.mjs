@@ -1,17 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
+import { messengerFixtureCss } from './messengerFixtureCss.mjs';
 import { chromium } from 'playwright';
 
-const indexCss = fs.readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
-const chatAreaCss = fs.readFileSync(new URL('../src/components/ChatArea.css', import.meta.url), 'utf8');
-const chatInfoCss = fs.readFileSync(new URL('../src/components/ChatInfo.css', import.meta.url), 'utf8');
-
-const combinedCss = `
-${indexCss}
-${chatAreaCss}
-${chatInfoCss}
-`;
+const combinedCss = messengerFixtureCss();
 
 function buildReactionHtml({ reactionCount = 8 } = {}) {
   const emojiList = [

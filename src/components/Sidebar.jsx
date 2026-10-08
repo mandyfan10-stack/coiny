@@ -1,10 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useChat } from '../context/ChatContext';
 import { dataService } from '../services/dataLayer';
-import { Menu, Search, Pin, VolumeX, MessageSquare, User, Users, Megaphone, MessageSquarePlus, Eye, Plus, Lock, WifiOff } from 'lucide-react';
+import { Menu, Search, ArrowLeft, Pencil, Pin, VolumeX, MessageSquarePlus, Eye, Plus, Lock, WifiOff } from 'lucide-react';
 import { isSavedMessagesChat } from '../utils/savedMessages';
 import { chatAvatarFallback, personAvatarFallback } from '../context/chat/avatarFallback';
 import { triggerHaptic } from '../hooks/useMessageTouch';
+import IconButton from './ui/IconButton';
+import SearchField from './ui/SearchField';
+import Avatar from './ui/Avatar';
+import './Sidebar.css';
 
 
 export default function Sidebar() {
@@ -35,7 +39,25 @@ export default function Sidebar() {
   const [globalLoading, setGlobalLoading] = useState(false);
   const [showMyStoriesMenu, setShowMyStoriesMenu] = useState(false);
   const [openingProfileId, setOpeningProfileId] = useState(null);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const searchInputRef = useRef(null);
+  const searchToggleRef = useRef(null);
   const storiesTrayRef = useRef(null);
+
+  useEffect(() => {
+    if (isSearchOpen) searchInputRef.current?.focus();
+  }, [isSearchOpen]);
+
+  const closeSearch = () => {
+    setSearchQuery('');
+    setIsSearchOpen(false);
+    if (window.matchMedia('(max-width: 768px)').matches) requestAnimationFrame(() => searchToggleRef.current?.focus());
+  };
+  const openNewChat = () => {
+    triggerHaptic(8);
+    setNewChatModalTab('personal');
+    setIsNewChatOpen(true);
+  };
 
   // Translate vertical wheel scroll to horizontal scroll on stories tray
   useEffect(() => {
@@ -139,7 +161,7 @@ export default function Sidebar() {
   const sortedChats = [...filteredChats].sort((a, b) => {
     if (a.pinned && !b.pinned) return -1;
     if (!a.pinned && b.pinned) return 1;
-    
+
     const aLastMsg = a.messages[a.messages.length - 1];
     const bLastMsg = b.messages[b.messages.length - 1];
     if (!aLastMsg) return 1;
@@ -152,50 +174,39 @@ export default function Sidebar() {
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  const getFolderIcon = (folder) => {
-    switch (folder) {
-      case 'all': return <MessageSquare size={16} />;
-      case 'personal': return <User size={16} />;
-      case 'groups': return <Users size={16} />;
-      case 'channels': return <Megaphone size={16} />;
-      default: return null;
-    }
-  };
-
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" aria-label="Чаты">
       {/* Top Header */}
-      <div className="sidebar-header">
-        <button
-          className="menu-btn"
+      <div className={`sidebar-header ${isSearchOpen ? 'searching' : ''}`}>
+        <IconButton
+          label="Настройки"
+          className="menu-btn sidebar-menu-trigger"
           onClick={() => {
             triggerHaptic(8);
             setIsDrawerOpen(true);
           }}
-          title="Настройки"
         >
           <Menu size={22} />
-        </button>
-        <div className="search-container">
-          <Search size={18} className="search-icon" />
-          <input
-            type="text"
-            placeholder="Поиск чатов и сообщений..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-        <button
-          className="menu-btn"
-          onClick={() => {
-            triggerHaptic(8);
-            setNewChatModalTab('personal');
-            setIsNewChatOpen(true);
-          }}
-          title="Новый чат"
+        </IconButton>
+        <IconButton label="Закрыть поиск чатов" className="sidebar-search-back" onClick={closeSearch}><ArrowLeft size={22} /></IconButton>
+        <span className="sidebar-brand">Coiny</span>
+        <SearchField
+          label="Поиск чатов и сообщений"
+          className="search-container sidebar-search"
+          inputRef={searchInputRef}
+          placeholder="Поиск"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Escape') closeSearch(); }}
+        />
+        <IconButton ref={searchToggleRef} label="Поиск чатов" className="sidebar-search-toggle" onClick={() => setIsSearchOpen(true)} aria-expanded={isSearchOpen}><Search size={22} /></IconButton>
+        <IconButton
+          label="Новый чат"
+          className="menu-btn sidebar-new-chat"
+          onClick={openNewChat}
         >
           <MessageSquarePlus size={22} />
-        </button>
+        </IconButton>
       </div>
       {!isOnline && (
         <div className="offline-banner" style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
@@ -213,14 +224,15 @@ export default function Sidebar() {
           { id: 'channels', name: 'Каналы' }
         ].map(folder => (
           <button
+            type="button"
             key={folder.id}
             className={`folder-tab ${activeFolder === folder.id ? 'active' : ''}`}
+            aria-pressed={activeFolder === folder.id}
             onClick={() => {
               triggerHaptic(6);
               setActiveFolder(folder.id);
             }}
           >
-            {getFolderIcon(folder.id)}
             <span>{folder.name}</span>
           </button>
         ))}
@@ -232,11 +244,12 @@ export default function Sidebar() {
           const myStoriesList = stories.filter(s => s.userId === currentUser?.id);
           const hasMyStories = myStoriesList.length > 0;
           const hasUnviewedMyStories = myStoriesList.some(s => !s.viewed);
-          
+
           return (
-            <div 
-              className="story-item current-user-story" 
-              style={{ position: 'relative', minWidth: '72px' }}
+            <button
+              type="button"
+              className="story-item current-user-story"
+              aria-label="Моя история"
               onClick={(e) => {
                 e.stopPropagation();
                 triggerHaptic(10);
@@ -247,14 +260,14 @@ export default function Sidebar() {
                 }
               }}
             >
-              <div className={`story-avatar-wrapper ${hasMyStories ? (hasUnviewedMyStories ? 'unviewed' : 'viewed') : 'plus-icon'}`}>
-                <div className="story-avatar-initials" style={{ padding: 0 }}>{renderAvatar(currentUser?.avatar, personAvatarFallback(currentUser))}</div>
-              </div>
-              <span className="story-username" style={{ whiteSpace: 'nowrap', overflow: 'visible', textOverflow: 'clip' }}>Моя история</span>
-            </div>
+              <span className={`story-avatar-wrapper ${hasMyStories ? (hasUnviewedMyStories ? 'unviewed' : 'viewed') : 'plus-icon'}`}>
+                <span className="story-avatar-initials">{renderAvatar(currentUser?.avatar, personAvatarFallback(currentUser))}</span>
+              </span>
+              <span className="story-username">Моя история</span>
+            </button>
           );
         })()}
-        
+
         {(() => {
           const otherStories = stories.filter(s => s.userId !== currentUser?.id);
           const groupedStories = [];
@@ -266,7 +279,7 @@ export default function Sidebar() {
               const userStories = otherStories.filter(s => s.userId === story.userId);
               const hasUnviewed = userStories.some(s => !s.viewed);
               const storyToOpen = userStories.find(s => !s.viewed) || userStories[0];
-              
+
               groupedStories.push({
                 ...story,
                 hasUnviewed,
@@ -276,19 +289,21 @@ export default function Sidebar() {
           }
 
           return groupedStories.map(story => (
-            <div
+            <button
+              type="button"
               key={story.userId}
               className={`story-item ${story.hasUnviewed ? 'unviewed' : 'viewed'}`}
+              aria-label={`История ${story.userName}`}
               onClick={() => {
                 triggerHaptic(8);
                 viewStory(story.storyToOpenId);
               }}
             >
-              <div className="story-avatar-wrapper">
-                <div className="story-avatar-initials" style={{ padding: 0 }}>{renderAvatar(story.userAvatar, personAvatarFallback(story))}</div>
-              </div>
+              <span className="story-avatar-wrapper">
+                <span className="story-avatar-initials">{renderAvatar(story.userAvatar, personAvatarFallback(story))}</span>
+              </span>
               <span className="story-username">{story.userName}</span>
-            </div>
+            </button>
           ));
         })()}
       </div>
@@ -324,9 +339,11 @@ export default function Sidebar() {
               : null;
 
             return (
-              <div
+              <button
+                type="button"
                 key={chat.id}
                 className={`chat-item ${isActive ? 'active' : ''}`}
+                aria-current={isActive ? 'page' : undefined}
                 data-chat-id={chat.id}
                 data-chat-username={chat.username || undefined}
                 onClick={() => {
@@ -335,18 +352,18 @@ export default function Sidebar() {
                 }}
               >
                 {/* Avatar */}
-                <div className="chat-avatar">
+                <Avatar className="chat-avatar">
                   {renderAvatar(chat.avatar, chatAvatarFallback(chat))}
                   {isOnline && <span className="online-badge" />}
-                </div>
+                </Avatar>
 
                 {/* Info info */}
                 <div className="chat-info-block">
                   <div className="chat-info-header">
-                    <span className="chat-name" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                      {chat.name}
-                      {chat.type === 'personal' && (
-                        <Lock size={12} className="e2ee-sidebar-lock-icon" title="Сквозное шифрование" style={{ marginLeft: '4px', verticalAlign: 'middle', display: 'inline-block' }} />
+                    <span className="chat-name">
+                      <span className="chat-name-label">{chat.name}</span>
+                      {chat.type === 'personal' && !isSavedMessagesChat(chat, currentUser?.id) && (
+                        <Lock size={12} className="e2ee-sidebar-lock-icon" aria-label="Сквозное шифрование" />
                       )}
                     </span>
                     <span className="chat-time">
@@ -381,7 +398,7 @@ export default function Sidebar() {
                     </div>
                   </div>
                 </div>
-              </div>
+              </button>
             );
           })
         )}
@@ -391,7 +408,7 @@ export default function Sidebar() {
             <div className="search-section-header" style={{ padding: '16px 16px 4px 16px', borderTop: '1px solid var(--border-color)', marginTop: '8px', fontSize: '11px', fontWeight: '600', color: 'var(--accent-color)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
               Глобальный поиск
             </div>
-            
+
             {globalLoading ? (
               <div className="search-status" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', color: 'var(--text-secondary)', fontSize: '13px' }}>
                 <div className="spinner" style={{ width: '16px', height: '16px', border: '2px solid var(--border-color)', borderTopColor: 'var(--accent-color)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
@@ -410,7 +427,7 @@ export default function Sidebar() {
                   onClick={() => handleSelectGlobalUser(user)}
                   disabled={openingProfileId === user.id}
                 >
-                  <div className="chat-avatar">{renderAvatar(user.avatar, personAvatarFallback(user))}</div>
+                  <Avatar className="chat-avatar">{renderAvatar(user.avatar, personAvatarFallback(user))}</Avatar>
                   <div className="chat-info-block">
                     <div className="chat-info-header">
                       <span className="chat-name">{user.display_name || user.username}</span>
@@ -428,13 +445,15 @@ export default function Sidebar() {
         )}
       </div>
 
+      <IconButton label="Создать чат" variant="primary" className="sidebar-compose-button" onClick={openNewChat}><Pencil size={24} /></IconButton>
+
       {showMyStoriesMenu && (() => {
         const myStoriesList = stories.filter(s => s.userId === currentUser?.id);
         return (
-          <div className="my-stories-dropdown" style={{ top: '172px', left: '12px' }} onClick={(e) => e.stopPropagation()}>
-            <button 
+          <div className="my-stories-dropdown" onClick={(e) => e.stopPropagation()}>
+            <button
               type="button"
-              className="my-stories-dropdown-btn" 
+              className="my-stories-dropdown-btn"
               onClick={() => {
                 setShowMyStoriesMenu(false);
                 const storyToOpen = myStoriesList.find(s => !s.viewed) || myStoriesList[0];
@@ -443,9 +462,9 @@ export default function Sidebar() {
             >
               <Eye size={16} /> Посмотреть
             </button>
-            <button 
+            <button
               type="button"
-              className="my-stories-dropdown-btn" 
+              className="my-stories-dropdown-btn"
               onClick={() => {
                 setShowMyStoriesMenu(false);
                 setIsCreateStoryOpen(true);

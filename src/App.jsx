@@ -14,11 +14,10 @@ import CreateStoryModal from './components/CreateStoryModal';
 import MainMenuDrawer from './components/MainMenuDrawer';
 import E2EESetupModal from './components/E2EESetupModal';
 import { isMisconfigured } from './supabaseClient';
-import { normalizeExternalHttpsUrl } from './utils/urlSecurity';
 import { initNotificationService } from './services/notificationService';
 import { parseInviteParam, savePendingInvite, clearInviteParamFromUrl } from './utils/inviteLink';
 import { useInviteHandler } from './hooks/useInviteHandler';
-import { X } from 'lucide-react';
+import AppUpdateModal from './components/AppUpdateModal';
 // Shared by SettingsModal, NewChatModal, CreateStoryModal — must load with shell
 // so closed overlays never participate in app flex layout.
 import './components/SettingsModal.css';
@@ -89,81 +88,6 @@ function DeferredCallOverlay() {
   );
 }
 
-function UpdateModal({ show, releaseInfo, onClose }) {
-  if (!show || !releaseInfo) return null;
-
-  return (
-    <div className="settings-modal-overlay open" style={{ zIndex: 10000 }}>
-      <div className="settings-container update-modal-container" style={{ maxWidth: '400px', width: '90%' }}>
-        <div className="settings-header">
-          <h3>Доступно обновление! 🚀</h3>
-          <button className="settings-close-btn" onClick={onClose}>
-            <X size={20} />
-          </button>
-        </div>
-        <div className="settings-body" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '48px', marginBottom: '12px' }}>📦</div>
-            <h4 style={{ margin: '0 0 6px 0', fontSize: '18px', fontWeight: '600' }}>
-              Версия {releaseInfo.tagName}
-            </h4>
-            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-              Текущая версия: {CURRENT_VERSION}
-            </span>
-          </div>
-
-          {releaseInfo.body && (
-            <div className="update-changelog" style={{
-              background: 'rgba(255, 255, 255, 0.05)',
-              padding: '12px',
-              borderRadius: '8px',
-              maxHeight: '120px',
-              overflowY: 'auto',
-              fontSize: '13px',
-              lineHeight: '1.5',
-              whiteSpace: 'pre-wrap',
-              border: '1px solid var(--border-color)',
-              color: 'var(--text-primary)'
-            }}>
-              <strong>Что нового:</strong><br />
-              {releaseInfo.body}
-            </div>
-          )}
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
-            <a
-              href={normalizeExternalHttpsUrl(releaseInfo.downloadUrl) || undefined}
-              target="_blank"
-              rel="noreferrer"
-              className="add-member-btn"
-              style={{
-                textAlign: 'center',
-                textDecoration: 'none',
-                display: 'block',
-                padding: '10px'
-              }}
-            >
-              Скачать обновление
-            </a>
-            <button
-              onClick={onClose}
-              className="picker-tab-btn"
-              style={{
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: '1px solid var(--border-color)',
-                padding: '10px',
-                borderRadius: '8px',
-                cursor: 'pointer'
-              }}
-            >
-              Позже
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 const isNewerVersion = (latest, current) => {
   const parse = (v) => v.split('.').map(Number);
@@ -322,7 +246,7 @@ function MainLayout() {
       <MainMenuDrawer />
       <DeferredCallOverlay />
       <E2EESetupModal />
-      <UpdateModal show={showUpdate} releaseInfo={releaseInfo} onClose={() => setShowUpdate(false)} />
+      <AppUpdateModal currentVersion={CURRENT_VERSION} show={showUpdate} releaseInfo={releaseInfo} onClose={() => setShowUpdate(false)} />
     </div>
   );
 }

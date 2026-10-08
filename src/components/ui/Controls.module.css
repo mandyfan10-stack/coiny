@@ -1,0 +1,64 @@
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 var(--control-size);
+  width: var(--control-size);
+  height: var(--control-size);
+  min-width: var(--control-size);
+  min-height: var(--control-size);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+.iconButton:hover:not(:disabled), .iconButton:active:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--bg-active);
+}
+.iconButton:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: -2px;
+}
+.iconButton.active { color: var(--accent-color); background: var(--accent-color-alpha); }
+.iconButton:disabled { opacity: .4; cursor: default; }
+.primary { background: var(--accent-solid); color: #ffffff; }
+.primary:hover:not(:disabled), .primary:active:not(:disabled) { background: color-mix(in srgb, var(--accent-solid) 88%, black); color: #ffffff; }
+.searchField { position: relative; display: flex; align-items: center; flex: 1; min-width: 0; }
+.searchIcon { position: absolute; inset-inline-start: 12px; color: var(--text-secondary); pointer-events: none; }
+.searchInput {
+  width: 100%;
+  min-width: 0;
+  height: var(--control-size);
+  padding: 0 12px 0 40px;
+  border: 1px solid transparent;
+  border-radius: 24px;
+  outline: none;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font: 14px var(--font-sans);
+  transition: border-color var(--transition-fast);
+}
+.searchInput::placeholder { color: var(--text-secondary); opacity: 1; }
+.searchInput:focus { border-color: var(--accent-color); }
+.searchInput::-webkit-search-cancel-button { cursor: pointer; }
+.button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 16px; border: 0; border-radius: 8px; font: 500 15px/1.4 var(--font-sans); cursor: pointer; transition: background-color var(--transition-fast); }
+.button:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 3px; }
+.button:disabled { opacity: .5; cursor: default; }
+.button.quiet { background: var(--bg-input); color: var(--accent-color); }
+.button.quiet:hover:not(:disabled) { background: var(--bg-active); }
+.button.danger { background: var(--bg-input); color: var(--danger-color); }
+.switch { position: relative; display: inline-flex; width: 44px; height: 28px; flex: 0 0 44px; align-self: center; }
+.switch input { position: absolute; inset: -8px 0; width: 44px; height: 44px; opacity: 0; z-index: 1; cursor: pointer; }
+.switchTrack { display: block; width: 44px; height: 28px; border-radius: 20px; background: var(--text-secondary); transition: background-color var(--transition-fast); }
+.switchTrack::after { content: ''; position: absolute; top: 4px; left: 4px; width: 20px; height: 20px; border-radius: 50%; background: white; transition: transform var(--transition-fast); }
+.switch input:checked + .switchTrack { background: var(--accent-solid); }
+.switch input:checked + .switchTrack::after { transform: translateX(16px); }
+.switch input:focus-visible + .switchTrack { outline: 2px solid var(--accent-color); outline-offset: 3px; }
+.switch input:disabled + .switchTrack { opacity: .4; }
+@media (prefers-reduced-motion: reduce) { .switchTrack, .switchTrack::after { transition: none; } }

@@ -1,7 +1,11 @@
+import Button from './ui/Button';
+import IconButton from './ui/IconButton';
+import SearchField from './ui/SearchField';
+import './NewChatModal.css';
 import React, { useState, useEffect } from 'react';
 import { useChat } from '../context/ChatContext';
 import { dataService } from '../services/dataLayer';
-import { X, Search, Users, MessageSquare } from 'lucide-react';
+import { X, Users, MessageSquare } from 'lucide-react';
 import { personAvatarFallback } from '../context/chat/avatarFallback';
 
 
@@ -156,9 +160,9 @@ export default function NewChatModal() {
         {/* Header */}
         <div className="settings-header">
           <h3>{getTitle()}</h3>
-          <button className="settings-close-btn" onClick={() => setIsNewChatOpen(false)}>
+          <IconButton label="Закрыть создание чата" className="settings-close-btn" onClick={() => setIsNewChatOpen(false)}>
             <X size={20} />
-          </button>
+          </IconButton>
         </div>
 
         {/* Body */}
@@ -166,16 +170,12 @@ export default function NewChatModal() {
           {createError && <div className="auth-error-alert">{createError}</div>}
           {newChatModalTab === 'personal' && (
             <div className="personal-chat-search">
-              <div className="search-container modal-search">
-                <Search size={18} className="search-icon" />
-                <input
-                  type="text"
+              <SearchField label="Поиск пользователей" className="search-container modal-search"
                   placeholder="Введите имя или никнейм пользователя..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   autoFocus
-                />
-              </div>
+              />
 
               {/* Results list */}
               <div className="search-results-list">
@@ -195,7 +195,8 @@ export default function NewChatModal() {
                   </div>
                 ) : (
                   results.map(user => (
-                    <div
+                    <button
+                      type="button"
                       key={user.id}
                       className="search-user-item"
                       onClick={() => handleSelectUser(user)}
@@ -207,7 +208,7 @@ export default function NewChatModal() {
                         </span>
                         <span className="search-user-username">@{user.username}</span>
                       </div>
-                    </div>
+                    </button>
                   ))
                 )}
               </div>
@@ -248,16 +249,12 @@ export default function NewChatModal() {
                     ))}
                   </div>
                 )}
-                
-                <div className="search-container modal-search" style={{ marginBottom: '8px' }}>
-                  <Search size={18} className="search-icon" />
-                  <input
-                    type="text"
+
+                <SearchField label="Поиск пользователей" className="search-container modal-search"
                     placeholder="Поиск пользователей по имени..."
                     value={memberSearchQuery}
                     onChange={(e) => setMemberSearchQuery(e.target.value)}
-                  />
-                </div>
+              />
 
                 {memberLoading ? (
                   <div className="search-status" style={{ padding: '8px 0' }}>
@@ -275,6 +272,14 @@ export default function NewChatModal() {
                       return (
                         <div
                           key={user.id}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={event => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              event.currentTarget.click();
+                            }
+                          }}
                           className={`search-user-item ${isSelected ? 'selected' : ''}`}
                           onClick={() => {
                             if (isSelected) {
@@ -289,8 +294,8 @@ export default function NewChatModal() {
                         >
                           <div className="chat-avatar" style={{ width: '28px', height: '28px', minWidth: '28px', fontSize: '12px' }}>{renderAvatar(user.avatar, personAvatarFallback(user))}</div>
                           <div className="search-user-info" style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', textAlign: 'left' }}>
-                            <span className="search-user-name" style={{ fontSize: '13px', fontWeight: '500' }}>{user.display_name || user.username}</span>
-                            <span className="search-user-username" style={{ fontSize: '11px', opacity: 0.7 }}>@{user.username}</span>
+                            <span className="search-user-name" style={{ fontSize: '15px', fontWeight: '500' }}>{user.display_name || user.username}</span>
+                            <span className="search-user-username" style={{ fontSize: '14px', opacity: 0.7 }}>@{user.username}</span>
                           </div>
                           <input
                             type="checkbox"
@@ -304,11 +309,11 @@ export default function NewChatModal() {
                   </div>
                 ) : null}
               </div>
-              
-              <button type="submit" className="group-submit-btn" disabled={!groupName.trim() || creating}>
+
+              <Button type="submit" className="group-submit-btn" disabled={!groupName.trim() || creating}>
                 <Users size={18} />
                 <span>{creating ? 'Создание...' : 'Создать группу'}</span>
-              </button>
+              </Button>
             </form>
           )}
 
@@ -346,16 +351,12 @@ export default function NewChatModal() {
                     ))}
                   </div>
                 )}
-                
-                <div className="search-container modal-search" style={{ marginBottom: '8px' }}>
-                  <Search size={18} className="search-icon" />
-                  <input
-                    type="text"
+
+                <SearchField label="Поиск пользователей" className="search-container modal-search"
                     placeholder="Поиск пользователей по имени..."
                     value={memberSearchQuery}
                     onChange={(e) => setMemberSearchQuery(e.target.value)}
-                  />
-                </div>
+              />
 
                 {memberLoading ? (
                   <div className="search-status" style={{ padding: '8px 0' }}>
@@ -373,6 +374,14 @@ export default function NewChatModal() {
                       return (
                         <div
                           key={user.id}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={event => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              event.currentTarget.click();
+                            }
+                          }}
                           className={`search-user-item ${isSelected ? 'selected' : ''}`}
                           onClick={() => {
                             if (isSelected) {
@@ -387,8 +396,8 @@ export default function NewChatModal() {
                         >
                           <div className="chat-avatar" style={{ width: '28px', height: '28px', minWidth: '28px', fontSize: '12px' }}>{renderAvatar(user.avatar, personAvatarFallback(user))}</div>
                           <div className="search-user-info" style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', textAlign: 'left' }}>
-                            <span className="search-user-name" style={{ fontSize: '13px', fontWeight: '500' }}>{user.display_name || user.username}</span>
-                            <span className="search-user-username" style={{ fontSize: '11px', opacity: 0.7 }}>@{user.username}</span>
+                            <span className="search-user-name" style={{ fontSize: '15px', fontWeight: '500' }}>{user.display_name || user.username}</span>
+                            <span className="search-user-username" style={{ fontSize: '14px', opacity: 0.7 }}>@{user.username}</span>
                           </div>
                           <input
                             type="checkbox"
@@ -402,11 +411,11 @@ export default function NewChatModal() {
                   </div>
                 ) : null}
               </div>
-              
-              <button type="submit" className="group-submit-btn" disabled={!channelName.trim() || creating} style={{ background: 'var(--accent-gradient)' }}>
+
+              <Button type="submit" className="group-submit-btn" disabled={!channelName.trim() || creating} style={{ background: 'var(--accent-gradient)' }}>
                 <Users size={18} />
                 <span>{creating ? 'Создание...' : 'Создать канал'}</span>
-              </button>
+              </Button>
             </form>
           )}
         </div>

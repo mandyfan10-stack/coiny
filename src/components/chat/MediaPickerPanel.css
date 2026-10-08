@@ -12,25 +12,21 @@
   min-height: 0;
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 16px;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
   z-index: 150;
   overflow: hidden;
-  animation: pickerPopIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  animation: pickerPopIn 0.16s ease;
 }
 
 @keyframes pickerPopIn {
   0% {
     opacity: 0;
-    transform: translateY(10px) scale(0.96);
   }
   100% {
     opacity: 1;
-    transform: translateY(0) scale(1);
   }
 }
 
@@ -50,7 +46,7 @@
   border: none;
   color: var(--text-secondary);
   padding: 6px 0;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   border-radius: 8px;
@@ -59,6 +55,7 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
+  min-height: 44px;
 }
 
 .picker-top-tab:hover {
@@ -67,9 +64,8 @@
 }
 
 .picker-top-tab.active {
-  color: #ffffff;
-  background: var(--accent-color);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  color: var(--accent-color);
+  background: var(--accent-color-alpha);
 }
 
 /* Search Bar */
@@ -91,7 +87,7 @@
   border-radius: 20px;
   padding: 6px 30px 6px 12px;
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: 14px;
   outline: none;
   transition: border-color var(--transition-fast);
 }
@@ -143,8 +139,8 @@
   background: none;
   border: none;
   font-size: 16px;
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   border-radius: 8px;
   cursor: pointer;
   display: flex;
@@ -160,7 +156,7 @@
 }
 
 .picker-cat-btn.active {
-  background: rgba(36, 129, 204, 0.2);
+  background: var(--accent-color-alpha);
   color: var(--accent-color);
 }
 
@@ -177,7 +173,7 @@
 
 /* Emoji Sections */
 .emoji-section-header {
-  font-size: 11.5px;
+  font-size: 14px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -213,12 +209,12 @@
 
 .emoji-cell-btn:hover {
   background: var(--surface-hover, rgba(255, 255, 255, 0.1));
-  transform: scale(1.22);
+  transform: none;
   z-index: 2;
 }
 
 .emoji-cell-btn:active {
-  transform: scale(0.95);
+  transform: none;
 }
 
 /* =========================================================
@@ -266,12 +262,12 @@
 
 .sticker-cell-btn:hover {
   background: var(--surface-hover, rgba(255, 255, 255, 0.08));
-  transform: scale(1.06);
+  transform: none;
   border-color: var(--border-color, rgba(255, 255, 255, 0.1));
 }
 
 .sticker-cell-btn:active {
-  transform: scale(0.96);
+  transform: none;
 }
 
 .sticker-preview-media {
@@ -288,7 +284,7 @@
   position: absolute;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%) scale(1);
+  transform: translate(-50%, -50%);
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 16px;
@@ -302,17 +298,16 @@
   gap: 8px;
   pointer-events: none;
   animation: previewCardScale 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-  backdrop-filter: blur(12px);
 }
 
 @keyframes previewCardScale {
   0% {
     opacity: 0;
-    transform: translate(-50%, -50%) scale(0.85);
+    transform: translate(-50%, -50%);
   }
   100% {
     opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
+    transform: translate(-50%, -50%);
   }
 }
 
@@ -377,8 +372,8 @@
 }
 
 .sticker-add-btn {
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.05);
   border: none;
@@ -393,7 +388,7 @@
 
 .sticker-add-btn:hover {
   color: white;
-  background: var(--accent-color);
+  background: var(--accent-solid);
 }
 
 /* =========================================================
@@ -458,8 +453,8 @@
   top: 50%;
   transform: translateY(-50%);
   z-index: 4;
-  width: 24px;
-  height: 24px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -470,8 +465,6 @@
   cursor: pointer;
   padding: 0;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
   transition: all var(--transition-fast);
   flex-shrink: 0;
 }
@@ -480,11 +473,11 @@
   color: var(--text-primary);
   background: var(--surface-hover, rgba(255, 255, 255, 0.16));
   border-color: var(--accent-color);
-  transform: translateY(-50%) scale(1.08);
+  transform: translateY(-50%);
 }
 
 .gif-cat-slider-btn:active {
-  transform: translateY(-50%) scale(0.95);
+  transform: translateY(-50%);
 }
 
 .gif-cat-slider-btn.left {
@@ -523,7 +516,7 @@
   border: 1px solid transparent;
   color: var(--text-secondary);
   padding: 4px 10px;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
   border-radius: 14px;
   cursor: pointer;
@@ -531,6 +524,7 @@
   transition: all var(--transition-fast);
   flex-shrink: 0;
   user-select: none;
+  min-height: 44px;
 }
 
 .gif-cat-pill:hover {
@@ -540,8 +534,8 @@
 
 .gif-cat-pill.active {
   color: white;
-  background: var(--accent-color);
-  border-color: var(--accent-color);
+  background: var(--accent-solid);
+  border-color: var(--accent-solid);
 }
 
 .gif-grid-scroll {
@@ -574,9 +568,9 @@
 }
 
 .gif-cell-btn:hover {
-  transform: scale(1.03);
+  transform: none;
   z-index: 2;
-  box-shadow: var(--shadow-md);
+  box-shadow: none;
 }
 
 .gif-preview-img {
@@ -597,16 +591,17 @@
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid var(--border-color);
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
   padding: 6px 16px;
   border-radius: 16px;
   cursor: pointer;
   transition: all var(--transition-fast);
+  min-height: 44px;
 }
 
 .gif-load-more-btn:hover {
-  background: var(--accent-color);
+  background: var(--accent-solid);
   color: white;
   border-color: var(--accent-color);
 }
@@ -643,7 +638,7 @@
 }
 
 .picker-empty-placeholder span {
-  font-size: 12px;
+  font-size: 14px;
 }
 
 /* Responsive Mobile Bottom Sheet */
@@ -680,3 +675,5 @@
     font-size: 24px;
   }
 }
+.media-picker-panel button:focus-visible { outline: 2px solid var(--accent-color); outline-offset: -2px; }
+@media (prefers-reduced-motion: reduce) { .media-picker-panel, .media-picker-panel *, .sticker-hover-preview-card { animation: none !important; transition: none !important; scroll-behavior: auto; } }

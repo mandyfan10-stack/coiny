@@ -1,17 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
+import { messengerFixtureCss } from './messengerFixtureCss.mjs';
 import { chromium } from 'playwright';
 
-const indexCss = fs.readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
-const chatAreaCss = fs.readFileSync(new URL('../src/components/ChatArea.css', import.meta.url), 'utf8');
-const chatInfoCss = fs.readFileSync(new URL('../src/components/ChatInfo.css', import.meta.url), 'utf8');
-
-const combinedCss = `
-${indexCss}
-${chatAreaCss}
-${chatInfoCss}
-`;
+const combinedCss = messengerFixtureCss();
 
 function buildM2TestPageHtml() {
   return `
@@ -37,7 +29,7 @@ function buildM2TestPageHtml() {
         <div class="chat-body" id="test-chat-body">
           <div class="chat-date-divider" id="top-date-divider"><span>Today</span></div>
           <div class="messages-list" id="test-messages-list">
-            
+
             <!-- First message at top (Me) -->
             <div class="message-row row-me group-first group-last" id="msg-top-me" data-id="top-me">
               <div class="message-bubble bubble-me">
@@ -122,7 +114,7 @@ function buildM2TestPageHtml() {
             <div class="input-textarea-wrapper">
               <textarea placeholder="Сообщение..."></textarea>
             </div>
-            <button class="send-message-btn">➤</button>
+            <button class="iconButton send-message-btn">➤</button>
           </div>
         </div>
       </div>
@@ -132,7 +124,7 @@ function buildM2TestPageHtml() {
   <!-- Portaled reaction drawer template function -->
   <script>
     const EMOJIS = ['👍', '❤️', '🔥', '🎉', '🚀', '👏', '😍', '💯'];
-    
+
     function openReactionDrawer(anchorBtnId) {
       const existing = document.querySelector('.reaction-drawer-fixed');
       if (existing) existing.remove();
@@ -149,7 +141,7 @@ function buildM2TestPageHtml() {
       drawer.className = 'reaction-drawer reaction-drawer-fixed';
       drawer.setAttribute('role', 'listbox');
       drawer.setAttribute('aria-label', 'Реакции');
-      
+
       EMOJIS.forEach(emo => {
         const item = document.createElement('span');
         item.className = 'reaction-drawer-item';

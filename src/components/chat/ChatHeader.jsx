@@ -4,6 +4,8 @@ import { useE2EE } from '../../context/E2EEContext';
 import { isSavedMessagesChat, requiresPersonalE2EE, savedMessagesDisplayName } from '../../utils/savedMessages';
 import { chatAvatarFallback } from '../../context/chat/avatarFallback';
 import { triggerHaptic } from '../../hooks/useMessageTouch';
+import IconButton from '../ui/IconButton';
+import Avatar from '../ui/Avatar';
 
 export default function ChatHeader({
   activeChat,
@@ -33,19 +35,18 @@ export default function ChatHeader({
   return (
     <header className="chat-header" onClick={toggleInfo}>
       <div className="chat-header-info">
-        <button
-          type="button"
+        <IconButton
+          label="Назад"
           className="chat-back-btn"
           onClick={(e) => {
             e.stopPropagation();
             triggerHaptic(10);
             setActiveChatId(null);
           }}
-          title="Назад"
         >
           <ArrowLeft size={20} />
-        </button>
-        <div className="chat-avatar header-avatar">{renderAvatar(activeChat.avatar, chatAvatarFallback(activeChat))}</div>
+        </IconButton>
+        <Avatar size={40} className="chat-avatar header-avatar">{renderAvatar(activeChat.avatar, chatAvatarFallback(activeChat))}</Avatar>
         <div className="chat-header-meta">
           <h4 className="chat-header-name">
             <span className="chat-header-title" title={title}>{title}</span>
@@ -63,23 +64,23 @@ export default function ChatHeader({
         </div>
       </div>
       <div className="chat-header-actions" onClick={(e) => e.stopPropagation()}>
-        <button
-          type="button"
+        <IconButton
+          label="Поиск в чате"
+          active={isSearchOpen}
           className={`chat-header-btn ${isSearchOpen ? 'active' : ''}`}
           onClick={() => {
             triggerHaptic(8);
             onToggleSearch?.();
           }}
           title="Поиск в чате (Ctrl+F)"
-          aria-label="Поиск в чате"
           aria-expanded={isSearchOpen}
           data-testid="chat-header-search-btn"
         >
-          <Search size={19} />
-        </button>
-        <button type="button" className="chat-header-btn" onClick={toggleInfo} title="Информация">
+          <Search size={22} />
+        </IconButton>
+        <IconButton label="Информация" className="chat-header-btn" onClick={toggleInfo}>
           <MoreVertical size={20} />
-        </button>
+        </IconButton>
       </div>
     </header>
   );

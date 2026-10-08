@@ -1,0 +1,15 @@
+.app-container { display: flex; width: 100%; min-width: 0; height: 100%; overflow: hidden; position: relative; }
+.chat-back-btn { display: none; }
+
+@media (max-width: 768px) {
+  .app-container { height: 100%; }
+  .app-container > .sidebar { width: 100%; min-width: 0; max-width: none; flex: 1; border-inline-end: 0; }
+  .app-container > .chat-area { display: none; }
+  .app-container.active-chat-selected > .sidebar { display: none; }
+  .app-container.active-chat-selected > .chat-area { display: flex; width: 100%; flex: 1; }
+  .chat-back-btn { display: inline-flex; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message-bubble, .media-picker-panel { animation: none; }
+}

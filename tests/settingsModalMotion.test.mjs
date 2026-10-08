@@ -34,8 +34,9 @@ test('settings modal no longer opens a custom profile styling dialog', () => {
 
 test('settings motion is subtle, non-interactive while hidden, and reduced-motion safe', () => {
   assert.match(styles, /pointer-events: none/);
-  assert.match(styles, /translateY\(12px\) scale\(0\.98\)/);
-  assert.match(styles, /transform 260ms cubic-bezier\(0\.22, 1, 0\.36, 1\)/);
+  assert.match(styles, /transform:\s*none/);
+  assert.doesNotMatch(styles, /translateY\(12px\) scale\(0\.98\)/);
+  assert.match(styles, /opacity 180ms ease/);
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
   assert.match(styles, /transition-duration: 0\.01ms !important/);
 });

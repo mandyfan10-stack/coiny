@@ -21,6 +21,7 @@ const chatAreaCode = await readFile(
   new URL('../src/components/ChatArea.jsx', import.meta.url),
   'utf8'
 );
+const composerCode = await readFile(new URL('../src/components/chat/ChatComposer.jsx', import.meta.url), 'utf8');
 const useMessageTouchCode = await readFile(
   new URL('../src/hooks/useMessageTouch.js', import.meta.url),
   'utf8'
@@ -117,10 +118,11 @@ test('getReplyPreviewText formats media and text reply previews intuitively with
   assert.deepEqual(getReplyType({ media: 'https://example.com/voice.ogg', mediaType: 'voice' }), { type: 'voice', label: 'Голосовое сообщение' });
 });
 
-test('ChatArea and MessageBubble use getReplyType and SVG icons for reply previews', () => {
-  assert.match(chatAreaCode, /getReplyType\(replyingTo\)/);
+test('the live composer and MessageBubble use getReplyType and SVG icons for reply previews', () => {
+  assert.match(chatAreaCode, /<ChatComposer/);
+  assert.match(composerCode, /getReplyType\(replyingTo\)/);
   assert.match(messageBubbleCode, /getReplyType\(replyMsg\)/);
-  assert.match(chatAreaCode, /reply-media-svg/);
+  assert.match(composerCode, /reply-media-svg/);
   assert.match(messageBubbleCode, /reply-media-svg/);
 });
 
@@ -224,7 +226,9 @@ test('Mobile Tactility: multi-tier haptics engine, user settings toggle, and act
   assert.match(notificationsTabCode, /Тактильный отклик/, 'NotificationsTab has Tactility/Haptics toggle');
   assert.match(swipeGestureCode, /triggerHaptic\(12\)/, 'Edge swipe back dispatches haptic');
   assert.match(indexCss, /touch-action:\s*manipulation/, 'CSS enforces touch-action: manipulation');
-  assert.match(indexCss, /\.chat-item:active/, 'CSS defines active press scaling for chat items');
+  const sidebarCss = await readFile(new URL('../src/components/Sidebar.css', import.meta.url), 'utf8');
+  assert.match(sidebarCss, /\.chat-item:active/, 'Chat rows provide pressed feedback');
+  assert.doesNotMatch(sidebarCss, /transform:\s*scale/, 'Press feedback preserves row dimensions');
 });
 
 test('Chat Instant Opening: IndexedDB caching, Stale-While-Revalidate seamless merge, smart prewarming, and Telegram shimmer skeleton', async () => {
@@ -268,5 +272,3 @@ test('Chat Instant Opening: IndexedDB caching, Stale-While-Revalidate seamless m
   assert.match(chatSkeletonCss, /@keyframes telegramShimmer/, 'ChatSkeleton.css implements telegramShimmer animation');
   assert.match(chatSkeletonCss, /border-radius:\s*16px 16px 16px 4px/, 'ChatSkeleton implements Telegram incoming bubble curvature');
 });
-
-

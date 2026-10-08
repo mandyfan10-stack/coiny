@@ -11,7 +11,7 @@ const authContext = await readFile(new URL("../src/context/AuthContext.jsx", imp
 const authService = await readFile(new URL("../src/services/authService.js", import.meta.url), "utf8");
 const dataLayer = await readFile(new URL("../src/services/dataLayer.js", import.meta.url), "utf8");
 const authEmail = await readFile(new URL("../src/services/authEmail.ts", import.meta.url), "utf8");
-const settingsCss = await readFile(new URL("../src/components/SettingsModal.css", import.meta.url), "utf8");
+const settingsCss = await readFile(new URL("../src/components/E2EESetupModal.css", import.meta.url), "utf8");
 
 const emojiRegex = /[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}]/u;
 

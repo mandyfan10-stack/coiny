@@ -1,21 +1,23 @@
+import Button from './ui/Button';
+import IconButton from './ui/IconButton';
+import './AuthScreen.css';
 import React, { useState, useMemo, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { isSupabaseConfigured } from '../supabaseClient';
 import { getPendingInvite } from '../utils/inviteLink';
 import coinyLogo from '../assets/logo.png';
-import { 
-  Lock, 
-  User, 
-  UserPlus, 
-  LogIn, 
-  AlertCircle, 
-  Eye, 
-  EyeOff, 
-  Check, 
-  ShieldCheck, 
-  Zap, 
+import {
+  Lock,
+  User,
+  UserPlus,
+  LogIn,
+  AlertCircle,
+  Eye,
+  EyeOff,
+  Check,
+  ShieldCheck,
+  Zap,
   CheckCircle2,
-  Shield,
   ArrowUp
 } from 'lucide-react';
 
@@ -40,7 +42,6 @@ export default function AuthScreen() {
   const pendingInvite = useMemo(() => getPendingInvite(), []);
 
   const passwordInputRef = useRef(null);
-  const lastToggleTimeRef = useRef(0);
 
   const handleResetSubmit = async (e) => {
     e.preventDefault();
@@ -75,7 +76,7 @@ export default function AuthScreen() {
     const upperLower = /[a-z]/.test(password) && /[A-Z]/.test(password);
     const hasDigit = /\d/.test(password);
     const hasSpecial = /[^A-Za-z0-9]/.test(password);
-    
+
     let score = 0;
     if (minLength) score++;
     if (upperLower) score++;
@@ -124,11 +125,6 @@ export default function AuthScreen() {
     if (e?.preventDefault) {
       e.preventDefault();
     }
-    const now = Date.now();
-    if (now - lastToggleTimeRef.current < 250) {
-      return;
-    }
-    lastToggleTimeRef.current = now;
     setShowPassword((prev) => !prev);
     if (passwordInputRef.current) {
       passwordInputRef.current.focus();
@@ -229,25 +225,16 @@ export default function AuthScreen() {
 
   return (
     <div className="auth-screen-container">
-      {/* Background glow orbs */}
-      <div className="auth-glow-orb auth-glow-1" aria-hidden="true" />
-      <div className="auth-glow-orb auth-glow-2" aria-hidden="true" />
-
-      {/* Glassmorphism Auth Card */}
+      {/* Account form */}
       <div className="auth-card-wrapper">
         <div className="auth-card">
             {/* Logo Branding Section */}
             <div className="auth-logo-section">
               <div className="auth-logo-svg-wrapper">
-                <div className="auth-logo-halo" />
                 <img src={coinyLogo} alt="Coiny" className="auth-logo-img" width="76" height="76" />
               </div>
               <h2>Coiny</h2>
-              <p className="auth-subtitle">Защищённый клиент обмена сообщениями</p>
-              <div className="auth-brand-badge">
-                <Shield size={11} />
-                <span>MLS v1.0 • E2EE</span>
-              </div>
+              <p className="auth-subtitle">Войдите, чтобы продолжить общение.</p>
             </div>
 
             {/* Pending invite banner */}
@@ -273,10 +260,6 @@ export default function AuthScreen() {
               <>
                 {/* Segmented Switcher with Sliding Pill Indicator */}
                 <div className="auth-tabs" role="tablist">
-                  <div 
-                    className={`auth-tabs-slider ${!isLogin ? 'is-register' : 'is-login'}`}
-                    aria-hidden="true"
-                  />
                   <button
                     type="button"
                     role="tab"
@@ -373,17 +356,16 @@ export default function AuthScreen() {
                         aria-describedby={!isLogin ? 'password-requirements' : undefined}
                         required
                       />
-                      <button
+                      <IconButton
                         type="button"
                         className="auth-password-toggle-btn"
-                        onMouseDown={handleTogglePassword}
+                        onMouseDown={(event) => event.preventDefault()}
                         onClick={handleTogglePassword}
-                        tabIndex={-1}
                         title={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
                         aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
                       >
                         {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                      </button>
+                      </IconButton>
                     </div>
 
                     {/* 4-Segment Password Strength Progress Bar & Concise Hints (Registration only) */}
@@ -456,7 +438,7 @@ export default function AuthScreen() {
                   )}
 
                   {/* Submit Button */}
-                  <button type="submit" className="auth-submit-btn" disabled={loading}>
+                  <Button type="submit" className="auth-submit-btn" disabled={loading}>
                     {loading ? (
                       <span className="spinner"></span>
                     ) : isLogin ? (
@@ -470,13 +452,13 @@ export default function AuthScreen() {
                         <span>Создать аккаунт</span>
                       </>
                     )}
-                  </button>
+                  </Button>
 
                   {/* Compact Demo Mode Button positioned below main submit button */}
                   {!isSupabaseConfigured && (
                     <div className="auth-demo-compact-section">
-                      <button 
-                        type="button" 
+                      <Button variant="quiet"
+                        type="button"
                         className="auth-demo-quick-btn"
                         onClick={handleDemoLogin}
                         disabled={loading}
@@ -484,7 +466,7 @@ export default function AuthScreen() {
                       >
                         <Zap size={14} />
                         <span>Быстрый вход в демо-режим (alex_dev)</span>
-                      </button>
+                      </Button>
                       <span className="auth-demo-subtext">Локальный профиль без сетевой синхронизации</span>
                     </div>
                   )}
@@ -505,7 +487,7 @@ export default function AuthScreen() {
                       <CheckCircle2 size={16} />
                       <span>Инструкции по сбросу пароля отправлены на ваш email. Проверьте входящие сообщения.</span>
                     </div>
-                    <button
+                    <Button
                       type="button"
                       className="auth-submit-btn"
                       style={{ marginTop: '16px' }}
@@ -517,7 +499,7 @@ export default function AuthScreen() {
                     >
                       <LogIn size={18} />
                       <span>Вернуться ко входу</span>
-                    </button>
+                    </Button>
                     <div className="auth-reset-actions" style={{ marginTop: '4px' }}>
                       <button
                         type="button"
@@ -551,9 +533,9 @@ export default function AuthScreen() {
                       </div>
                     </div>
 
-                    <button type="submit" className="auth-submit-btn" disabled={resetLoading}>
+                    <Button type="submit" className="auth-submit-btn" disabled={resetLoading}>
                       {resetLoading ? <span className="spinner"></span> : <span>Отправить инструкции</span>}
-                    </button>
+                    </Button>
 
                     <div className="auth-reset-actions">
                       <button
@@ -576,8 +558,7 @@ export default function AuthScreen() {
             {/* Footer Security Badge */}
             <div className="auth-footer-security">
               <ShieldCheck size={14} className="security-shield-icon" />
-              <span>Сквозное E2EE шифрование</span>
-              <span className="security-live-dot" title="MLS & AES-256 GCM" />
+              <span>Сквозное шифрование</span>
             </div>
         </div>
       </div>

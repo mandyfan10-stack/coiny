@@ -429,14 +429,13 @@ test('EMPIRICAL CHALLENGER: CSS animation keyframes, curves, z-index, and reduce
 
   // Sheet card slide up animation
   assert.match(sheetCss, /@keyframes\s+mobileSheetSlideUp\s*\{/);
-  assert.match(sheetCss, /from\s*\{\s*transform:\s*translateY\(40px\)\s+scale\(0\.96\);\s*opacity:\s*0;\s*\}/);
-  assert.match(sheetCss, /to\s*\{\s*transform:\s*translateY\(0\)\s+scale\(1\);\s*opacity:\s*1;\s*\}/);
+  assert.match(sheetCss, /from\s*\{\s*transform:\s*translateY\(40px\);\s*opacity:\s*0;\s*\}/);
+  assert.match(sheetCss, /to\s*\{\s*transform:\s*translateY\(0\);\s*opacity:\s*1;\s*\}/);
   assert.match(sheetCss, /animation:\s*mobileSheetSlideUp\s+0\.25s\s+cubic-bezier\(0\.16,\s*1,\s*0\.3,\s*1\)/);
 
-  // Z-index & backdrop filter
+  // Z-index and a flat backdrop
   assert.match(sheetCss, /z-index:\s*10060/);
-  assert.match(sheetCss, /backdrop-filter:\s*blur\(8px\)/);
-  assert.match(sheetCss, /-webkit-backdrop-filter:\s*blur\(8px\)/);
+  assert.doesNotMatch(sheetCss, /backdrop-filter:/);
 
   // Safe area insets
   assert.match(sheetCss, /padding-bottom:\s*max\(16px,\s*env\(safe-area-inset-bottom,\s*16px\)\)/);
@@ -556,4 +555,3 @@ test('EMPIRICAL CHALLENGER: Component contracts, text extraction, clipboard fall
   const normalized = normalizeReaction({ emoji: '🔥', users: ['alice_1', 'bob_2'] });
   assert.deepEqual(normalized.users, ['alice_1', 'bob_2']);
 });
-

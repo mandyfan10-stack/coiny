@@ -1,17 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
+import { messengerFixtureCss } from './messengerFixtureCss.mjs';
 import { chromium } from 'playwright';
 
-const indexCss = fs.readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
-const chatAreaCss = fs.readFileSync(new URL('../src/components/ChatArea.css', import.meta.url), 'utf8');
-const chatInfoCss = fs.readFileSync(new URL('../src/components/ChatInfo.css', import.meta.url), 'utf8');
-
-const combinedCss = `
-${indexCss}
-${chatAreaCss}
-${chatInfoCss}
-`;
+const combinedCss = messengerFixtureCss();
 
 function buildAdversarialHarnessHtml() {
   return `
@@ -42,7 +34,7 @@ function buildAdversarialHarnessHtml() {
         </div>
 
         <div class="chat-body" id="harness-chat-body" style="height: 100%; position: relative;">
-          
+
           <!-- Container for dynamically placed test elements -->
           <div id="dynamic-test-container"></div>
 
@@ -53,7 +45,7 @@ function buildAdversarialHarnessHtml() {
             <div class="input-textarea-wrapper">
               <textarea placeholder="Сообщение..."></textarea>
             </div>
-            <button class="send-message-btn">➤</button>
+            <button class="iconButton send-message-btn">➤</button>
           </div>
         </div>
       </div>
@@ -175,7 +167,7 @@ function buildAdversarialHarnessHtml() {
       drawer.className = 'reaction-drawer reaction-drawer-fixed';
       drawer.setAttribute('role', 'listbox');
       drawer.setAttribute('aria-label', 'Реакции');
-      
+
       EMOJIS.forEach(emo => {
         const item = document.createElement('span');
         item.className = 'reaction-drawer-item';
@@ -733,4 +725,3 @@ test('EMPIRICAL ADVERSARIAL: Exact pixel coordinate stress testing (scrolled top
     await browser.close();
   }
 });
-

@@ -8,8 +8,6 @@
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.48);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
   z-index: 10060;
   display: flex;
   flex-direction: column;
@@ -37,7 +35,7 @@
 .mobile-action-sheet {
   background: var(--bg-secondary, #17212b);
   border: 1px solid var(--border-color, #101921);
-  border-radius: 24px;
+  border-radius: 12px 12px 0 0;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55), 0 0 1px rgba(255, 255, 255, 0.08);
   overflow: hidden;
   max-width: 440px;
@@ -56,11 +54,11 @@
 
 @keyframes mobileSheetSlideUp {
   from {
-    transform: translateY(40px) scale(0.96);
+    transform: translateY(40px);
     opacity: 0;
   }
   to {
-    transform: translateY(0) scale(1);
+    transform: translateY(0);
     opacity: 1;
   }
 }
@@ -106,18 +104,17 @@
 
 .mobile-sheet-reaction-pill:hover {
   background: var(--surface-hover, rgba(255, 255, 255, 0.12));
-  transform: scale(1.15);
+  transform: none;
 }
 
 .mobile-sheet-reaction-pill:active {
-  transform: scale(1.28);
+  transform: none;
 }
 
 .mobile-sheet-reaction-pill.active {
-  background: var(--accent-gradient, linear-gradient(135deg, #2481cc 0%, #1c6199 100%));
+  background: var(--accent-color-alpha);
   border-color: transparent;
-  box-shadow: 0 0 14px var(--accent-color, #2481cc);
-  transform: scale(1.06);
+  transform: none;
 }
 
 /* --- Action Menu Group --- */
@@ -165,7 +162,7 @@
 
 .mobile-sheet-item:active {
   background: var(--surface-row, rgba(255, 255, 255, 0.08));
-  transform: scale(0.985);
+  transform: none;
   transition: transform 0.08s ease, background 0.08s ease;
 }
 
@@ -222,7 +219,7 @@
 
   .mobile-action-sheet {
     max-width: 100%;
-    border-radius: 20px;
+    border-radius: 12px 12px 0 0;
   }
 }
 
@@ -247,4 +244,3 @@
     display: none !important;
   }
 }
-

@@ -126,7 +126,7 @@ test('ChatHeader component exposes search button and props', () => {
   assert.match(chatHeaderSource, /data-testid="chat-header-search-btn"/);
   assert.match(chatHeaderSource, /isSearchOpen/);
   assert.match(chatHeaderSource, /onToggleSearch/);
-  assert.match(chatHeaderSource, /Search size=\{19\}/);
+  assert.match(chatHeaderSource, /Search size=\{22\}/);
 });
 
 test('ChatArea component integrates in-chat search state, hotkeys and matching', () => {
