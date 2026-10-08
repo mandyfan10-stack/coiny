@@ -121,6 +121,8 @@ test('image viewing retains Escape, focus and the chat reading position',async({
   await page.setViewportSize(size);
   const photo=page.locator('[data-message-id="photo"] img');
   await expect.poll(()=>photo.evaluate(node=>node.complete&&node.naturalWidth>0)).toBe(true);
+  // Reading history starts with user input; programmatic layout changes keep the bottom pin.
+  await page.locator('.chat-body').dispatchEvent('wheel',{deltaY:-1000});
   await photo.scrollIntoViewIfNeeded();
   const trigger=page.locator('[data-message-id="photo"] .bubble-media-open');
   await trigger.focus();
