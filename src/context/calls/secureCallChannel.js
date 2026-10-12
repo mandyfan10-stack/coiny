@@ -11,7 +11,8 @@ export function secureCallChannel(channel, {
   chatId,
   cryptoVersion,
   encryptEvent,
-  decryptEvent
+  decryptEvent,
+  shouldSend = () => true
 }) {
   if (cryptoVersion !== 2) return channel;
 
@@ -56,7 +57,10 @@ export function secureCallChannel(channel, {
       if (property === 'send') {
         return async (message) => {
           if (message?.type !== 'broadcast') return target.send(message);
-          return target.send({ ...message, payload: await protect(message.event, message.payload) });
+          const payload = await protect(message.event, message.payload);
+          // Cancellation can happen while the worker is encrypting an invite.
+          if (!shouldSend(message)) return 'cancelled';
+          return target.send({ ...message, payload });
         };
       }
       if (property === 'on') {

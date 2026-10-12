@@ -24,7 +24,8 @@ async function countRemoteAudioFeeds(page) {
   });
 }
 
-test('two users establish and finish a WebRTC audio call with remote media', async ({ browser }, testInfo) => {
+for (const delayedRecipient of [false, true]) {
+test(`two users establish and finish a WebRTC audio call with remote media${delayedRecipient ? ' after delayed recipient subscription' : ''}`, async ({ browser }, testInfo) => {
   test.setTimeout(180_000);
   const contextOptions = {
     permissions: ['microphone', 'camera'],
@@ -36,6 +37,23 @@ test('two users establish and finish a WebRTC audio call with remote media', asy
   const pageErrors = [];
   const diagnostics = [];
   const startedAt = Date.now();
+  const heldJoins = [];
+  let holdSubscriptions = delayedRecipient;
+  if (delayedRecipient) {
+    await secondPage.routeWebSocket('**/realtime/v1/websocket*', (socket) => {
+      const server = socket.connectToServer();
+      socket.onMessage((message) => {
+        let frame;
+        if (typeof message === 'string') {
+          try { frame = JSON.parse(message); } catch { /* Binary or non-JSON message. */ }
+        }
+        if (holdSubscriptions && frame?.[3] === 'phx_join'
+          && String(frame[2]).startsWith('realtime:call:chat:') && !String(frame[2]).endsWith(':media')) {
+          heldJoins.push(() => server.send(message));
+        } else server.send(message);
+      });
+    });
+  }
 
   for (const [label, page] of [['A', firstPage], ['B', secondPage]]) {
     observeCallSignaling(page, label, diagnostics, startedAt);
@@ -49,6 +67,13 @@ test('two users establish and finish a WebRTC audio call with remote media', asy
     await openPersonalChat(firstPage, qa.second.username);
     await firstPage.locator('.chat-header-btn[title="Информация"]').click();
     await firstPage.getByTestId('start-call').or(firstPage.locator('.info-action-btn[title="Звонок"], .quick-action-item[title="Звонок"]')).click({ timeout: 15_000 });
+    if (delayedRecipient) {
+      expect(heldJoins.length, 'recipient invitation channels must actually be delayed').toBeGreaterThan(0);
+      await expect(secondPage.locator('.call-accept')).toBeHidden();
+      await secondPage.waitForTimeout(4_500);
+      holdSubscriptions = false;
+      heldJoins.splice(0).forEach((send) => send());
+    }
 
     const accept = secondPage.locator('.call-accept[title="Ответить на звонок"]');
     await expect(accept).toBeVisible({ timeout: 30_000 });
@@ -90,3 +115,4 @@ test('two users establish and finish a WebRTC audio call with remote media', asy
     await Promise.all([firstContext.close(), secondContext.close()]);
   }
 });
+}

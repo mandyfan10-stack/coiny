@@ -7,6 +7,7 @@ import { startAudioAnalyzer } from './audioAnalyzer';
 import { createPeerConnection, refreshIceConfiguration } from './iceServers';
 import { isScreenTrack, attachRemoteAudioElement } from './mediaTrackHelpers';
 import { useCallSignaling } from './useCallSignaling';
+import { CALL_INVITATION_TTL_MS } from './callInvitationDelivery';
 import { useCallMedia } from './useCallMedia';
 import { useE2EE } from '../E2EEContext';
 import { secureCallChannel } from './secureCallChannel';
@@ -164,6 +165,7 @@ export const CallProvider = ({ children }) => {
     currentUser,
     chats,
     signalingChannelKey,
+    callState,
     setCallState,
     onRemoteEnd: () => endCallLocallyRef.current(),
     encryptEvent,
@@ -177,7 +179,9 @@ export const CallProvider = ({ children }) => {
     const timer = setTimeout(() => {
       if (callStateRef.current.status !== statusAtStart) return;
       if (dataService.isLive() && callStateRef.current.chatId) {
-        sendSignalingMessage(callStateRef.current.chatId, 'call-rejected', {});
+        sendSignalingMessage(callStateRef.current.chatId, 'call-rejected', {
+          callId: callStateRef.current.callId, senderId: currentUserRef.current?.id
+        });
       }
       endCallLocally();
     }, CALL_RING_TIMEOUT_MS);
@@ -912,10 +916,14 @@ export const CallProvider = ({ children }) => {
     const otherMember = chat.members.find(m => m.id !== currentUser.id && m.id !== 'current');
     const otherUserId = chat.type === 'personal' ? (otherMember ? otherMember.id : null) : null;
     const isGroup = chat.type === 'group';
+    const callId = crypto.randomUUID();
+    const expiresAt = Date.now() + CALL_INVITATION_TTL_MS;
 
     setCallState({
       status: isGroup ? 'connected' : 'calling',
       chatId,
+      callId,
+      expiresAt,
       duration: 0,
       muted: false,
       isOutgoing: true,
@@ -962,6 +970,7 @@ export const CallProvider = ({ children }) => {
     if (dataService.isLive()) {
       if (chat.type === 'personal' && otherUserId) {
         sendSignalingMessage(chatId, 'incoming-call', {
+          callId, expiresAt,
           callerId: currentUser.id,
           callerName: currentUser.name || currentUser.username || 'Пользователь',
           callerAvatar: currentUser.avatar,
@@ -970,6 +979,7 @@ export const CallProvider = ({ children }) => {
         });
       } else if (isGroup) {
         sendSignalingMessage(chatId, 'incoming-call', {
+          callId, expiresAt,
           callerId: currentUser.id,
           callerName: chat.name || 'Группа',
           callerAvatar: chat.avatar,
@@ -1009,7 +1019,7 @@ export const CallProvider = ({ children }) => {
     }
 
     if (dataService.isLive() && callState.otherUserId) {
-      sendSignalingMessage(callState.chatId, 'call-accepted', { responderId: currentUser.id });
+      sendSignalingMessage(callState.chatId, 'call-accepted', { responderId: currentUser.id, callId: callState.callId });
     }
     setCallState(prev => ({
       ...prev,
@@ -1022,14 +1032,14 @@ export const CallProvider = ({ children }) => {
         setCallState(prev => prev.status === 'connected' ? { ...prev, webrtcState: 'connected' } : prev);
       }, 1500);
     }
-  }, [callState.chatId, callState.otherUserId, currentUser, chats, sendSignalingMessage]);
+  }, [callState.chatId, callState.otherUserId, callState.callId, currentUser, chats, sendSignalingMessage]);
 
   const rejectCall = useCallback(() => {
     if (dataService.isLive() && callState.otherUserId) {
-      sendSignalingMessage(callState.chatId, 'call-rejected', {});
+      sendSignalingMessage(callState.chatId, 'call-rejected', { callId: callState.callId, senderId: currentUser.id });
     }
     endCallLocally();
-  }, [callState.chatId, callState.otherUserId, endCallLocally, sendSignalingMessage]);
+  }, [callState.chatId, callState.otherUserId, callState.callId, currentUser, endCallLocally, sendSignalingMessage]);
 
   const endCall = useCallback(() => {
     if (dataService.isLive()) {
@@ -1040,11 +1050,11 @@ export const CallProvider = ({ children }) => {
           payload: { senderId: currentUser?.id }
         });
       } else if (callState.otherUserId) {
-        sendSignalingMessage(callState.chatId, 'call-rejected', {});
+        sendSignalingMessage(callState.chatId, 'call-rejected', { callId: callState.callId, senderId: currentUser?.id });
       }
     }
     endCallLocally();
-  }, [callState.chatId, callState.otherUserId, endCallLocally, currentUser, sendSignalingMessage]);
+  }, [callState.chatId, callState.otherUserId, callState.callId, endCallLocally, currentUser, sendSignalingMessage]);
 
   /** C7: best-effort ICE restart (STUN-only; may still fail behind symmetric NAT). */
   const retryCallConnection = useCallback(async () => {

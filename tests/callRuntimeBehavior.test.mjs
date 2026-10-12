@@ -350,6 +350,23 @@ test('v2 call channel decrypts a bound signaling event exactly once', async () =
   assert.deepEqual(received, [{ payload, transport: 'realtime' }]);
 });
 
+test('v2 call channel checks cancellation after asynchronous encryption', async () => {
+  const { channel, sent } = createChannel();
+  let cancelled = false;
+  let finish;
+  const proxy = secureCallChannel(channel, {
+    chatId: 'chat-1', cryptoVersion: 2,
+    encryptEvent: () => new Promise((resolve) => { finish = resolve; }),
+    decryptEvent: async () => ({}),
+    shouldSend: () => !cancelled
+  });
+  const sending = proxy.send({ type: 'broadcast', event: 'incoming-call', payload: { callId: 'call-1' } });
+  cancelled = true;
+  finish({ cipherText: 'encrypted' });
+  assert.equal(await sending, 'cancelled');
+  assert.equal(sent.length, 0);
+});
+
 test('v2 call channel rejects plaintext, replayed, cross-chat, and fingerprint-mismatched events', async () => {
   const { channel, listeners } = createChannel();
   const received = [];
