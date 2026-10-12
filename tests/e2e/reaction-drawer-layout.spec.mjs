@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import path from 'node:path';
+import fs from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import {
   loadE2eAccounts,
@@ -112,6 +113,9 @@ test('reaction drawer stays wide and fully visible at chat top', async ({ page }
     };
   });
 
+  // Keep release diagnostics limited to layout measurements, without network traces.
+  await fs.mkdir(shotDir, { recursive: true });
+  await fs.writeFile(path.join(shotDir, `top-message-reaction-${testInfo.project.name}.json`), JSON.stringify(metrics, null, 2));
   // Debug artifact for humans
   await page.screenshot({
     path: path.join(shotDir, `top-message-reaction-${testInfo.project.name}.png`),

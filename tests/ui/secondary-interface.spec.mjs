@@ -126,6 +126,15 @@ test('image viewing retains Escape, focus and the chat reading position',async({
   await photo.scrollIntoViewIfNeeded();
   const trigger=page.locator('[data-message-id="photo"] .bubble-media-open');
   await trigger.focus();
+  // Resize/focus may dispatch scroll after the DOM already reports its new top.
+  // Start the viewer scenario only after the reading anchor has been captured.
+  await expect.poll(()=>page.locator('.chat-body').evaluate(node=>{
+   const saved=JSON.parse(localStorage.getItem('coingram_chat_scroll_design')||'{}');
+   const anchor=[...node.querySelectorAll('[data-message-id]')].find(row=>row.dataset.messageId===saved.topMessageId);
+   if(typeof saved.scrollTop!=='number'||!anchor)return Infinity;
+   const offset=anchor.getBoundingClientRect().top-node.getBoundingClientRect().top;
+   return Math.max(Math.abs(saved.scrollTop-node.scrollTop),Math.abs(saved.topMessageOffset-offset));
+  })).toBeLessThanOrEqual(1);
   const top=await page.locator('.chat-body').evaluate(node=>node.scrollTop);
   // Keyboard activation does not add Playwright's pointer auto-scroll.
   await trigger.press('Enter');

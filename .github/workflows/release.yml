@@ -96,14 +96,12 @@ jobs:
             tests/e2e/two-user-read-receipt.spec.mjs \
             tests/e2e/reaction-drawer-layout.spec.mjs
 
-      - name: Upload failure artifacts
+      - name: Upload reaction layout diagnostics
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: release-test-failure
-          path: |
-            playwright-report
-            test-results
+          name: release-reaction-layout
+          path: test-results/reaction-drawer/*.json
           retention-days: 7
 
       - name: Upload web build

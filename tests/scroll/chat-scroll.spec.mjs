@@ -173,6 +173,14 @@ test('row growth and viewport resizing keep the latest message visible', async (
   await expect.poll(async () => (await position(page)).gap).toBeLessThan(2);
 });
 
+test('viewport width and height changes preserve the message being read', async ({ page }) => {
+  const saved = await readHistory(page, 8000);
+  for (const size of [{ width: 768, height: 360 }, { width: 1024, height: 600 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(size);
+    await expectAnchor(page, saved);
+  }
+});
+
 test('an image decoding later keeps the latest message visible', async ({ page }) => {
   let releaseImage;
   const imageReady = new Promise(resolve => { releaseImage = resolve; });
