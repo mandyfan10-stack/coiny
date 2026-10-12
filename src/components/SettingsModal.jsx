@@ -144,11 +144,24 @@ export default function SettingsModal() {
   useEffect(() => {
     if (!isSettingsOpen || !isVisible || discardPrompt || didSetInitialFocusRef.current) return undefined;
     const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    const focusTimer = window.setTimeout(() => {
-      didSetInitialFocusRef.current = true;
-      closeButtonRef.current?.focus({ preventScroll: true });
-    }, reduceMotion ? 32 : 260);
-    return () => window.clearTimeout(focusTimer);
+    let focusFrame;
+    const focusWhenVisible = () => {
+      const button = closeButtonRef.current;
+      if (!button) return;
+      // A visibility transition can still be pending when the timer runs.
+      // Hidden elements ignore focus; mark it complete only after it succeeds.
+      const style = window.getComputedStyle(button);
+      if (style.visibility === 'visible' && style.display !== 'none' && button.getClientRects().length) {
+        button.focus({ preventScroll: true });
+        didSetInitialFocusRef.current = document.activeElement === button;
+      }
+      if (!didSetInitialFocusRef.current) focusFrame = window.requestAnimationFrame(focusWhenVisible);
+    };
+    const focusTimer = window.setTimeout(focusWhenVisible, reduceMotion ? 0 : 260);
+    return () => {
+      window.clearTimeout(focusTimer);
+      window.cancelAnimationFrame(focusFrame);
+    };
   }, [isSettingsOpen, isVisible, discardPrompt]);
 
   useEffect(() => {
