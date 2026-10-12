@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loadE2eAccounts, loginAndUnlock, openPersonalChat } from './helpers.mjs';
+import { observeCallSignaling, saveCallDiagnostics } from './call-diagnostics.mjs';
 
 const qa = loadE2eAccounts();
 
@@ -23,7 +24,7 @@ async function countRemoteAudioFeeds(page) {
   });
 }
 
-test('two users establish and finish a WebRTC audio call with remote media', async ({ browser }) => {
+test('two users establish and finish a WebRTC audio call with remote media', async ({ browser }, testInfo) => {
   test.setTimeout(180_000);
   const contextOptions = {
     permissions: ['microphone', 'camera'],
@@ -33,8 +34,11 @@ test('two users establish and finish a WebRTC audio call with remote media', asy
   const firstPage = await firstContext.newPage();
   const secondPage = await secondContext.newPage();
   const pageErrors = [];
+  const diagnostics = [];
+  const startedAt = Date.now();
 
   for (const [label, page] of [['A', firstPage], ['B', secondPage]]) {
+    observeCallSignaling(page, label, diagnostics, startedAt);
     page.on('pageerror', (error) => pageErrors.push(`${label}: ${error.message}`));
   }
 
@@ -82,6 +86,7 @@ test('two users establish and finish a WebRTC audio call with remote media', asy
 
     expect(pageErrors, pageErrors.join('\n')).toEqual([]);
   } finally {
+    await saveCallDiagnostics(testInfo, diagnostics);
     await Promise.all([firstContext.close(), secondContext.close()]);
   }
 });

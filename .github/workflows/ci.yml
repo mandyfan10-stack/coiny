@@ -113,6 +113,15 @@ jobs:
             tests/e2e/two-user-read-receipt.spec.mjs \
             tests/e2e/reaction-drawer-layout.spec.mjs
 
+      - name: Upload call signaling milestones
+        if: ${{ always() && env.LIVE_E2E_READY == 'true' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: call-signaling-milestones
+          path: test-results/call-diagnostics/*.json
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Upload failure artifacts
         if: ${{ failure() && env.LIVE_E2E_READY == 'true' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
