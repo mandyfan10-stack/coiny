@@ -6,6 +6,7 @@
 .chat-footer-input textarea::placeholder { color: var(--text-secondary); opacity: 1; }
 .chat-footer-input textarea:focus-visible { box-shadow: inset 0 -2px var(--accent-color); }
 .chat-footer-input .send-message-btn { color: var(--accent-color); }
+.chat-footer-input .record-message-btn { touch-action: none; }
 .chat-footer-input .reply-indicator-bar { display: flex; align-items: center; gap: 12px; min-height: 52px; margin-inline-start: 48px; border-bottom: 1px solid var(--border-color); padding: 4px 0; }
 .chat-footer-input .reply-bar-icon { flex-shrink: 0; color: var(--accent-color); }
 .chat-footer-input .reply-bar-meta { flex: 1; min-width: 0; padding-inline-start: 8px; border-inline-start: 2px solid var(--accent-color); }

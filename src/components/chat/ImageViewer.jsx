@@ -6,6 +6,12 @@ import { prepareFiniteMediaDuration } from '../../utils/mediaDuration';
 import IconButton from '../ui/IconButton';
 import './ImageViewer.css';
 
+function viewerControls(viewer) {
+  if (!viewer) return [];
+  return [...viewer.querySelectorAll('button:not([disabled]), input:not([disabled]), a[href], video[controls], audio[controls], [tabindex]:not([tabindex="-1"]):not([data-focus-guard])')]
+    .filter(element => element.getClientRects().length && getComputedStyle(element).visibility !== 'hidden');
+}
+
 function isAudioUrl(url) {
   if (!url || typeof url !== 'string') return false;
   const lower = url.toLowerCase();
@@ -39,6 +45,9 @@ function isVideoUrl(url) {
 export default function ImageViewer({ imageUrl, isVideo: isVideoProp, onClose }) {
   const videoRef = useRef(null);
   const closeButtonRef = useRef(null);
+  const viewerRef = useRef(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   const [videoReady, setVideoReady] = useState(false);
   const [renderType, setRenderType] = useState(() => {
     if (isAudioUrl(imageUrl)) return 'audio';
@@ -102,20 +111,23 @@ export default function ImageViewer({ imageUrl, isVideo: isVideoProp, onClose })
 
   useEffect(() => {
     if (!imageUrl) return undefined;
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        onClose();
+    const returnFocus = document.activeElement;
+    const handleKeyDown = event => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        onCloseRef.current();
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [imageUrl, onClose]);
-
-  useEffect(() => {
-    if (!imageUrl) return undefined;
-    const returnFocus = document.activeElement;
-    closeButtonRef.current?.focus();
+    const keepFocusInside = event => {
+      if (!viewerRef.current?.contains(event.target)) closeButtonRef.current?.focus({ preventScroll: true });
+    };
+    closeButtonRef.current?.focus({ preventScroll: true });
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('focusin', keepFocusInside);
     return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('focusin', keepFocusInside);
       if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
     };
   }, [imageUrl]);
@@ -124,12 +136,16 @@ export default function ImageViewer({ imageUrl, isVideo: isVideoProp, onClose })
 
   const content = (
     <div
+      ref={viewerRef}
       className="chat-image-viewer"
       role="dialog"
       aria-modal="true"
       aria-label={renderType === 'audio' ? 'Аудио' : renderType === 'video' ? 'Просмотр видео' : 'Просмотр изображения'}
       onClick={onClose}
     >
+      {/* Guards let the browser traverse native video/audio controls normally. */}
+      <span className="chat-image-viewer-focus-guard" tabIndex={0} data-focus-guard aria-hidden="true"
+        onFocus={() => viewerControls(viewerRef.current).at(-1)?.focus({ preventScroll: true })} />
       <IconButton
         ref={closeButtonRef}
         className="chat-image-viewer-close"
@@ -167,6 +183,8 @@ export default function ImageViewer({ imageUrl, isVideo: isVideoProp, onClose })
           }}
         />
       )}
+      <span className="chat-image-viewer-focus-guard" tabIndex={0} data-focus-guard aria-hidden="true"
+        onFocus={() => closeButtonRef.current?.focus({ preventScroll: true })} />
     </div>
   );
 

@@ -437,7 +437,7 @@ export default function ChatInfo() {
   const isOnlineStatus = statusText.toLowerCase().includes('в сети');
 
   return (
-    <aside className={`chat-info ${isInfoOpen ? 'open' : ''}`}>
+    <aside className={`chat-info ${isInfoOpen ? 'open' : ''}`} inert={!isInfoOpen} aria-hidden={!isInfoOpen}>
       <div className="chat-info-inner">
         {/* Top Header */}
         <div className="info-header">

@@ -3,6 +3,7 @@
 .chat-image-viewer .chat-image-viewer-close { position: fixed; top: max(8px, env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); z-index: 1; color: white; background: transparent; }
 .chat-image-viewer .chat-image-viewer-close:hover { color: white; background: rgb(255 255 255 / 12%); }.chat-image-viewer .chat-image-viewer-close:focus-visible { outline-color: white; }
 .chat-image-viewer-audio-container { width: min(440px, 100%); padding: 20px; border: 1px solid var(--border-color); border-radius: 12px; background: var(--bg-secondary); }
+.chat-image-viewer-focus-guard { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
 @keyframes viewerFadeIn { from { opacity: 0; } to { opacity: 1; } }
 @media (max-width: 768px) { .chat-image-viewer { padding-inline: max(12px, env(safe-area-inset-left, 0px)) max(12px, env(safe-area-inset-right, 0px)); } }
 @media (prefers-reduced-motion: reduce) { .chat-image-viewer { animation: none; } }

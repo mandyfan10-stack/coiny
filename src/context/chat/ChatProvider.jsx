@@ -154,6 +154,8 @@ export const ChatProvider = ({ children }) => {
       deleteStory: stories.deleteStory,
       searchQuery: ui.searchQuery,
       setSearchQuery: ui.setSearchQuery,
+      isChatListSearchOpen: ui.isChatListSearchOpen,
+      setIsChatListSearchOpen: ui.setIsChatListSearchOpen,
       activeFolder: ui.activeFolder,
       setActiveFolder: ui.setActiveFolder,
       isSettingsOpen: ui.isSettingsOpen,

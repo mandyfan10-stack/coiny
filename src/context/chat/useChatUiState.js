@@ -8,6 +8,7 @@ import { normalizeSettingsSection } from '../../utils/settingsNavigation.js';
 export function useChatUiState(currentUser) {
   const [activeChatId, setActiveChatId] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isChatListSearchOpen, setIsChatListSearchOpen] = useState(false);
   const [activeFolder, setActiveFolder] = useState('all');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isInfoOpen, setIsInfoOpen] = useState(false);
@@ -34,6 +35,11 @@ export function useChatUiState(currentUser) {
     return () => { settingsBackHandlerRef.current = null; };
   }, []);
   const [newChatModalTab, setNewChatModalTab] = useState('personal');
+
+  useEffect(() => {
+    setIsChatListSearchOpen(false);
+    setSearchQuery('');
+  }, [currentUser?.id]);
 
   // Synchronize wallpaper and theme when currentUser profile updates/loads
   useEffect(() => {
@@ -82,7 +88,7 @@ export function useChatUiState(currentUser) {
 
     window.handleAndroidBackButton = () => {
       // 1. Close open image preview / lightbox
-      const activeImageViewerClose = document.querySelector('.image-viewer-close, .lightbox-close');
+      const activeImageViewerClose = document.querySelector('.chat-image-viewer-close, .image-viewer-close, .lightbox-close');
       if (activeImageViewerClose instanceof HTMLElement) {
         triggerHaptic(10);
         activeImageViewerClose.click();
@@ -136,7 +142,16 @@ export function useChatUiState(currentUser) {
         return true;
       }
 
-      // 7. Already at root chat list -> let Android handle normal exit / minimize
+      // 7. Mobile list search closes before Android exits the app. A search
+      // underneath an active chat stays intact until we return to the list.
+      if (isChatListSearchOpen && window.matchMedia('(max-width: 768px)').matches) {
+        triggerHaptic(10);
+        setSearchQuery('');
+        setIsChatListSearchOpen(false);
+        return true;
+      }
+
+      // 8. Already at root chat list -> let Android handle normal exit / minimize
       return false;
     };
 
@@ -149,7 +164,8 @@ export function useChatUiState(currentUser) {
     isNewChatOpen,
     isCreateStoryOpen,
     isInfoOpen,
-    activeChatId
+    activeChatId,
+    isChatListSearchOpen
   ]);
 
   return {
@@ -157,6 +173,8 @@ export function useChatUiState(currentUser) {
     setActiveChatId,
     searchQuery,
     setSearchQuery,
+    isChatListSearchOpen,
+    setIsChatListSearchOpen,
     activeFolder,
     setActiveFolder,
     isSettingsOpen,

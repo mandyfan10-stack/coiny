@@ -19,6 +19,8 @@ export default function Sidebar() {
     setActiveChatId,
     searchQuery,
     setSearchQuery,
+    isChatListSearchOpen: isSearchOpen,
+    setIsChatListSearchOpen: setIsSearchOpen,
     activeFolder,
     setActiveFolder,
     stories,
@@ -39,19 +41,23 @@ export default function Sidebar() {
   const [globalLoading, setGlobalLoading] = useState(false);
   const [showMyStoriesMenu, setShowMyStoriesMenu] = useState(false);
   const [openingProfileId, setOpeningProfileId] = useState(null);
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const wasSearchOpenRef = useRef(false);
   const searchInputRef = useRef(null);
   const searchToggleRef = useRef(null);
   const storiesTrayRef = useRef(null);
 
   useEffect(() => {
-    if (isSearchOpen) searchInputRef.current?.focus();
-  }, [isSearchOpen]);
+    const isMobile = window.matchMedia('(max-width: 768px)').matches;
+    if (!isMobile || !activeChatId) {
+      if (isSearchOpen) searchInputRef.current?.focus({ preventScroll: true });
+      else if (wasSearchOpenRef.current && isMobile) searchToggleRef.current?.focus({ preventScroll: true });
+    }
+    wasSearchOpenRef.current = isSearchOpen;
+  }, [isSearchOpen, activeChatId]);
 
   const closeSearch = () => {
     setSearchQuery('');
     setIsSearchOpen(false);
-    if (window.matchMedia('(max-width: 768px)').matches) requestAnimationFrame(() => searchToggleRef.current?.focus());
   };
   const openNewChat = () => {
     triggerHaptic(8);
