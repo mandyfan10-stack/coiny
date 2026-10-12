@@ -45,6 +45,9 @@ test('reaction drawer stays wide and fully visible at chat top', async ({ page }
   await chatBody.waitFor({ state: 'visible' });
 
   // Scroll to the very top — this is where the old absolute drawer got clipped.
+  // Register manual intent so background synchronization does not pin the chat
+  // back to the latest message while the test inspects an older row.
+  await chatBody.dispatchEvent('wheel', { deltaY: -1000 });
   await chatBody.evaluate((el) => {
     el.scrollTop = 0;
   });
@@ -141,10 +144,14 @@ test('reaction drawer stays wide and fully visible at chat top', async ({ page }
   });
   await page.waitForTimeout(200);
 
-  const stillOpen = await drawer.evaluate((el) => {
+  // An offscreen anchor closes its drawer. Query absence directly: locator
+  // evaluation would wait for the absent drawer until the entire test expires.
+  const stillOpen = await page.evaluate(() => {
+    const el = document.querySelector('.reaction-drawer');
+    if (!el) return false;
     const r = el.getBoundingClientRect();
     return getComputedStyle(el).visibility === 'visible' && r.width > 100;
-  }).catch(() => false);
+  });
   if (!stillOpen) {
     await targetRow.scrollIntoViewIfNeeded();
     await targetRow.locator('.message-bubble').hover();
@@ -154,7 +161,8 @@ test('reaction drawer stays wide and fully visible at chat top', async ({ page }
       .toBe(true);
   }
 
-  const finalWidth = await drawer.evaluate((el) => el.getBoundingClientRect().width);
+  await expect(drawer).toBeVisible({ timeout: 5_000 });
+  const finalWidth = await page.evaluate(() => document.querySelector('.reaction-drawer')?.getBoundingClientRect().width || 0);
   expect(finalWidth).toBeGreaterThan(160);
 
   expect(pageErrors, pageErrors.join('\n')).toEqual([]);
