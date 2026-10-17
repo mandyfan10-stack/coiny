@@ -161,7 +161,7 @@ test('call hardening binds MLS signaling and fully disposable DSP', async () => 
   assert.match(dsp, /DynamicsCompressorNode/);
   assert.match(dsp, /AudioWorkletNode/);
   assert.match(dsp, /replaceTrack/);
-  assert.match(dsp, /context\?\.close/);
+  assert.match(dsp, /resource.context.close\(\)/);
   assert.match(dsp, /echoCancellation: true/);
   assert.match(ice, /iceTransportPolicy: hasRelay && !options\.allowDirectConnection \? 'relay' : 'all'/);
   assert.match(ice, /STUN_SERVERS/);

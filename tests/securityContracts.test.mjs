@@ -4,13 +4,14 @@ import { readFile } from 'node:fs/promises';
 
 const callProvider = await readFile(new URL('../src/context/calls/CallProvider.jsx', import.meta.url), 'utf8');
 const callSignaling = await readFile(new URL('../src/context/calls/useCallSignaling.js', import.meta.url), 'utf8');
-const callSources = [callProvider, callSignaling].join('\n');
+const callTransport = await readFile(new URL('../src/context/calls/useCallTransport.js', import.meta.url), 'utf8');
+const callSources = [callProvider, callSignaling, callTransport].join('\n');
 const migration = await readFile(new URL('../supabase/migrations/20260723114811_harden_messenger_security_and_limits.sql', import.meta.url), 'utf8');
 
 test('call signaling uses only private chat-scoped topics', () => {
   assert.doesNotMatch(callSources, /call:user:/);
   assert.match(callSources, /call:chat:/);
-  assert.match(callSources, /call:chat:\$\{callStateRef\.current\.chatId\}:media/);
+  assert.match(callTransport, /call:chat:\$\{chat\.id\}:media/);
   assert.match(callSources, /private:\s*true/);
   assert.doesNotMatch(
     callSources,

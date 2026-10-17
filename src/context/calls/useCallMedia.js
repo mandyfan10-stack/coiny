@@ -1,267 +1,152 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { removeVideoSender, replaceOrAddVideoTrack, stopStreamTracks } from './mediaTrackHelpers';
 
-/**
- * Camera / screen-share controls and renegotiation for 1:1 and group calls.
- */
+/** Camera/display requests belong to a call generation, including pending permissions. */
 export function useCallMedia({
-  callState,
-  chats,
-  currentUser,
-  localVideoStream,
-  setLocalVideoStream,
-  isScreenSharing,
-  setIsScreenSharing,
-  localVideoStreamRef,
-  screenStreamRef,
-  wasCameraActiveRef,
-  pcRef,
-  pcsRef,
-  activeCallChannelRef,
-  setMediaError
+  callState, currentUser, chats, setLocalVideoStream, setIsScreenSharing,
+  localVideoStreamRef, screenStreamRef, wasCameraActiveRef, pcRef, pcsRef,
+  activeCallChannelRef, setMediaError, renegotiateMedia, mediaGenerationRef, callStateRef
 }) {
-  const reportMediaError = useCallback((message) => {
-    if (typeof setMediaError === 'function') setMediaError(message);
-  }, [setMediaError]);
-  const triggerRenegotiation = useCallback(async () => {
-    const isGroup = chats.find((c) => c.id === callState.chatId)?.type === 'group';
-    if (isGroup) {
-      await Promise.all(Object.keys(pcsRef.current).map(async (peerId) => {
-        const pcInstance = pcsRef.current[peerId];
-        if (pcInstance && activeCallChannelRef.current) {
-          try {
-            pcInstance.makingOffer = true;
-            const offer = await pcInstance.createOffer();
-            await pcInstance.setLocalDescription(offer);
-            await activeCallChannelRef.current.send({
-              type: 'broadcast',
-              event: 'signal',
-              payload: {
-                type: 'offer',
-                sdp: offer.sdp,
-                senderId: currentUser.id,
-                targetId: peerId
-              }
-            });
-          } catch (e) {
-            console.error(e);
-          } finally {
-            pcInstance.makingOffer = false;
-          }
-        }
-      }));
-    } else if (pcRef.current && activeCallChannelRef.current) {
-      try {
-        const offer = await pcRef.current.createOffer();
-        await pcRef.current.setLocalDescription(offer);
-        activeCallChannelRef.current.send({
-          type: 'broadcast',
-          event: 'signal',
-          payload: { type: 'renegotiate-offer', sdp: offer.sdp }
-        });
-      } catch (e) {
-        console.error(e);
-      }
-    }
-  }, [callState.chatId, chats, currentUser, pcsRef, pcRef, activeCallChannelRef]);
-
-  const cleanupVideoTracks = useCallback(async () => {
-    if (localVideoStreamRef.current) {
-      localVideoStreamRef.current.getTracks().forEach((track) => track.stop());
-      localVideoStreamRef.current = null;
-    }
-    setLocalVideoStream(null);
-
-    const isGroup = chats.find((c) => c.id === callState.chatId)?.type === 'group';
-    if (isGroup) {
-      Object.keys(pcsRef.current).forEach((peerId) => {
-        const pcInstance = pcsRef.current[peerId];
-        if (pcInstance) removeVideoSender(pcInstance);
-      });
-    } else if (pcRef.current) {
-      removeVideoSender(pcRef.current);
-    }
-
-    if (activeCallChannelRef.current) {
-      activeCallChannelRef.current.send({
-        type: 'broadcast',
-        event: 'signal',
-        payload: { type: 'video-stopped' }
-      });
-      await triggerRenegotiation();
-    }
-  }, [callState.chatId, chats, triggerRenegotiation, localVideoStreamRef, setLocalVideoStream, pcsRef, pcRef, activeCallChannelRef]);
-
-  const stopScreenSharing = useCallback(async (revertToCamera = false) => {
-    if (screenStreamRef.current) {
-      screenStreamRef.current.getTracks().forEach((track) => track.stop());
-      screenStreamRef.current = null;
-    }
-    setIsScreenSharing(false);
-
-    if (revertToCamera && wasCameraActiveRef.current) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
-        setLocalVideoStream(stream);
-        localVideoStreamRef.current = stream;
-
-        const videoTrack = stream.getVideoTracks()[0];
-        const isGroup = chats.find((c) => c.id === callState.chatId)?.type === 'group';
-
-        if (isGroup) {
-          await Promise.all(Object.keys(pcsRef.current).map(async (peerId) => {
-            if (pcsRef.current[peerId]) await replaceOrAddVideoTrack(pcsRef.current[peerId], videoTrack, stream);
-          }));
-          await triggerRenegotiation();
-        } else if (pcRef.current) {
-          await replaceOrAddVideoTrack(pcRef.current, videoTrack, stream);
-          await triggerRenegotiation();
-        }
-      } catch (err) {
-        console.error(err);
-        await cleanupVideoTracks();
-      }
-    } else {
-      await cleanupVideoTracks();
-    }
-    wasCameraActiveRef.current = false;
-  }, [cleanupVideoTracks, triggerRenegotiation, callState.chatId, chats, screenStreamRef, wasCameraActiveRef, setIsScreenSharing, setLocalVideoStream, localVideoStreamRef, pcsRef, pcRef]);
-
-  const toggleCallVideo = useCallback(async () => {
-    if (callState.status !== 'connected') return;
-
-    const isGroup = chats.find((c) => c.id === callState.chatId)?.type === 'group';
-
-    if (localVideoStream) {
-      localVideoStream.getTracks().forEach((track) => track.stop());
-      localVideoStreamRef.current = null;
-      if (screenStreamRef.current) {
-        stopStreamTracks(screenStreamRef.current);
-        screenStreamRef.current = null;
-      }
-      setIsScreenSharing(false);
-      wasCameraActiveRef.current = false;
-
-      if (isGroup) {
-        Object.keys(pcsRef.current).forEach((peerId) => {
-          if (pcsRef.current[peerId]) removeVideoSender(pcsRef.current[peerId]);
-        });
-      } else if (pcRef.current) {
-        removeVideoSender(pcRef.current);
-      }
-
-      setLocalVideoStream(null);
-
-      if (activeCallChannelRef.current) {
-        activeCallChannelRef.current.send({
-          type: 'broadcast',
-          event: 'signal',
-          payload: { type: 'video-stopped' }
-        });
-        await triggerRenegotiation();
-      }
-    } else {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
-        setLocalVideoStream(stream);
-        localVideoStreamRef.current = stream;
-        reportMediaError(null);
-
-        const videoTrack = stream.getVideoTracks()[0];
-
-        if (isGroup) {
-          Object.keys(pcsRef.current).forEach((peerId) => {
-            if (pcsRef.current[peerId]) pcsRef.current[peerId].addTrack(videoTrack, stream);
-          });
-          await triggerRenegotiation();
-        } else if (pcRef.current) {
-          pcRef.current.addTrack(videoTrack, stream);
-          await triggerRenegotiation();
-        }
-      } catch (err) {
-        console.error('Failed to capture video:', err);
-        reportMediaError('Не удалось получить доступ к камере. Проверьте разрешения.');
-      }
-    }
-  }, [callState.status, localVideoStream, callState.chatId, chats, triggerRenegotiation, localVideoStreamRef, screenStreamRef, wasCameraActiveRef, setIsScreenSharing, setLocalVideoStream, pcsRef, pcRef, activeCallChannelRef, reportMediaError]);
-
-  const toggleCallScreenShare = useCallback(async () => {
-    if (callState.status !== 'connected') return;
-
-    if (isScreenSharing) {
-      await stopScreenSharing(true);
-    } else {
-      try {
-        const wasCameraActive = !!localVideoStream;
-        wasCameraActiveRef.current = wasCameraActive;
-
-        if (wasCameraActive) {
-          if (localVideoStreamRef.current) {
-            localVideoStreamRef.current.getTracks().forEach((track) => track.stop());
-            localVideoStreamRef.current = null;
-          }
-          setLocalVideoStream(null);
-        }
-
-        const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-        screenStreamRef.current = screenStream;
-        setIsScreenSharing(true);
-        setLocalVideoStream(screenStream);
-        localVideoStreamRef.current = screenStream;
-
-        const screenTrack = screenStream.getVideoTracks()[0];
-
-        screenTrack.onended = () => {
-          stopScreenSharing(true);
-        };
-
-        const isGroup = chats.find((c) => c.id === callState.chatId)?.type === 'group';
-
-        if (isGroup) {
-          await Promise.all(Object.keys(pcsRef.current).map(async (peerId) => {
-            if (pcsRef.current[peerId]) await replaceOrAddVideoTrack(pcsRef.current[peerId], screenTrack, screenStream);
-          }));
-          await triggerRenegotiation();
-        } else if (pcRef.current) {
-          // Renegotiate after addTrack/replace so peer receives screen without prior camera (C3).
-          await replaceOrAddVideoTrack(pcRef.current, screenTrack, screenStream);
-          await triggerRenegotiation();
-        }
-      } catch (err) {
-        console.error('Failed screen share:', err);
-        reportMediaError('Не удалось начать демонстрацию экрана.');
-        if (wasCameraActiveRef.current) {
-          try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
-            setLocalVideoStream(stream);
-            localVideoStreamRef.current = stream;
-
-            const videoTrack = stream.getVideoTracks()[0];
-            const isGroup = chats.find((c) => c.id === callState.chatId)?.type === 'group';
-
-            if (isGroup) {
-              await Promise.all(Object.keys(pcsRef.current).map(async (peerId) => {
-                if (pcsRef.current[peerId]) await replaceOrAddVideoTrack(pcsRef.current[peerId], videoTrack, stream);
-              }));
-              await triggerRenegotiation();
-            } else if (pcRef.current) {
-              await replaceOrAddVideoTrack(pcRef.current, videoTrack, stream);
-              await triggerRenegotiation();
-            }
-          } catch (cameraErr) {
-            console.error(cameraErr);
-          }
-        }
-        wasCameraActiveRef.current = false;
-      }
-    }
-  }, [callState.status, isScreenSharing, localVideoStream, stopScreenSharing, triggerRenegotiation, callState.chatId, chats, wasCameraActiveRef, localVideoStreamRef, screenStreamRef, setIsScreenSharing, setLocalVideoStream, pcsRef, pcRef, reportMediaError]);
-
-  return {
-    triggerRenegotiation,
-    cleanupVideoTracks,
-    stopScreenSharing,
-    toggleCallVideo,
-    toggleCallScreenShare
+  const mounted = useRef(true);
+  const operation = useRef(0);
+  const latest = useRef({ callState, currentUser });
+  latest.current = { callState, currentUser };
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; operation.current += 1; };
+  }, []);
+  const begin = () => ({
+    generation: mediaGenerationRef?.current,
+    callId: callState.callId,
+    userId: currentUser?.id,
+    operation: ++operation.current
+  });
+  const current = (token, checkOperation = true) => {
+    const live = callStateRef?.current ?? latest.current.callState;
+    return mounted.current && live.status === 'connected' && live.callId === token.callId
+      && latest.current.currentUser?.id === token.userId
+      && mediaGenerationRef?.current === token.generation
+      && (!checkOperation || operation.current === token.operation);
   };
+  const peers = () => chats.find(chat => chat.id === callState.chatId)?.type === 'group'
+    ? Object.values(pcsRef.current) : [pcRef.current].filter(Boolean);
+  const report = (token, message) => { if (current(token)) setMediaError?.(message); };
+  const triggerRenegotiation = useCallback(async () => { await renegotiateMedia?.(); }, [renegotiateMedia]);
+
+  const clearVideo = async (token) => {
+    if (!current(token)) return;
+    const video = localVideoStreamRef.current;
+    const screen = screenStreamRef.current;
+    screen?.getTracks().forEach(track => { track.onended = null; });
+    localVideoStreamRef.current = null;
+    screenStreamRef.current = null;
+    stopStreamTracks(video);
+    if (screen !== video) stopStreamTracks(screen);
+    setLocalVideoStream(null);
+    setIsScreenSharing(false);
+    for (const pc of peers()) removeVideoSender(pc);
+    if (activeCallChannelRef.current) {
+      try {
+        const channel = activeCallChannelRef.current;
+        const payload = { type: 'video-stopped', callId: token.callId, senderId: token.userId };
+        const group = chats.find(chat => chat.id === callState.chatId)?.type === 'group';
+        if (group) {
+          for (const targetId of Object.keys(pcsRef.current)) {
+            if (!current(token)) return;
+            await channel.send({ type: 'broadcast', event: 'signal', payload: { ...payload, targetId } });
+          }
+        } else await channel.send({ type: 'broadcast', event: 'signal', payload });
+      } catch { report(token, 'Не удалось сообщить об отключении видео.'); }
+      if (current(token)) await triggerRenegotiation();
+    }
+  };
+  const activate = async (stream, token, screen) => {
+    if (!current(token)) { stopStreamTracks(stream); return false; }
+    const previous = localVideoStreamRef.current;
+    const videoTrack = stream.getVideoTracks()[0];
+    const targets = peers();
+    try {
+      for (const pc of targets) {
+        if (!current(token)) { stopStreamTracks(stream); return false; }
+        await replaceOrAddVideoTrack(pc, videoTrack, stream);
+        if (!current(token)) { stopStreamTracks(stream); return false; }
+      }
+      if (videoTrack?.readyState === 'ended') throw new Error('Capture ended before activation');
+    } catch (error) {
+      // A failed replacement must not leave an otherwise working camera sender
+      // pointing at the newly rejected/stopped display stream.
+      if (current(token)) {
+        for (const pc of targets) {
+          try {
+            const track = previous?.getVideoTracks()[0];
+            if (track && track.readyState !== 'ended') await replaceOrAddVideoTrack(pc, track, previous);
+            else removeVideoSender(pc);
+          } catch { /* Closed/replaced peers are cleaned up by their call owner. */ }
+          if (!current(token)) break;
+        }
+      }
+      stopStreamTracks(stream);
+      throw error;
+    }
+    if (!current(token)) { stopStreamTracks(stream); return false; }
+    screenStreamRef.current?.getTracks().forEach(track => { track.onended = null; });
+    localVideoStreamRef.current = stream;
+    screenStreamRef.current = screen ? stream : null;
+    setLocalVideoStream(stream);
+    setIsScreenSharing(screen);
+    if (previous !== stream) stopStreamTracks(previous);
+    report(token, null);
+    await triggerRenegotiation();
+    return current(token);
+  };
+  const cleanupVideoTracks = async () => {
+    const token = begin();
+    if (current(token)) { wasCameraActiveRef.current = false; await clearVideo(token); }
+  };
+  const stopScreenSharing = async (revertToCamera = false) => {
+    const token = begin();
+    if (!current(token)) return;
+    const restoreCamera = revertToCamera && wasCameraActiveRef.current;
+    wasCameraActiveRef.current = false;
+    await clearVideo(token);
+    if (!restoreCamera || !current(token)) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+      if (!current(token)) { stopStreamTracks(stream); return; }
+      await activate(stream, token, false);
+    } catch { report(token, 'Не удалось восстановить камеру. Проверьте разрешения.'); }
+  };
+  const toggleCallVideo = async () => {
+    const token = begin();
+    if (!current(token)) return;
+    if (localVideoStreamRef.current) {
+      wasCameraActiveRef.current = false;
+      await clearVideo(token);
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+      if (!current(token)) { stopStreamTracks(stream); return; }
+      await activate(stream, token, false);
+    } catch { report(token, 'Не удалось получить доступ к камере. Проверьте разрешения.'); }
+  };
+  const toggleCallScreenShare = async () => {
+    if (screenStreamRef.current) { await stopScreenSharing(true); return; }
+    const token = begin();
+    if (!current(token)) return;
+    const hadCamera = Boolean(localVideoStreamRef.current);
+    try {
+      // Retain the camera until display permission succeeds. Canceling the
+      // browser picker must not stop a working camera or reopen its permission.
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      if (!current(token)) { stopStreamTracks(stream); return; }
+      if (!await activate(stream, token, true)) return;
+      wasCameraActiveRef.current = hadCamera;
+      const screenTrack = stream.getVideoTracks()[0];
+      screenTrack.onended = () => {
+        if (current(token, false) && screenStreamRef.current === stream) void stopScreenSharing(true);
+      };
+    } catch { report(token, 'Не удалось начать демонстрацию экрана.'); }
+  };
+  return { triggerRenegotiation, cleanupVideoTracks, stopScreenSharing, toggleCallVideo, toggleCallScreenShare };
 }

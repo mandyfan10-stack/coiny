@@ -21,7 +21,7 @@ export function callFrameMilestone(payload) {
     if (event === 'broadcast') event = body?.event;
   }
   if (!String(topic).startsWith('realtime:call:chat:')) return null;
-  const allowed = ['phx_join', 'phx_reply', 'phx_error', 'phx_close', 'incoming-call', 'call-received', 'call-accepted', 'call-rejected', 'signal', 'hangup'];
+  const allowed = ['phx_join', 'phx_reply', 'phx_error', 'phx_close', 'incoming-call', 'call-received', 'call-accepted', 'call-accepted-received', 'call-rejected', 'signal', 'hangup'];
   if (!allowed.includes(event)) return null;
   const status = ['ok', 'error'].includes(body?.status) ? body.status : undefined;
   return { kind: event, channel: String(topic).endsWith(':media') ? 'media' : 'invitation', ...(status ? { status } : {}) };

@@ -12,6 +12,9 @@ export interface CallerInfo {
 
 export interface CallState {
   status: CallStatus;
+  callId?: string;
+  ownerId?: ProfileId;
+  expiresAt?: number;
   chatId: ChatId | null;
   /** Legacy field; live timer is local to CallOverlay (C9). */
   duration: number;

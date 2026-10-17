@@ -852,3 +852,17 @@
 
 
 .call-card.is-compact { min-height: 0; max-height: 100%; overflow-y: auto; }
+.call-quality {
+  margin: 8px auto;
+  max-width: 320px;
+  width: 100%;
+  color: var(--text-secondary, #8d9ca8);
+  font-size: 12px;
+  text-align: left;
+}
+.call-quality summary { cursor: pointer; padding: 8px 4px; text-align: center; }
+.call-quality summary:focus-visible { outline: 2px solid var(--accent-color, #3390ec); outline-offset: 2px; }
+.call-quality dl { margin: 4px 0; }
+.call-quality dl div { display: flex; justify-content: space-between; gap: 12px; padding: 3px 4px; }
+.call-quality dd { margin: 0; flex-shrink: 0; }
+.call-quality p { margin: 8px 4px; line-height: 1.4; }

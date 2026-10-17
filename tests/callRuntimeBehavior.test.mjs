@@ -237,7 +237,10 @@ test('ICE configuration accepts only authenticated TURN servers and defaults to 
   };
 
   const relayOnly = await refreshIceConfiguration({}, credentialClient);
-  assert.deepEqual(calls, [{ name: 'turn-credentials', options: { method: 'POST' } }]);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].name, 'turn-credentials');
+  assert.equal(calls[0].options.method, 'POST');
+  assert.ok(calls[0].options.signal instanceof AbortSignal);
   assert.equal(relayOnly.iceTransportPolicy, 'relay');
   assert.deepEqual(relayOnly.iceServers.slice(ICE_SERVERS.length), [
     { urls: ['turn:relay.example.test:3478'], username: 'alice', credential: 'secret-1' },

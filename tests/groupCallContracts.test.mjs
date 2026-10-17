@@ -9,35 +9,44 @@ const callMedia = await readFile(new URL('../src/context/calls/useCallMedia.js',
 const callSignaling = await readFile(new URL('../src/context/calls/useCallSignaling.js', import.meta.url), 'utf8');
 const callOverlay = await readFile(new URL('../src/components/call/CallOverlay.jsx', import.meta.url), 'utf8');
 const callOverlayCss = await readFile(new URL('../src/components/call/CallOverlay.css', import.meta.url), 'utf8');
-const callSources = [callProvider, callMedia, callSignaling].join('\n');
+const callTransport = await readFile(new URL('../src/context/calls/useCallTransport.js', import.meta.url), 'utf8');
+const callSources = [callProvider, callMedia, callSignaling, callTransport].join('\n');
 
-test('group peers are registered from both join and signaling events', () => {
-  assert.match(callProvider, /const ensureGroupParticipant = \(peerId\)/);
-  assert.ok((callProvider.match(/ensureGroupParticipant\(senderId\)/g) || []).length >= 2);
-});
-test('new group peers receive the currently active camera or screen track', () => {
-  assert.match(callProvider, /const activeVideoStream = localVideoStreamRef\.current/);
-  assert.match(callProvider, /track\.readyState === 'live'/);
-  assert.match(callProvider, /pcInstance\.addTrack\(track, activeVideoStream\)/);
+// Behavioral coverage uses actual peer sessions in callPeerSession.test.mjs and
+// actual providers with native ICE/DTLS/RTP in ui/call-transport.spec.mjs.
+test('group discovery and addressed signaling share one session per peer', () => {
+  assert.match(callTransport, /const existing = sessions.get\(id\)/);
+  assert.match(callTransport, /event: 'join-group-call'/);
+  assert.match(callTransport, /payload.targetId !== selfId \|\| !isMember\(id\)/);
+  assert.match(callTransport, /else await engine.receive\(payload\)/);
 });
 
-test('group media updates finish for every peer before renegotiation', () => {
+test('new group peers receive the live camera or screen track', () => {
+  assert.match(callTransport, /localVideoStreamRef.current\?\.getVideoTracks\(\).filter\(track => track.readyState === 'live'\)/);
+  assert.match(callTransport, /pc.addTrack\(track, refs.localVideoStreamRef.current\)/);
+});
+
+test('camera and screen replacement finish before the shared renegotiation', () => {
   assert.doesNotMatch(callSources, /forEach\(async/);
-  assert.ok((callSources.match(/await Promise\.all\(Object\.keys\(pcsRef\.current\)\.map/g) || []).length >= 4);
+  assert.match(callMedia, /for \(const pc of targets\)/);
+  assert.match(callMedia, /await replaceOrAddVideoTrack\(pc, videoTrack, stream\)/);
+  assert.match(callMedia, /await renegotiateMedia\?\.\(\)/);
+  assert.doesNotMatch(callMedia, /createOffer|setLocalDescription/);
 });
 
-test('group participant list is reconciled from Supabase Presence', () => {
-  assert.match(callProvider, /presence:\s*\{ key: currentUserRef\.current\.id \}/);
-  assert.match(callProvider, /\.on\('presence', \{ event: 'sync' \}/);
-  assert.match(callProvider, /activeCallChannel\.presenceState\(\)/);
-  assert.match(callProvider, /await activeCallChannel\.track\(\{/);
-  assert.match(callSources, /activeCallChannelRef\.current\.track\(\{/);
+test('group presence reconciles peers without tearing down healthy media', () => {
+  assert.match(callTransport, /presence: \{ key: selfId \}/);
+  assert.match(callTransport, /channel.presenceState\(\)/);
+  assert.match(callTransport, /await channel.track\(/);
+  assert.match(callTransport, /markMissing\(id\)/);
+  assert.match(callTransport, /15_000/);
+  assert.match(callTransport, /pc.connectionState !== 'connected'\) removePeer\(id\)/);
 });
 
-test('group call metadata is resolved from the call chat instead of the open chat', () => {
-  assert.match(callProvider, /const callChat = chats\.find\(c => c\.id === callState\.chatId\)/);
-  assert.match(callProvider, /callChatRef\.current\?\.members/);
-  assert.doesNotMatch(callProvider, /activeChatRef/);
+test('call metadata is resolved from the call chat instead of the open chat', () => {
+  assert.match(callProvider, /const callChat = chats.find\(c => c.id === callState.chatId\)/);
+  assert.match(callTransport, /latest.current.callChatRef.current\?\.members/);
+  assert.doesNotMatch(callSources, /activeChatRef/);
 });
 
 test('endCallLocally only idles when status is still ended (C1)', () => {
@@ -56,16 +65,19 @@ test('call signaling subscriptions stay stable across ordinary context rerenders
   assert.match(callSignaling, /const chatsRef = useRef\(chats\)/);
   assert.match(callSignaling, /encryptEventRef\.current\(\.\.\.args\)/);
   assert.match(callSignaling, /decryptEventRef\.current\(\.\.\.args\)/);
-  assert.match(callSignaling, /\[currentUserId, signalingChannelKey, setCallState\]/);
+  assert.match(callSignaling, /\[currentUserId, signalingChannelKey, setCallState, acceptedIsCurrent, terminalIsCurrent\]/);
   assert.doesNotMatch(callSignaling, /\[currentUserId,[^\]]*\bchats\b/);
 });
 
 test('1:1 screen share triggers renegotiation after track replace (C3)', () => {
-  assert.match(callMedia, /await replaceOrAddVideoTrack\(pcRef\.current, screenTrack, screenStream\);\s*\n\s*await triggerRenegotiation\(\);/);
+  assert.match(callMedia, /await activate\(stream, token, true\)/);
+  assert.match(callMedia, /await replaceOrAddVideoTrack[\s\S]*await triggerRenegotiation\(\)/);
 });
 
 test('WebRTC effect cleanup tears down group peers and analyzers (C4)', () => {
-  assert.match(callProvider, /cancelled = true/);
+  assert.match(callTransport, /active = false/);
+  assert.match(callTransport, /session.*dispose|engine.dispose/);
+  assert.match(callTransport, /teardownMedia\(\)/);
   assert.match(callProvider, /teardownMedia\(\)/);
   assert.match(callProvider, /pcsRef\.current\[peerId\]\?\.close/);
   assert.match(callProvider, /audioAnalyzersRef\.current\[key\]\?\.stop/);
@@ -79,15 +91,15 @@ test('dead useCallWebRtc extract is removed (C5)', async () => {
   assert.doesNotMatch(callProvider, /useCallWebRtc/);
 });
 
-test('group UI is voice-stage only without remote video surface (C6)', () => {
+test('group UI keeps participant and video controls (C6)', () => {
   assert.match(callOverlay, /isGroupCall/);
   assert.match(callOverlay, /showVideoControls/);
-  assert.match(callProvider, /group UI is voice-stage only/);
+  assert.match(callTransport, /cameraStream: stream/);
 });
 
 test('ICE failure exposes retry path and clearer copy (C7)', () => {
   assert.match(callProvider, /retryCallConnection/);
-  assert.match(callProvider, /restartIce/);
+  assert.match(callProvider, /session.recover\(\{ force: true \}\)/);
   assert.match(callOverlay, /Нет WebRTC-связи/);
   assert.match(callOverlay, /retryCallConnection/);
 });
@@ -107,118 +119,15 @@ test('compact call overlay and unmirrored screen preview (V1/V2)', () => {
   assert.match(callOverlayCss, /\.local-video-feed\.is-screen/);
 });
 
-test('retryCallConnection transmits new offer with iceRestart: true and logs state telemetry', () => {
-  assert.match(callProvider, /createOffer\(\{\s*iceRestart:\s*true\s*\}\)/);
-  assert.match(callProvider, /setLocalDescription\(offer\)/);
-  assert.match(callProvider, /\[WebRTC Telemetry\]/);
+test('media lifetime depends on call identity and uses current crypto callbacks', () => {
+  assert.match(callTransport, /\[status, callId, userId, teardownMedia, endCallLocally\]/);
+  assert.match(callTransport, /latest.current.encryptEvent\(\.\.\.args\)/);
+  assert.match(callTransport, /latest.current.decryptEvent\(\.\.\.args\)/);
+  assert.doesNotMatch(callTransport, /console\.(log|warn|error)/);
 });
 
-test('Perfect Negotiation handles polite and impolite glare resolution without InvalidStateError', () => {
-  assert.match(callProvider, /const isPolite = String\(currentUserId\) < String\(senderId\)/);
-  assert.match(callProvider, /const offerCollision = Boolean\(pcInstance\.makingOffer\) || pcInstance\.signalingState !== 'stable'/);
-  assert.match(callProvider, /setLocalDescription\(\{\s*type:\s*'rollback'\s*\}\)/);
-  assert.match(callProvider, /\[PerfectNegotiation\] Glare detected/);
-});
-
-test('Supabase Presence sync tears down peer connections, audio analyzers, and DOM feeds on abrupt disconnect', () => {
-  assert.match(callProvider, /teardownPeer/);
-  assert.match(callProvider, /!syncedParticipants\.has\(peerId\)/);
-  assert.match(callProvider, /webrtc-audio-\$\{peerId\}-/);
-});
-
-test('Audio analyzer lifecycle cleans up prior instances before replacement and handles track end', () => {
-  assert.match(callProvider, /audioAnalyzersRef\.current\['remote'\]\.stop/);
-  assert.match(callProvider, /audioAnalyzersRef\.current\[peerId\]\.stop/);
-  assert.match(callProvider, /event\.track\.onended/);
-});
-
-test('mock peer connection state transitions, restartIce offer generation, and track teardown integration', async () => {
-  class MockPeerConnection {
-    constructor() {
-      this.iceConnectionState = 'new';
-      this.connectionState = 'new';
-      this.signalingState = 'stable';
-      this.senders = [];
-      this.listeners = {};
-      this.localDescription = null;
-      this.iceRestartCalled = false;
-      this.iceRestartTriggered = false;
-    }
-    addEventListener(event, listener) {
-      this.listeners[event] = listener;
-    }
-    addTrack(track, stream) {
-      const sender = { track, stream };
-      this.senders.push(sender);
-      return sender;
-    }
-    async createOffer(options) {
-      if (options?.iceRestart) {
-        this.iceRestartTriggered = true;
-      }
-      return {
-        type: 'offer',
-        sdp: options?.iceRestart ? 'a=ice-options:trickle ice-restart\r\n' : 'a=ice-options:trickle\r\n'
-      };
-    }
-    async setLocalDescription(desc) {
-      this.localDescription = desc;
-      this.signalingState = desc?.type === 'rollback' ? 'stable' : 'have-local-offer';
-    }
-    restartIce() {
-      this.iceRestartCalled = true;
-    }
-    close() {
-      this.signalingState = 'closed';
-      this.connectionState = 'closed';
-      this.iceConnectionState = 'closed';
-    }
-  }
-
-  const pc = new MockPeerConnection();
-  assert.equal(pc.iceConnectionState, 'new');
-  assert.equal(pc.signalingState, 'stable');
-
-  // 1. Peer connection state transitions
-  pc.iceConnectionState = 'checking';
-  assert.equal(pc.iceConnectionState, 'checking');
-  pc.iceConnectionState = 'connected';
-  assert.equal(pc.iceConnectionState, 'connected');
-  pc.iceConnectionState = 'failed';
-  assert.equal(pc.iceConnectionState, 'failed');
-
-  // 2. restartIce() & offer generation with iceRestart: true
-  pc.restartIce();
-  assert.equal(pc.iceRestartCalled, true, 'restartIce() method must record invocation');
-
-  const offer = await pc.createOffer({ iceRestart: true });
-  assert.equal(pc.iceRestartTriggered, true, 'createOffer must accept iceRestart: true');
-  assert.match(offer.sdp, /ice-restart/, 'Offer SDP must contain ice-restart attribute');
-
-  await pc.setLocalDescription(offer);
-  assert.equal(pc.signalingState, 'have-local-offer', 'setLocalDescription must transition signalingState to have-local-offer');
-  assert.equal(pc.localDescription.type, 'offer');
-
-  // 3. Track teardown
-  let trackStopped = false;
-  const mockTrack = {
-    kind: 'audio',
-    readyState: 'live',
-    stop() {
-      this.readyState = 'ended';
-      trackStopped = true;
-    }
-  };
-  pc.addTrack(mockTrack);
-  assert.equal(pc.senders.length, 1);
-  assert.equal(mockTrack.readyState, 'live');
-
-  // Teardown execution: stop tracks and close peer connection
-  pc.senders.forEach(sender => sender.track.stop());
-  pc.close();
-
-  assert.equal(trackStopped, true, 'Media track stop() must be called on teardown');
-  assert.equal(mockTrack.readyState, 'ended', 'Media track readyState must transition to ended');
-  assert.equal(pc.connectionState, 'closed', 'PeerConnection state must transition to closed');
-  assert.equal(pc.signalingState, 'closed', 'SignalingState must transition to closed');
+test('audio analyzer lifecycle stops prior instances and handles ended tracks', () => {
+  assert.match(callTransport, /audioAnalyzersRef.current\[key\]\?\.stop\(\)/);
+  assert.match(callTransport, /track.onended/);
+  assert.match(callTransport, /element.srcObject = null/);
 });

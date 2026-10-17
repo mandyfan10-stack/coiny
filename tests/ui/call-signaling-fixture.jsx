@@ -4,20 +4,21 @@ import { useCallSignaling } from '../../src/context/calls/useCallSignaling';
 import { supabase } from '../../src/supabaseClient';
 import { dataService } from '../../src/services/dataLayer';
 
-const control = { channels: [], sent: [], drop: 0, failEncryption: 0, encryptionWait: null };
+const control = { channels: [], sent: [], drop: 0, dropEvents: {}, failEncryption: 0, encryptionWait: null };
 window.__callSignalingTest = control;
-const chats = [{ id: 'chat', cryptoVersion: 2, type: 'personal', members: [
-  { id: 'A', name: 'Alice' }, { id: 'B', name: 'Bob' }
-] }];
+const query = new URLSearchParams(location.search);
+const group = query.has('group');
+const users = [{ id: 'A', name: 'Alice' }, { id: 'B', name: 'Bob' }, ...(group ? [{ id: 'C', name: 'Carol' }] : [])];
+const chats = [{ id: 'chat', cryptoVersion: 2, type: group ? 'group' : 'personal', members: users }];
 dataService.isLive = () => true;
 supabase.channel = (topic, options) => {
-  const owner = control.channels.length === 0 ? 'A' : 'B';
+  const owner = users[control.channels.length % users.length].id;
   const channel = {
     topic: `realtime:${topic}`, owner, options, listeners: [], connected: false,
     on(_type, filter, callback) { this.listeners.push({ event: filter.event, callback }); return this; },
     subscribe(callback) {
       this.subscription = callback;
-      if (!(owner === 'B' && location.search.includes('hold=B'))) this.connect(true);
+      if (owner !== query.get('hold')) this.connect(true);
       return this;
     },
     connect(connected) {
@@ -28,6 +29,7 @@ supabase.channel = (topic, options) => {
     async send(message) {
       control.sent.push({ owner, event: message.event, counter: message.payload.envelope?.decoded.counter });
       if (control.drop > 0 && message.event === 'incoming-call') { control.drop--; return 'ok'; }
+      if (control.dropEvents[message.event] > 0) { control.dropEvents[message.event]--; return 'ok'; }
       if (!this.connected) return 'timed out';
       for (const peer of control.channels.filter((item) => item !== this && item.connected)) {
         for (const listener of peer.listeners.filter((item) => item.event === message.event)) {
@@ -50,6 +52,7 @@ function Peer({ id }) {
     encryptEvent: async (chatId, eventType, decoded) => {
       if (control.failEncryption > 0) { control.failEncryption--; throw new Error('MLS conversation state is unavailable.'); }
       if (control.encryptionWait && decoded.event === 'incoming-call') await control.encryptionWait;
+      if (control.acceptedWait && decoded.event === 'call-accepted') await control.acceptedWait;
       return { chatId, eventType, senderDeviceId: `device-${id}`, decoded };
     },
     decryptEvent: async (envelope) => {
@@ -63,17 +66,21 @@ function Peer({ id }) {
 
 control.start = (callId = 'call-1') => {
   const payload = { callerId: 'A', chatId: 'chat', callId, expiresAt: Date.now() + 60_000 };
-  control.A.setState({ status: 'calling', chatId: 'chat', callId, otherUserId: 'B', isOutgoing: true });
+  control.A.setState({ status: group ? 'connected' : 'calling', chatId: 'chat', callId, otherUserId: group ? null : 'B', isOutgoing: true });
   control.A.send('chat', 'incoming-call', payload);
 };
 control.end = () => {
   const callId = control.A.state.callId;
-  control.A.send('chat', 'call-rejected', { senderId: 'A', callId });
+  control.A.send('chat', 'call-rejected', { senderId: 'A', callerId: 'A', callId });
   control.A.setState((previous) => ({ ...previous, status: 'ended' }));
 };
-control.accept = () => {
-  control.B.send('chat', 'call-accepted', { responderId: 'B', callId: control.B.state.callId });
-  control.B.setState((previous) => ({ ...previous, status: 'connected' }));
+control.accept = (id = 'B') => {
+  control[id].send('chat', 'call-accepted', { responderId: id, callId: control[id].state.callId });
+  control[id].setState((previous) => ({ ...previous, status: 'connected' }));
+};
+control.reject = (id = 'B') => {
+  control[id].send('chat', 'call-rejected', { senderId: id, callId: control[id].state.callId });
+  control[id].setState(previous => ({ ...previous, status: 'ended' }));
 };
 control.inject = async (event, payload) => {
   const peer = control.channels.find((item) => item.owner === 'B');
@@ -85,4 +92,4 @@ control.inject = async (event, payload) => {
     } } });
   }
 };
-createRoot(document.getElementById('root')).render(<><Peer id="A"/><Peer id="B"/></>);
+createRoot(document.getElementById('root')).render(<>{users.map(user => <Peer key={user.id} id={user.id}/>)}</>);

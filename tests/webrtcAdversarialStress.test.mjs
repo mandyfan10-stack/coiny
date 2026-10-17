@@ -262,9 +262,8 @@ test('Adversarial Stress: Repeated Audio Analyzer Instantiation (100 cycles) avo
   delete globalThis.requestAnimationFrame;
 });
 
-test('Adversarial Stress: retryCallConnection initiates ICE restart offer with iceRestart: true', () => {
-  assert.match(callProviderCode, /createOffer\(\{\s*iceRestart:\s*true\s*\}\)/);
-  assert.match(callProviderCode, /restartIce/);
-  assert.match(callProviderCode, /setLocalDescription\(offer\)/);
-  assert.match(callProviderCode, /\[WebRTC Telemetry\] Initiating ICE restart/);
+test('manual recovery delegates to the tested per-peer session controller', () => {
+  assert.match(callProviderCode, /retryCallConnection/);
+  assert.match(callProviderCode, /session\.recover\(\{ force: true \}\)/);
+  assert.doesNotMatch(callProviderCode, /createOffer|setRemoteDescription/);
 });

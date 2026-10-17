@@ -27,6 +27,7 @@ import {
 import { useCallCardChrome } from './useCallCardChrome';
 import { useCallLocalPreviewDrag } from './useCallLocalPreviewDrag';
 import { chatAvatarFallback, personAvatarFallback } from '../../context/chat/avatarFallback';
+import CallQuality from './CallQuality';
 
 
 function getIsCompactViewport() {
@@ -58,6 +59,7 @@ export default function CallOverlay() {
     mediaError,
     clearMediaError,
     voiceEnhancementEnabled,
+    callQuality,
     toggleVoiceEnhancement
   } = useCalls();
 
@@ -670,6 +672,7 @@ export default function CallOverlay() {
             </div>
 
             {/* Group Voice Participant List */}
+            {callState.status === 'connected' && <CallQuality peers={callQuality?.peers} />}
             {isGroupCall && (
               <div className="group-call-stage-list">
                 {sortedGroupParticipants.map((p) => (
