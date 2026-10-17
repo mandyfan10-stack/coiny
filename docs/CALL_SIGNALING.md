@@ -45,6 +45,8 @@ stale-candidate filtering. Duplicate offers replay a cached answer using a
 fresh encrypted envelope; candidates repeat until a real connection exists.
 Polite rollback handles offer collisions and rebinds the live audio sender
 because Chromium can otherwise retain a live track with stopped outgoing RTP.
+Rebinding resolves the current microphone/processed track after each native
+replacement, so a concurrent processing toggle cannot restore a stopped track.
 An elected offerer handles `restart-request`; a bounded fallback supports
 older clients. Recovery refreshes TURN configuration before a new ICE offer.
 

@@ -305,3 +305,38 @@ for (const group of [false, true]) {
     }
   });
 }
+
+
+for (const initialEnhancement of [true, false]) {
+  test(`voice processing ${initialEnhancement ? 'disable' : 'enable'} during a native glare audio repair restores the current live track`, async ({ page }) => {
+    await open(page);
+    await start(page);
+    await connected(page);
+    if (initialEnhancement) {
+      await page.getByRole('button', { name: 'Voice A', exact: true }).click();
+      await expect.poll(() => page.evaluate(() => window.__callTransportTest.apis.A.voiceEnhancementEnabled)).toBe(true);
+    }
+    const originalPeerCount = (await snapshot(page)).peers.length;
+    await page.evaluate(async () => {
+      const control = window.__callTransportTest;
+      control.holdAudioRepair = true;
+      control.delays['renegotiate-offer'] = 100;
+      await Promise.all([control.apis.A.toggleCallVideo(), control.apis.B.toggleCallVideo()]);
+    });
+    await expect.poll(() => page.evaluate(() => Boolean(window.__callTransportTest.heldRepair))).toBe(true);
+    expect(await page.evaluate(() => window.__callTransportTest.heldRepair.sender.track === null)).toBe(true);
+    await page.getByRole('button', { name: 'Voice A', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.__callTransportTest.apis.A.voiceEnhancementEnabled)).toBe(!initialEnhancement);
+    if (initialEnhancement) expect(await page.evaluate(() => window.__callTransportTest.heldRepair.previousTrack.readyState)).toBe('ended');
+    await page.evaluate(() => window.__callTransportTest.heldRepair.release());
+    await expect.poll(() => page.evaluate(() => {
+      const { sender, previousTrack } = window.__callTransportTest.heldRepair;
+      return sender.track?.readyState === 'live' && sender.track !== previousTrack;
+    })).toBe(true);
+    await connected(page);
+    await advancing(page, await snapshot(page));
+    expect((await snapshot(page)).peers).toHaveLength(originalPeerCount);
+    expect(await page.evaluate(() => window.__callTransportTest.pcs.every(pc => pc.getSenders()
+      .filter(sender => sender.track?.kind === 'audio').some(sender => sender.track.readyState === 'live')))).toBe(true);
+  });
+}

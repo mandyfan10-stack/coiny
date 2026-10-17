@@ -13,6 +13,19 @@ import '../../src/components/call/CallOverlay.css';
 // negotiation controller, RTCPeerConnection, ICE and bidirectional RTP are real.
 const control = { pcs: [], channels: [], events: [], captures: [], apis: {}, updates: {}, chatUpdates: {}, drops: {}, delays: {} };
 window.__callTransportTest = control;
+const realReplaceTrack = RTCRtpSender.prototype.replaceTrack;
+RTCRtpSender.prototype.replaceTrack = async function(track) {
+  const previousTrack = this.track;
+  const owner = control.pcs.find(pc => pc.getSenders().includes(this))?.fixtureOwner;
+  if (control.holdAudioRepair && !control.heldRepair && track === null && previousTrack?.kind === 'audio' && owner === 'A') {
+    // The native detachment really happens; only its promise completion is held.
+    // This exposes the same null sender seen during an in-flight browser repair.
+    await realReplaceTrack.call(this, track);
+    await new Promise(resolve => { control.heldRepair = { sender: this, previousTrack, release: resolve }; });
+    return;
+  }
+  return realReplaceTrack.call(this, track);
+};
 const RealPC = window.RTCPeerConnection;
 window.RTCPeerConnection = class extends RealPC {
   constructor(configuration) {
@@ -80,6 +93,11 @@ supabase.channel = (topic, options = {}) => {
     async send(message) {
       const plain = message.payload?.envelope?.decoded?.payload || message.payload;
       const type = plain?.type || message.event;
+      if (plain?.sdp && plain.senderId) {
+        const fragment = plain.sdp.match(/^a=ice-ufrag:([^\r\n]+)/m)?.[1];
+        const pc = control.pcs.find(candidate => candidate.localDescription?.sdp.includes(`a=ice-ufrag:${fragment}`));
+        if (pc) pc.fixtureOwner = plain.senderId;
+      }
       control.events.push({ type, sender: plain?.senderId || plain?.callerId || null });
       if (!this.connected) return 'timed out';
       if (control.drops[type] > 0) { control.drops[type]--; return 'ok'; }

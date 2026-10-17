@@ -4,6 +4,7 @@ const ufrags = (sdp = '') => new Set([...sdp.matchAll(/^a=ice-ufrag:([^\r\n]+)/g
 /** One serialized negotiation/recovery owner per RTCPeerConnection. */
 export function createCallPeerSession({
   pc, polite, send, prepareRestart = async () => null,
+  getAudioTrack = () => null,
   onState = () => {}, onError = () => {}, isCurrent = () => true, group = false,
   schedule = setTimeout, cancel = clearTimeout,
   retryDelays = RETRY_DELAYS, recoveryGraceMs = 3_000
@@ -122,7 +123,17 @@ export function createCallPeerSession({
       if (track?.kind !== 'audio' || track.readyState !== 'live') continue;
       await sender.replaceTrack(null);
       if (!active()) return;
-      if (sender.track === null && track.readyState === 'live') await sender.replaceTrack(track);
+      // Voice processing may switch the stream while this native replacement
+      // is pending. Restore its current track, not a now-stopped DSP output.
+      let ownedTrack = null;
+      while (active() && sender.track === ownedTrack) {
+        const currentTrack = getAudioTrack() ?? track;
+        if (currentTrack?.kind !== 'audio' || currentTrack.readyState !== 'live' || currentTrack === ownedTrack) break;
+        await sender.replaceTrack(currentTrack);
+        // A pipeline change can also finish during this second native await.
+        // Reconcile only replacements we own; external changes win.
+        ownedTrack = currentTrack;
+      }
       if (!active()) return;
     }
     needsAudioRepair = false;

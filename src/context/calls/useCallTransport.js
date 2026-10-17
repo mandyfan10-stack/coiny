@@ -118,6 +118,7 @@ export function useCallTransport(options) {
         .forEach(track => pc.addTrack(track, refs.localVideoStreamRef.current));
       const engine = createCallPeerSession({
         pc, group, polite: String(selfId) < String(id), isCurrent: live,
+        getAudioTrack: () => refs.localStreamRef.current?.getAudioTracks()[0],
         send: payload => send({ ...payload, ...(group ? { targetId: id } : {}) }),
         prepareRestart: async () => {
           const configuration = await refreshIceConfiguration({ allowDirectConnection: true, cacheKey: selfId, forceRefresh: true });
