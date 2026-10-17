@@ -110,6 +110,52 @@ test('a server-confirmed optimistic message becomes delivered and can be removed
   await expect.poll(() => page.evaluate(() => window.__messengerTest.cache.read())).toEqual([]);
 });
 
+test('a delayed history reply preserves messages confirmed after the request began', async ({ page }) => {
+  await openChat(page);
+  const old = message('old', 'Старая история');
+  const sent = { ...message('sent-during-load', 'Подтверждённая новая отправка', 1), senderId: 'messenger-self', isOptimistic: false, isPending: false };
+  await complete(page, 'cache', 'a', [old]);
+  await page.evaluate(messages => window.__messengerTest.replaceMessages('a', messages), [old, sent]);
+  await page.evaluate(messages => window.__messengerTest.cache.seed(messages), [old, sent]);
+  await expect(page.getByText(sent.text)).toBeVisible();
+  // The request took its database snapshot before the new INSERT committed.
+  await complete(page, 'network', 'a', [old]);
+  await expect(page.getByText(sent.text)).toBeAttached();
+  await expect.poll(() => page.evaluate(async () => (await window.__messengerTest.cache.read()).map(row => row.id))).toContain(sent.id);
+  // A subsequent fresh snapshot must still be able to reconcile deletion.
+  await page.evaluate(() => { void window.__messengerTest.load('a'); });
+  await complete(page, 'network', 'a', [old]);
+  await expect(page.getByText(sent.text)).toHaveCount(0);
+});
+
+for (const cacheFirst of [true, false]) {
+  test(`an empty stale response retains a live arrival with ${cacheFirst ? 'early' : 'late'} cache hydration`, async ({ page }) => {
+    await openChat(page);
+    const deleted = message('old-deleted', 'Удалено до запроса');
+    const incoming = message('live-arrival', 'Входящее во время загрузки', 2);
+    if (cacheFirst) await complete(page, 'cache', 'a', [deleted]);
+    await page.evaluate(messages => window.__messengerTest.replaceMessages('a', messages), cacheFirst ? [deleted, incoming] : [incoming]);
+    await complete(page, 'network', 'a', []);
+    if (!cacheFirst) await complete(page, 'cache', 'a', [deleted, incoming]);
+    await expect(page.getByText(incoming.text)).toBeAttached();
+    await expect(page.getByText(deleted.text)).toHaveCount(0);
+    await expect.poll(() => page.evaluate(async () => (await window.__messengerTest.cache.read()).map(row => row.id))).toEqual([incoming.id]);
+  });
+}
+
+test('a send pending before refresh stays visible when confirmed before its stale response', async ({ page }) => {
+  await openChat(page);
+  const pending = { ...message('pending-send', 'Отправка при обновлении'), isPending: true, isOptimistic: true };
+  await complete(page, 'cache', 'a', [pending]);
+  await complete(page, 'network', 'a', []);
+  await expect.poll(async () => (await state(page)).status.a).toBe('loaded');
+  await page.evaluate(() => { void window.__messengerTest.load('a'); });
+  await page.evaluate(messages => window.__messengerTest.replaceMessages('a', messages), [{ ...pending, isPending: false, isOptimistic: false }]);
+  await complete(page, 'network', 'a', []);
+  await expect(page.getByText(pending.text)).toBeAttached();
+  await expect.poll(() => page.evaluate(async () => (await window.__messengerTest.cache.read()).map(row => row.id))).toContain(pending.id);
+});
+
 test('older pagination uses the server cursor even when cached history starts earlier', async ({ page }) => {
   await openChat(page);
   const timestamp = '2026-10-06T12:00:00.123456Z';

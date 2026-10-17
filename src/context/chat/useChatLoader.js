@@ -250,11 +250,15 @@ export function useChatLoader({
 
   const loadActiveChatMessages = useCallback(async (chatId) => {
     if (!chatId || !currentUser) return;
-    const request = {};
+    const existingChat = chatsRef.current.find((chat) => chat.id === chatId);
+    const initialMessages = existingChat?.messages || [];
+    const request = {
+      baselineIds: new Set(initialMessages.map((message) => message.id)),
+      pendingIds: new Set(initialMessages.filter((message) => message.isPending || message.isOptimistic || message.isFailed).map((message) => message.id))
+    };
     loadRequestsRef.current.set(chatId, request);
     const isCurrentRequest = () => sessionUserRef.current === currentUserId
       && loadRequestsRef.current.get(chatId) === request;
-    const existingChat = chatsRef.current.find((chat) => chat.id === chatId);
     setIsChatLoading((prev) => ({ ...prev, [chatId]: !existingChat?.messages?.length }));
     setIsSyncing((prev) => ({ ...prev, [chatId]: true }));
     setHistoryLoadStatus((prev) => ({ ...prev, [chatId]: 'loading' }));
@@ -317,7 +321,15 @@ export function useChatLoader({
         const pending = existingMessages.filter(
           (m) => (m.isPending || m.isOptimistic || m.isFailed) && !incomingIds.has(m.id)
         );
-        const finalMessages = [...olderHistory, ...merged, ...pending].sort(
+        // A SELECT started before a new INSERT cannot establish its deletion.
+        // Protect arrivals and pending sends that became confirmed meanwhile,
+        // only for this snapshot; a later refresh can reconcile real deletions.
+        const retainedIds = new Set([...olderHistory, ...pending].map((message) => message.id));
+        const concurrent = existingMessages.filter((message) => !incomingIds.has(message.id)
+          && !retainedIds.has(message.id)
+          && (!request.baselineIds.has(message.id) || request.pendingIds.has(message.id)));
+        for (const message of [...concurrent, ...pending]) snapshot.ids.add(message.id);
+        const finalMessages = [...olderHistory, ...merged, ...pending, ...concurrent].sort(
           compareMessages
         );
 
@@ -447,6 +459,13 @@ export function useChatLoader({
 
           // Late cache hydration must not overwrite newer bodies, receipts or reactions.
           const currentById = new Map(currentMsgs.map((message) => [message.id, message]));
+          const request = loadRequestsRef.current.get(activeChatId);
+          // Cache hydration is old history, not a new live arrival. Do not
+          // classify messages already added in memory during the request as old.
+          if (request) for (const message of eligibleCache) {
+            if (message.isPending || message.isOptimistic || message.isFailed) request.pendingIds.add(message.id);
+            else if (!currentById.has(message.id)) request.baselineIds.add(message.id);
+          }
           const cachedIds = new Set(eligibleCache.map((m) => m.id));
           const merged = eligibleCache.map((message) => {
             const current = currentById.get(message.id);
