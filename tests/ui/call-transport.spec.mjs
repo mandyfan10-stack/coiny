@@ -340,3 +340,34 @@ for (const initialEnhancement of [true, false]) {
       .filter(sender => sender.track?.kind === 'audio').some(sender => sender.track.readyState === 'live')))).toBe(true);
   });
 }
+
+
+test('removing a remote group member closes its existing media path without cooperation from that member', async ({ page }) => {
+  await open(page, '?group=1');
+  await start(page);
+  await page.getByRole('button', { name: 'Accept C', exact: true }).click();
+  await connected(page, 6);
+  const links = await page.evaluate(() => {
+    const control = window.__callTransportTest;
+    return control.pcs.map((pc, index) => ({ index, owner: pc.fixtureOwner, remote: control.pcs[control.counterpart(index)]?.fixtureOwner }));
+  });
+  const removed = links.find(link => link.owner === 'A' && link.remote === 'C')?.index;
+  const preserved = links.find(link => link.owner === 'A' && link.remote === 'B')?.index;
+  expect(removed).toBeDefined();
+  expect(preserved).toBeDefined();
+  const before = await snapshot(page);
+  await page.evaluate(() => window.__callTransportTest.chatUpdates.A({ removeMember: 'C' }));
+  await expect.poll(async () => (await snapshot(page)).peers[removed].connection).toBe('closed');
+  await expect.poll(() => page.evaluate(() => window.__callTransportTest.apis.A.groupCallParticipants.some(member => member.id === 'C'))).toBe(false);
+  // C keeps its old membership view and does not hang up or acknowledge removal.
+  await expect(page.getByTestId('status-C')).toHaveText('connected');
+  await expect(page.getByTestId('status-A')).toHaveText('connected');
+  await expect(page.getByTestId('status-B')).toHaveText('connected');
+  await expect.poll(async () => {
+    const peer = (await snapshot(page)).peers[preserved];
+    const previous = before.peers[preserved];
+    return peer.connection === 'connected' && peer.incoming > previous.incoming && peer.outgoing > previous.outgoing
+      && (previous.incomingEnergy === null || peer.incomingEnergy > previous.incomingEnergy);
+  }).toBe(true);
+  expect((await snapshot(page)).peers).toHaveLength(before.peers.length);
+});

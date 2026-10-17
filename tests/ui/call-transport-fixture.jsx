@@ -149,7 +149,7 @@ function Side({ initialUser }) {
   control.updates[user.id] = () => setUser(previous => ({ ...previous, theme: `theme-${Date.now()}` }));
   const [visibleChats, setChats] = React.useState(chats);
   control.chatUpdates[user.id] = change => setChats(previous => change === 'remove' ? [] : previous.map(chat => ({
-    ...chat, members: chat.members.filter(member => member.id !== user.id)
+    ...chat, members: chat.members.filter(member => member.id !== (typeof change === 'object' ? change.removeMember : user.id))
   })));
   // Keep the actual v2 channel wrapper and its binding/replay validation. Only
   // the MLS worker result is synthetic, with the same required envelope shape.

@@ -23,7 +23,7 @@ jobs:
   validate:
     name: Validate and test
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     concurrency:
       group: coingram-live-e2e-shared-accounts
       cancel-in-progress: false

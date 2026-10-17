@@ -14,6 +14,8 @@ import { attachRemoteAudioElement, isScreenTrack } from './mediaTrackHelpers';
 export function useCallTransport(options) {
   const latest = useRef(options);
   latest.current = options;
+  const reconcileMembershipRef = useRef(null);
+  const membersKey = JSON.stringify((options.callChatRef.current?.members || []).map(member => member.id).sort());
   const { status, callId, userId, teardownMedia, endCallLocally } = options;
 
   useEffect(() => {
@@ -89,6 +91,11 @@ export function useCallTransport(options) {
       participants(previous => previous.filter(item => item.id !== id));
       updateState();
     };
+    const reconcileMembership = () => {
+      if (!live() || !group) return;
+      for (const id of sessions.keys()) if (!isMember(id)) removePeer(id);
+    };
+    reconcileMembershipRef.current = reconcileMembership;
     const markMissing = id => {
       if (missing.has(id)) return;
       missing.set(id, delay(() => {
@@ -102,6 +109,7 @@ export function useCallTransport(options) {
     };
     const send = async payload => {
       if (!live() || !subscribed || !channel) throw new Error('Call signaling is reconnecting.');
+      if (group && !isMember(payload.targetId)) return 'cancelled';
       const result = await channel.send({ type: 'broadcast', event: 'signal', payload: {
         ...payload, senderId: selfId, ...(!group ? { callId } : {})
       } });
@@ -113,11 +121,12 @@ export function useCallTransport(options) {
       const pc = createPeerConnection(configuration);
       if (group) { refs.pcsRef.current[id] = pc; ensureParticipant(id); }
       else refs.pcRef.current = pc;
+      const peerLive = () => live() && (!group || (isMember(id) && refs.pcsRef.current[id] === pc));
       localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
       refs.localVideoStreamRef.current?.getVideoTracks().filter(track => track.readyState === 'live')
         .forEach(track => pc.addTrack(track, refs.localVideoStreamRef.current));
       const engine = createCallPeerSession({
-        pc, group, polite: String(selfId) < String(id), isCurrent: live,
+        pc, group, polite: String(selfId) < String(id), isCurrent: peerLive,
         getAudioTrack: () => refs.localStreamRef.current?.getAudioTracks()[0],
         send: payload => send({ ...payload, ...(group ? { targetId: id } : {}) }),
         prepareRestart: async () => {
@@ -129,7 +138,7 @@ export function useCallTransport(options) {
       });
       sessions.set(id, engine);
       pc.ontrack = event => {
-        if (!live()) return;
+        if (!peerLive()) return;
         const track = event.track;
         if (track.kind === 'audio') {
           const stream = new MediaStream([track]);
@@ -138,13 +147,14 @@ export function useCallTransport(options) {
           element.dataset.callPeer = id;
           refs.audioAnalyzersRef.current[key]?.stop();
           refs.audioAnalyzersRef.current[key] = startAudioAnalyzer(stream, speaking => {
-            if (!live()) return;
+            if (!peerLive()) return;
             if (group) participants(previous => previous.map(item => item.id === id ? { ...item, speaking } : item));
             else setCall(previous => previous.isRemoteSpeaking === speaking ? previous : { ...previous, isRemoteSpeaking: speaking });
           });
           track.onended = () => {
             element.srcObject = null;
             element.remove();
+            if (!peerLive()) return;
             refs.audioAnalyzersRef.current[key]?.stop();
             delete refs.audioAnalyzersRef.current[key];
           };
@@ -157,7 +167,7 @@ export function useCallTransport(options) {
           } : item));
           else { refs.setRemoteVideoStream(stream); setCall(previous => ({ ...previous, isRemoteScreenSharing: screen })); }
           track.onended = () => {
-            if (!live()) return;
+            if (!peerLive()) return;
             if (group) participants(previous => previous.map(item => item.id === id ? {
               ...item, videoStream: screen ? item.cameraStream : item.screenStream,
               ...(screen ? { screenStream: null, isScreenSharing: false } : { cameraStream: null, isCameraActive: false })
@@ -205,7 +215,7 @@ export function useCallTransport(options) {
           encryptEvent: (...args) => latest.current.encryptEvent(...args),
           decryptEvent: (...args) => latest.current.decryptEvent(...args),
           shouldSend: message => {
-            if (live()) return true;
+            if (live()) return !group || message.event !== 'signal' || isMember(message.payload?.targetId);
             const ending = refs.endingSignalingRef.current;
             return message.event === 'hangup' && ending?.channel === channel
               && ending.callId === callId && ending.userId === latest.current.userId
@@ -299,6 +309,7 @@ export function useCallTransport(options) {
     window.addEventListener('online', wake);
     return () => {
       active = false;
+      if (reconcileMembershipRef.current === reconcileMembership) reconcileMembershipRef.current = null;
       window.removeEventListener('online', wake);
       for (const timer of timers) { clearTimeout(timer); clearInterval(timer); }
       for (const engine of sessions.values()) engine.dispose();
@@ -308,4 +319,8 @@ export function useCallTransport(options) {
       teardownMedia();
     };
   }, [status, callId, userId, teardownMedia, endCallLocally]);
+
+  useEffect(() => {
+    reconcileMembershipRef.current?.();
+  }, [membersKey, status, callId, userId]);
 }

@@ -55,6 +55,9 @@ recover independently, so one group participant does not restart healthy
 peers. Presence loss alone does not close a working media path; absent,
 unconnected peers are removed after a 15-second grace period. Exhausted
 attempts expose the retry action rather than an indefinite connecting state.
+Confirmed roster removal closes that participant's connection immediately,
+even if their client keeps signaling. Current membership also gates queued
+negotiation and encrypted sends; healthy remaining participants stay connected.
 
 TURN credentials are cached per account/client until their server expiry,
 with a 30-second safety margin. Concurrent requests share one operation;
