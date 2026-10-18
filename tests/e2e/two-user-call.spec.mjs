@@ -97,6 +97,14 @@ test(`two users establish and finish a WebRTC audio call with remote media${dela
 
     await openPersonalChat(firstPage, qa.second.username);
     await firstPage.locator('.chat-header-btn[title="Информация"]').click();
+    if (delayedRecipient) {
+      // Login can finish before the recipient mounts its invitation channels.
+      // Start only after a real channel join is held by the transport fixture.
+      await expect.poll(() => heldJoins.length, {
+        timeout: 30_000,
+        message: 'recipient invitation channel joins must be held before initiating the call',
+      }).toBeGreaterThan(0);
+    }
     await firstPage.getByTestId('start-call').or(firstPage.locator('.info-action-btn[title="Звонок"], .quick-action-item[title="Звонок"]')).click({ timeout: 15_000 });
     if (delayedRecipient) {
       expect(heldJoins.length, 'recipient invitation channels must actually be delayed').toBeGreaterThan(0);
