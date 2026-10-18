@@ -9,10 +9,19 @@ import { dataService } from '../../src/services/dataLayer';
 import CallQuality from '../../src/components/call/CallQuality';
 import '../../src/components/call/CallOverlay.css';
 
-// Only signaling delivery and microphone capture are synthetic. The provider,
+// Only signaling delivery and capture sources are synthetic. The provider,
 // negotiation controller, RTCPeerConnection, ICE and bidirectional RTP are real.
-const control = { pcs: [], channels: [], events: [], captures: [], apis: {}, updates: {}, chatUpdates: {}, drops: {}, delays: {} };
+const control = { pcs: [], channels: [], events: [], captures: [], apis: {}, updates: {}, chatUpdates: {}, drops: {}, delays: {}, captureAttempts: [] };
 window.__callTransportTest = control;
+const nativeMediaDevices = navigator.mediaDevices;
+// Playwright WebKit supplies mock devices. Capturing one is also required by
+// WebKit's host-candidate privacy policy; permission alone does not unblock ICE.
+const nativeMockCapture = window.__callTransportNativeMockCapture === true;
+control.capabilities = {
+  canvasCapture: typeof HTMLCanvasElement.prototype.captureStream,
+  audioContext: typeof window.AudioContext,
+  peerConnection: typeof window.RTCPeerConnection
+};
 const realReplaceTrack = RTCRtpSender.prototype.replaceTrack;
 RTCRtpSender.prototype.replaceTrack = async function(track) {
   const previousTrack = this.track;
@@ -32,6 +41,8 @@ window.RTCPeerConnection = class extends RealPC {
     super({ ...configuration, iceServers: [] }); // Local host-only test, no external STUN/TURN traffic.
     this.offers = 0;
     this.restarts = 0;
+    this.fixtureErrors = [];
+    this.fixtureCandidates = 0;
     control.pcs.push(this);
   }
   setConfiguration(configuration) { return super.setConfiguration({ ...configuration, iceServers: [] }); }
@@ -41,37 +52,87 @@ window.RTCPeerConnection = class extends RealPC {
     return super.createOffer(options);
   }
   async setRemoteDescription(description) {
-    await super.setRemoteDescription(description);
+    try { await super.setRemoteDescription(description); }
+    catch (error) {
+      this.fixtureErrors.push({ method: 'setRemoteDescription', type: description.type, name: error.name, signaling: this.signalingState });
+      throw error;
+    }
     if (description.type === 'offer') this.fixtureFailure = false;
+  }
+  async setLocalDescription(description) {
+    try { await super.setLocalDescription(description); }
+    catch (error) {
+      this.fixtureErrors.push({ method: 'setLocalDescription', type: description?.type, name: error.name, signaling: this.signalingState });
+      throw error;
+    }
+  }
+  async addIceCandidate(candidate) {
+    this.fixtureCandidates++;
+    try { return await super.addIceCandidate(candidate); }
+    catch (error) {
+      this.fixtureErrors.push({ method: 'addIceCandidate', name: error.name, signaling: this.signalingState });
+      throw error;
+    }
   }
   get connectionState() { return this.fixtureFailure ? 'failed' : super.connectionState; }
   get iceConnectionState() { return this.fixtureFailure ? 'failed' : super.iceConnectionState; }
 };
 
 async function captureVideo(kind) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 32; canvas.height = 32;
-  canvas.getContext('2d').fillRect(0, 0, 32, 32);
-  const stream = canvas.captureStream(5);
+  const attempt = { kind, stage: 'requested' };
+  control.captureAttempts.push(attempt);
+  let stream;
+  try {
+    if (nativeMockCapture) stream = await nativeMediaDevices.getUserMedia({ video: true });
+    else {
+      const canvas = document.createElement('canvas');
+      canvas.width = 32; canvas.height = 32;
+      canvas.getContext('2d').fillRect(0, 0, 32, 32);
+      stream = canvas.captureStream(5);
+    }
+  }
+  catch (error) { attempt.stage = 'failed'; attempt.error = error.name; throw error; }
+  attempt.stage = 'created';
+  attempt.trackCount = stream.getVideoTracks().length;
   const capture = { kind, stream };
   control.captures.push(capture);
-  if (control.holdVideo) await new Promise(resolve => { capture.release = resolve; });
+  if (control.holdVideo) {
+    attempt.stage = 'held';
+    await new Promise(resolve => { capture.release = resolve; });
+  }
+  attempt.stage = 'returned';
   return stream;
 }
-navigator.mediaDevices.getDisplayMedia = () => captureVideo('display');
-navigator.mediaDevices.getUserMedia = async constraints => {
+async function captureUserMedia(constraints) {
   if (constraints?.video) return captureVideo('camera');
-  const context = new AudioContext();
-  const oscillator = context.createOscillator();
-  const destination = context.createMediaStreamDestination();
-  oscillator.connect(destination);
-  oscillator.start();
-  const capture = { context, stream: destination.stream };
+  const attempt = { kind: 'audio', stage: 'requested' };
+  control.captureAttempts.push(attempt);
+  let context;
+  let stream;
+  if (nativeMockCapture) stream = await nativeMediaDevices.getUserMedia(constraints);
+  else {
+    context = new AudioContext();
+    const oscillator = context.createOscillator();
+    const destination = context.createMediaStreamDestination();
+    oscillator.connect(destination);
+    oscillator.start();
+    stream = destination.stream;
+    attempt.stage = 'resuming';
+    await context.resume();
+  }
+  const capture = { context, stream };
   control.captures.push(capture);
-  await context.resume();
+  attempt.stage = 'resumed';
   if (control.holdCapture) await new Promise(resolve => { capture.release = resolve; });
+  attempt.stage = 'returned';
   return capture.stream;
-};
+}
+// A stable own property also keeps WebKit from discarding method overrides
+// when it recreates the otherwise unretained native MediaDevices wrapper.
+Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: {
+  getUserMedia: captureUserMedia,
+  getDisplayMedia: () => captureVideo('display')
+} });
 dataService.isLive = () => true;
 supabase.functions.invoke = async () => ({ data: { available: false }, error: null });
 supabase.channel = (topic, options = {}) => {
@@ -98,7 +159,10 @@ supabase.channel = (topic, options = {}) => {
         const pc = control.pcs.find(candidate => candidate.localDescription?.sdp.includes(`a=ice-ufrag:${fragment}`));
         if (pc) pc.fixtureOwner = plain.senderId;
       }
-      control.events.push({ type, sender: plain?.senderId || plain?.callerId || null });
+      control.events.push({ type, sender: plain?.senderId || plain?.callerId || null, ...(type === 'candidate' ? {
+        empty: !plain.candidate?.candidate,
+        fragmentMatches: !plain.candidate?.usernameFragment || control.pcs.some(pc => pc.localDescription?.sdp.includes(`a=ice-ufrag:${plain.candidate.usernameFragment}`))
+      } : {}) });
       if (!this.connected) return 'timed out';
       if (control.drops[type] > 0) { control.drops[type]--; return 'ok'; }
       setTimeout(() => {
@@ -189,8 +253,8 @@ control.snapshot = async () => ({
     let outgoing = 0;
     let incomingEnergy = null;
     if (pc.connectionState !== 'closed') {
-      const stats = await pc.getStats();
-      stats.forEach(stat => {
+      const stats = await pc.getStats().catch(() => null);
+      stats?.forEach(stat => {
         if ((stat.kind ?? stat.mediaType) !== 'audio') return;
         if (stat.type === 'inbound-rtp') {
           incoming += stat.packetsReceived || 0;
@@ -199,9 +263,12 @@ control.snapshot = async () => ({
         if (stat.type === 'outbound-rtp') outgoing += stat.packetsSent || 0;
       });
     }
-    return { connection: pc.connectionState, ice: pc.iceConnectionState, signaling: pc.signalingState, incoming, outgoing, incomingEnergy, offers: pc.offers, restarts: pc.restarts };
+    return { connection: pc.connectionState, ice: pc.iceConnectionState, signaling: pc.signalingState, incoming, outgoing, incomingEnergy, offers: pc.offers, restarts: pc.restarts, appliedCandidates: pc.fixtureCandidates, errors: pc.fixtureErrors };
   })),
   captures: control.captures.map(capture => capture.stream.getTracks().map(track => track.readyState)),
-  ui: Object.fromEntries(Object.entries(control.apis).map(([id, api]) => [id, { status: api.callState.status, transport: api.callState.webrtcState }]))
+  audioContexts: control.captures.filter(capture => capture.context).map(capture => capture.context.state),
+  captureAttempts: control.captureAttempts,
+  capabilities: control.capabilities,
+  ui: Object.fromEntries(Object.entries(control.apis).map(([id, api]) => [id, { status: api.callState.status, transport: api.callState.webrtcState, mediaError: api.mediaError, voiceEnabled: api.voiceEnhancementEnabled, participants: api.groupCallParticipants.map(member => ({ id: member.id, camera: Boolean(member.cameraStream), video: Boolean(member.videoStream) })) }]))
 });
 createRoot(document.getElementById('root')).render(<>{users.map(user => <Side key={user.id} initialUser={user}/>)}</>);

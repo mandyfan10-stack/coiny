@@ -3,7 +3,11 @@ import { writeFile } from 'node:fs/promises';
 
 // This fixture owns its synthetic signaling bus. Keep development hot updates
 // from replacing a mounted provider while a transport scenario is in progress.
-test.beforeEach(async ({ page }) => { await page.routeWebSocket(/.*/, () => {}); });
+test.use({ permissions: ['microphone', 'camera'] });
+test.beforeEach(async ({ page, browserName }) => {
+  await page.routeWebSocket(/.*/, () => {});
+  if (browserName === 'webkit') await page.addInitScript(() => { window.__callTransportNativeMockCapture = true; });
+});
 
 test.afterEach(async ({ page }, testInfo) => {
   if (testInfo.status === testInfo.expectedStatus) return;
@@ -11,6 +15,7 @@ test.afterEach(async ({ page }, testInfo) => {
     const control = window.__callTransportTest;
     return control ? { snapshot: await control.snapshot(), events: control.events, remainingDrops: control.drops } : null;
   }).catch(() => null);
+  console.log('[call-transport-safe]', JSON.stringify(diagnostics));
   await writeFile(testInfo.outputPath('call-safe.json'), JSON.stringify(diagnostics, null, 2));
   await testInfo.attach('call-transport-safe-diagnostics', { body: JSON.stringify(diagnostics, null, 2), contentType: 'application/json' });
 });
@@ -347,6 +352,10 @@ test('removing a remote group member closes its existing media path without coop
   await start(page);
   await page.getByRole('button', { name: 'Accept C', exact: true }).click();
   await connected(page, 6);
+  await expect.poll(() => page.evaluate(() => {
+    const control = window.__callTransportTest;
+    return control.pcs.every((pc, index) => pc.signalingState === 'stable' && pc.fixtureOwner && control.counterpart(index) >= 0);
+  })).toBe(true);
   const links = await page.evaluate(() => {
     const control = window.__callTransportTest;
     return control.pcs.map((pc, index) => ({ index, owner: pc.fixtureOwner, remote: control.pcs[control.counterpart(index)]?.fixtureOwner }));

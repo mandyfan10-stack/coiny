@@ -3,6 +3,19 @@ const fixture='/tests/ui/interface-fixture.html';
 const sizes=[{width:320,height:640},{width:390,height:844},{width:768,height:360},{width:1024,height:360},{width:1920,height:900}];
 test.use({reducedMotion:'reduce'});
 async function ready(page,query=''){await page.goto(fixture+query);await expect.poll(()=>page.evaluate(()=>Boolean(window.__interfaceTest))).toBe(true);}
+async function readingAnchor(page){
+ return page.locator('.chat-body').evaluate(node=>{
+  const top=node.getBoundingClientRect().top;
+  const row=[...node.querySelectorAll('[data-message-id]')].find(item=>item.getBoundingClientRect().bottom>top+5);
+  return {id:row.dataset.messageId,offset:row.getBoundingClientRect().top-top};
+ });
+}
+async function expectReadingAnchor(page,anchor){
+ await expect.poll(()=>page.locator('.chat-body').evaluate((node,anchor)=>{
+  const row=[...node.querySelectorAll('[data-message-id]')].find(item=>item.dataset.messageId===anchor.id);
+  return row?Math.abs(row.getBoundingClientRect().top-node.getBoundingClientRect().top-anchor.offset):Infinity;
+ },anchor)).toBeLessThanOrEqual(1);
+}
 async function inside(page,selector){
  await expect.poll(()=>page.locator(selector).evaluate(node=>{const box=node.getBoundingClientRect();return box.left>=-1&&box.right<=innerWidth+1&&box.top>=-1&&box.bottom<=innerHeight+1;})).toBe(true);
  const value=await page.locator(selector).evaluate(node=>{const style=getComputedStyle(node);return {gradient:style.backgroundImage,blur:style.backdropFilter||'none'};});
@@ -135,7 +148,7 @@ test('image viewing retains Escape, focus and the chat reading position',async({
    const offset=anchor.getBoundingClientRect().top-node.getBoundingClientRect().top;
    return Math.max(Math.abs(saved.scrollTop-node.scrollTop),Math.abs(saved.topMessageOffset-offset));
   })).toBeLessThanOrEqual(1);
-  const top=await page.locator('.chat-body').evaluate(node=>node.scrollTop);
+  const anchor=await readingAnchor(page);
   // Keyboard activation does not add Playwright's pointer auto-scroll.
   await trigger.press('Enter');
   await expect(page.getByRole('dialog',{name:'Просмотр изображения'})).toBeVisible();
@@ -146,7 +159,47 @@ test('image viewing retains Escape, focus and the chat reading position',async({
   const bounds=await media.boundingBox();expect(bounds.width).toBeLessThanOrEqual(size.width);expect(bounds.height).toBeLessThanOrEqual(size.height);
   await page.keyboard.press('Escape');await expect(page.locator('.chat-image-viewer')).toHaveCount(0);
   await expect(trigger).toBeFocused();
-  // Anchor restoration can round a fractional CSS offset to the adjacent pixel.
-  await expect.poll(()=>page.locator('.chat-body').evaluate((node,top)=>Math.abs(node.scrollTop-top),top)).toBeLessThanOrEqual(1);
+  // A pending viewport reflow may change scrollTop to preserve the visible row.
+  // The reading position is its visual offset, with at most one pixel of rounding.
+  await expectReadingAnchor(page,anchor);
  }
+});
+
+test('image viewing preserves its reading anchor when earlier messages grow behind the viewer',async({page})=>{
+ await ready(page);
+ await page.setViewportSize({width:390,height:844});
+ await page.evaluate(()=>window.__interfaceTest.setChats(chats=>chats.map(chat=>chat.id==='design'?{
+  ...chat,messages:[...Array.from({length:12},(_,index)=>({
+   ...chat.messages[0],id:`earlier-${index}`,text:`Ранее в переписке: сообщение ${index}`
+  })),...chat.messages]
+ }:chat)));
+ const photo=page.locator('[data-message-id="photo"] img');
+ await expect.poll(()=>photo.evaluate(node=>node.complete&&node.naturalWidth>0)).toBe(true);
+ await page.locator('.chat-body').dispatchEvent('wheel',{deltaY:-1000});
+ await photo.evaluate(node=>node.closest('.message-row').scrollIntoView({block:'start'}));
+ const trigger=page.locator('[data-message-id="photo"] .bubble-media-open');
+ await trigger.focus();
+ const anchor=await readingAnchor(page);
+ expect(anchor.id).toBe('photo');
+ await expect.poll(()=>page.locator('.chat-body').evaluate(node=>{
+  const saved=JSON.parse(localStorage.getItem('coingram_chat_scroll_design')||'{}');
+  return typeof saved.scrollTop==='number'?Math.abs(saved.scrollTop-node.scrollTop):Infinity;
+ })).toBeLessThanOrEqual(1);
+ const before=await page.locator('.chat-body').evaluate(node=>({top:node.scrollTop,height:node.scrollHeight}));
+ await trigger.press('Enter');
+ await expect(page.getByRole('dialog',{name:'Просмотр изображения'})).toBeVisible();
+ // A message above the reading position can change while the modal is open.
+ await page.evaluate(()=>window.__interfaceTest.setChats(chats=>chats.map(chat=>chat.id==='design'?{
+  ...chat,messages:chat.messages.map(message=>message.id==='earlier-0'?{
+   ...message,text:message.text+'\nДополнение к сообщению.\nЕщё одна строка.'
+  }:message)
+ }:chat)));
+ await expect.poll(()=>page.locator('.chat-body').evaluate(node=>node.scrollHeight)).toBeGreaterThan(before.height+20);
+ await expectReadingAnchor(page,anchor);
+ await page.keyboard.press('Escape');
+ await expect(page.locator('.chat-image-viewer')).toHaveCount(0);
+ await expect(trigger).toBeFocused();
+ await expectReadingAnchor(page,anchor);
+ // Maintaining the same raw scrollTop here would cause an actual visual jump.
+ expect(await page.locator('.chat-body').evaluate(node=>node.scrollTop)).toBeGreaterThan(before.top+20);
 });

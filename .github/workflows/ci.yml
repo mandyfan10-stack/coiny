@@ -164,6 +164,7 @@ jobs:
         run: npm run test:scroll
 
       - name: Test settings and responsive chat UI
+        timeout-minutes: 20
         run: npm run test:ui
 
       - name: Run mock UI E2E
