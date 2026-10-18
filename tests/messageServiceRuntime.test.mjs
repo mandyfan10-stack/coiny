@@ -379,3 +379,20 @@ test('legacy positional send creates deterministic mock bubbles and surfaces ins
     (error) => error === insertError
   );
 });
+
+test('editing uses server revision and wire-text compare-and-set and surfaces conflicts', async () => {
+ const revised='2026-10-18T12:00:00.000Z';
+ const {client,calls}=createClient({resultFor:()=>({data:{text:'e2ee:old',edited_at:null},error:null}),rpcResult:{data:{text:'e2ee:new',edited_at:revised},error:null}});
+ const service=createMessageService({client,configured:true});
+ assert.equal((await service.editMessage('id','e2ee:new')).edited_at,revised);
+ assert.deepEqual(calls.find(call=>call.method==='rpc').args,{p_message_id:'id',p_text:'e2ee:new',p_expected_text:'e2ee:old',p_expected_edited_at:null});
+ const conflict=createClient({resultFor:()=>({data:{text:'changed'},error:null}),rpcResult:{data:null,error:null}});
+ await assert.rejects(()=>createMessageService({client:conflict.client,configured:true}).editMessage('id','new'),/изменено или удалено/);
+});
+
+test('legacy forwarding stores optional attribution separately without altering text or reply', async () => {
+ const {client,calls}=createClient({resultFor:()=>({data:{id:'forward'},error:null})});
+ const adapter=createV1MessageCompatibilityAdapter({client,configured:true});
+ await adapter.sendMessage('target','self','encrypted-text',null,'encrypted-media','forward',{forwardedFrom:'encrypted-origin'});
+ assert.deepEqual(calls.find(call=>call.method==='insert').args[0],{id:'forward',chat_id:'target',sender_id:'self',text:'encrypted-text',media:'encrypted-media',reply_to:null,forwarded_from:'encrypted-origin'});
+});

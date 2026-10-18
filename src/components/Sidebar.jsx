@@ -14,6 +14,7 @@ import './Sidebar.css';
 export default function Sidebar() {
   const {
     chats,
+    drafts = {},
     onlineUsers,
     activeChatId,
     setActiveChatId,
@@ -379,7 +380,7 @@ export default function Sidebar() {
 
                   <div className="chat-info-body">
                     <p className="chat-last-message">
-                      {isTypingText ? (
+                      {drafts[chat.id]?.text ? <span><span className="draft-label">Черновик: </span>{drafts[chat.id].text}</span> : isTypingText ? (
                         <span className="typing-indicator-sidebar">{isTypingText}</span>
                       ) : lastMsg ? (
                         <>

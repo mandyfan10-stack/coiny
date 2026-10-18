@@ -111,12 +111,17 @@ export async function processOfflineQueueItem(item, deps) {
 
   let textToSend = item.text;
   let mediaToSend = finalMediaUrl;
+  let forwardedFrom = item.forwardedFrom ? JSON.stringify(item.forwardedFrom) : null;
 
   if (requiresE2EE) {
     e2ee.requireE2EEKey(sharedKey);
     if (item.text) {
       const encryptedText = await e2ee.encryptMessage(item.text, sharedKey);
       textToSend = `e2ee:aes-gcm:${encryptedText.ciphertext}:${encryptedText.iv}`;
+    }
+    if (forwardedFrom) {
+      const encrypted = await e2ee.encryptMessage(forwardedFrom, sharedKey);
+      forwardedFrom = `e2ee:aes-gcm:${encrypted.ciphertext}:${encrypted.iv}`;
     }
     if (finalMediaUrl) {
       const encryptedMedia = await e2ee.encryptMessage(finalMediaUrl, sharedKey);
@@ -137,7 +142,8 @@ export async function processOfflineQueueItem(item, deps) {
       textToSend,
       item.replyToId,
       mediaToSend,
-      item.optimisticId
+      item.optimisticId,
+      ...(forwardedFrom ? [{ forwardedFrom }] : [])
     );
   } catch (error) {
     if (!isDuplicateMessageId(error)) throw error;

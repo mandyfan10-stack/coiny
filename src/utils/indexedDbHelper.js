@@ -9,7 +9,8 @@ import { compareMessages } from './messageCursor.ts';
 import { retainCachedMessage } from './messageHistory.js';
 
 const DB_NAME = 'CoinyOfflineDB';
-const DB_VERSION = 8;
+const DB_VERSION = 9;
+const DRAFT_STORE_NAME = 'chat-drafts';
 const ATTACHMENT_STORE_NAME = 'offline-attachments';
 const E2EE_KEY_STORE_NAME = 'e2ee-keys';
 const OFFLINE_QUEUE_STORE_NAME = 'offline-queue';
@@ -29,6 +30,7 @@ const localKeyPromises = new Map();
 
 function ensureStores(db) {
   for (const storeName of [
+    DRAFT_STORE_NAME,
     ATTACHMENT_STORE_NAME,
     E2EE_KEY_STORE_NAME,
     OFFLINE_QUEUE_STORE_NAME,
@@ -121,8 +123,16 @@ async function getLocalCryptoKey() {
       const existing = await getStoreValue(LOCAL_KEY_STORE_NAME, OFFLINE_QUEUE_KEY_ID);
       if (typeof CryptoKey !== 'undefined' && existing instanceof CryptoKey) return existing;
       const generated = await generateOfflineQueueKey();
-      await putStoreValue(LOCAL_KEY_STORE_NAME, OFFLINE_QUEUE_KEY_ID, generated);
-      return generated;
+      // Other tabs can generate a candidate concurrently. Select/store the key
+      // in one serialized read-write transaction so an existing key never changes.
+      const db = await initOfflineDB();
+      const transaction = db.transaction(LOCAL_KEY_STORE_NAME, 'readwrite');
+      const store = transaction.objectStore(LOCAL_KEY_STORE_NAME);
+      const current = await requestResult(store.get(OFFLINE_QUEUE_KEY_ID));
+      const selected = typeof CryptoKey !== 'undefined' && current instanceof CryptoKey ? current : generated;
+      if (selected === generated) await requestResult(store.put(generated, OFFLINE_QUEUE_KEY_ID));
+      await transactionComplete(transaction);
+      return selected;
     })().catch((error) => {
       localKeyPromises.delete(OFFLINE_QUEUE_KEY_ID);
       throw error;
@@ -334,6 +344,10 @@ export function normalizeCachedMessage(m, chatId, userId) {
     reactions: Array.isArray(m.reactions) ? m.reactions : [],
     timestampIso: validTs.toISOString(),
     createdAt: m.createdAt || null,
+    editedAt: m.editedAt || null,
+    cryptoVersion: m.cryptoVersion || 1,
+    requiresUpdate: Boolean(m.requiresUpdate),
+    forwardedFrom: m.forwardedFrom || null,
     isOptimistic: Boolean(m.isOptimistic),
     isPending: Boolean(m.isPending),
     isLocked: Boolean(m.isLocked),
@@ -923,4 +937,27 @@ export async function clearCachedMessages(chatId, userId) {
   } catch (err) {
     console.warn('Failed to clear cached messages from IndexedDB:', err);
   }
+}
+
+// Draft bodies use the same device-local, non-exportable key as the offline queue.
+export async function saveChatDraft(userId, chatId, draft) {
+  if (!userId || !chatId) return;
+  const id = JSON.stringify([userId, chatId]);
+  if (!draft?.text && !draft?.replyTo) return deleteStoreValue(DRAFT_STORE_NAME, id);
+  const encrypted = await encryptOfflineQueuePayload(draft, await getLocalCryptoKey(), `draft:${id}`);
+  return putStoreValue(DRAFT_STORE_NAME, id, encrypted);
+}
+export async function loadChatDrafts(userId) {
+  if (!userId) return {};
+  const db = await initOfflineDB();
+  const store = db.transaction(DRAFT_STORE_NAME, 'readonly').objectStore(DRAFT_STORE_NAME);
+  const [keys, records] = await Promise.all([requestResult(store.getAllKeys()), requestResult(store.getAll())]);
+  const key = await getLocalCryptoKey();
+  const entries = await Promise.all(keys.map(async (id, index) => {
+    const [owner, chatId] = JSON.parse(id);
+    if (owner !== userId) return null;
+    const draft = await decryptOfflineQueuePayload(records[index], key, `draft:${id}`);
+    return [chatId, draft];
+  }));
+  return Object.fromEntries(entries.filter(Boolean));
 }

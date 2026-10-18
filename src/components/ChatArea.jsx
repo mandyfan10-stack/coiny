@@ -23,6 +23,9 @@ import ChatComposer from './chat/ChatComposer';
 import ChatSearchBar from './chat/ChatSearchBar';
 import MessageBubble from './chat/MessageBubble';
 import ImageViewer from './chat/ImageViewer';
+import ForwardMessageDialog from './chat/ForwardMessageDialog';
+import { canEditMessage } from '../utils/messageContent.ts';
+import './chat/MessageOperations.css';
 import { createStorageReference } from '../utils/urlSecurity';
 import useResolvedMedia from '../hooks/useResolvedMedia';
 import useEdgeSwipeBack from '../hooks/useSwipeGesture';
@@ -44,6 +47,10 @@ export default function ChatArea() {
     activeChat,
     getChatStatus,
     sendMessage,
+    editMessage,
+    drafts: storedDrafts,
+    updateDraft,
+    draftError,
     deleteMessage,
     toggleReaction,
     isInfoOpen,
@@ -86,6 +93,9 @@ export default function ChatArea() {
 
   useEdgeSwipeBack({
     onSwipeBack: () => {
+      if (forwarding) { document.querySelector('.forward-dialog button[aria-label="Закрыть пересылку"]')?.click(); return; }
+      if (editingMessage) { setEditingMessage(null); return; }
+      if (selection !== null) { setSelection(null); return; }
       if (activeChat) {
         setActiveChatId(null);
       }
@@ -139,10 +149,51 @@ export default function ChatArea() {
     backgroundRepeat: 'no-repeat'
   } : {};
 
-  const [inputVal, setInputVal] = useState('');
+  const [localDrafts, setLocalDrafts] = useState({});
+  const [editingMessage, setEditingMessage] = useState(null);
+  const [editText, setEditText] = useState('');
+  const [operationError, setOperationError] = useState('');
+  const [sending, setSending] = useState(false);
+  const [selection, setSelection] = useState(null);
+  const [forwarding, setForwarding] = useState(null);
+  const closeForwarding = useCallback(() => { setForwarding(null); setSelection(null); requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true })); }, []);
+  const draftOwner = `${currentUser?.id}:${activeChat?.id}`;
+  const draft = (storedDrafts || localDrafts)[activeChat?.id] || { text: '', replyTo: null };
+  const draftRef = useRef({ owner: draftOwner, value: draft });
+  if (draftRef.current.owner !== draftOwner || draftRef.current.value !== draft) draftRef.current = { owner: draftOwner, value: draft };
+  const writeDraft = (value) => {
+    draftRef.current.value = value;
+    if (updateDraft) updateDraft(activeChat.id, value);
+    else setLocalDrafts(previous => ({ ...previous, [activeChat.id]: value }));
+  };
+  const inputVal = editingMessage ? editText : draft.text;
+  const replyingTo = draft.replyTo;
+  const setInputVal = value => {
+    const next = typeof value === 'function' ? value(inputVal) : value;
+    if (editingMessage) setEditText(next);
+    else writeDraft({ ...draftRef.current.value, text: next });
+  };
+  const setReplyingTo = value => {
+    if (sending && editingMessage) return;
+    if (value) setEditingMessage(null);
+    writeDraft({ ...draftRef.current.value, replyTo: value });
+  };
+  const operationScope = useRef(draftOwner);
+  operationScope.current = draftOwner;
+  const beginEdit = message => {
+    if (sending || !canEditMessage(message, currentUser?.id) || !editMessage) return;
+    if (isRecordingRef.current) stopRecordingAndSendRef.current?.(true);
+    setShowMsgActionsId(null); setEditingMessage(message); setEditText(message.text || ''); setOperationError('');
+    requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true }));
+  };
+  const beginForward = message => { setShowMsgActionsId(null); setForwarding([message]); };
+  const toggleSelection = message => setSelection(previous => {
+    const next = new Set(previous || []);
+    if (next.has(message.id)) next.delete(message.id); else next.add(message.id);
+    return next;
+  });
   const [retryMenuMsgId, setRetryMenuMsgId] = useState(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [replyingTo, setReplyingTo] = useState(null);
   const [showMsgActionsId, setShowMsgActionsId] = useState(null);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
   const [openedImageUrl, setOpenedImageUrl] = useState(null);
@@ -260,6 +311,7 @@ export default function ChatArea() {
   };
 
   const handleFileChange = async (e) => {
+    if (editingMessage || sending) return;
     const file = e.target.files[0];
     if (!file) return;
 
@@ -273,6 +325,7 @@ export default function ChatArea() {
   };
 
   const handlePaste = async (e) => {
+    if (editingMessage || sending) return;
     const items = e.clipboardData?.items;
     if (!items) return;
 
@@ -805,9 +858,12 @@ function formatDateDivider(timestamp) {
   }, [activeChat?.id, isInitialLoading, restoreReadingAnchor]);
 
   useEffect(() => {
-    setReplyingTo(null);
+    setEditingMessage(null);
+    setSending(false);
+    setOperationError('');
+    setSelection(null);
+    setForwarding(null);
     setOpenedImageUrl(null);
-    setInputVal('');
 
     if (isCurrentlyTypingRef.current) {
       setIsCurrentlyTyping(false);
@@ -819,7 +875,7 @@ function formatDateDivider(timestamp) {
     if (isRecordingRef.current) {
       stopRecordingAndSendRef.current?.(true);
     }
-  }, [activeChat?.id, isInitialLoading]);
+  }, [activeChat?.id, currentUser?.id]);
 
   useEffect(() => {
     const el = footerRef.current;
@@ -1583,26 +1639,43 @@ function formatDateDivider(timestamp) {
     );
   }
 
-  const handleSend = () => {
-    if (!inputVal.trim()) return;
-    sendMessage(inputVal, replyingTo?.id);
-    setInputVal('');
-    setReplyingTo(null);
-
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
+  const handleSend = async () => {
+    if (!inputVal.trim() || sending || !canPost) return;
+    const scope = draftOwner;
+    const submitted = inputVal;
+    const submittedReply = replyingTo;
+    setSending(true); setOperationError('');
+    try {
+      if (editingMessage) {
+        if (submitted !== editingMessage.text) await editMessage(activeChat.id, editingMessage, submitted);
+        if (operationScope.current === scope) { setEditingMessage(null); setEditText(''); }
+      } else {
+        const result = await sendMessage(submitted, submittedReply?.id);
+        if (result === false) throw new Error('Не удалось отправить сообщение. Текст сохранён в черновике.');
+        if (operationScope.current === scope) {
+          const latest = draftRef.current.value;
+          writeDraft({ text: latest.text === submitted ? '' : latest.text,
+            replyTo: latest.replyTo?.id === submittedReply?.id ? null : latest.replyTo });
+        }
+      }
+    } catch (error) { if (operationScope.current === scope) setOperationError(error.message || 'Не удалось сохранить сообщение.'); }
+    finally { if (operationScope.current === scope) setSending(false); }
+    if (operationScope.current !== scope) return;
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     setIsCurrentlyTyping(false);
     sendTypingStatus(activeChat.id, false);
   };
 
   const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
+    if (e.nativeEvent.isComposing || e.isComposing) return;
+    if (sending) return;
+    if (e.key === 'Escape' && editingMessage) { e.preventDefault(); e.stopPropagation(); setEditingMessage(null); setOperationError(''); return; }
+    if (e.key === 'ArrowUp' && !inputVal && !editingMessage) {
+      const message = [...activeChat.messages].reverse().find(item => canEditMessage(item, currentUser?.id));
+      if (message) { e.preventDefault(); beginEdit(message); }
     }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
-
 
   const handleInputChange = (e) => {
     setInputVal(e.target.value);
@@ -1681,6 +1754,12 @@ function formatDateDivider(timestamp) {
         </div>
       )}
 
+      {selection !== null && <div className="message-selection-bar" role="toolbar" aria-label="Выбранные сообщения">
+        <button type="button" aria-label="Отменить выбор" onClick={() => setSelection(null)}>✕</button>
+        <span>Выбрано: {selection.size}</span>
+        <button type="button" disabled={!selection.size} onClick={() => setForwarding(activeChat.messages.filter(message => selection.has(message.id)))}>Переслать</button>
+      </div>}
+      {forwarding && <ForwardMessageDialog sourceChat={activeChat} messages={forwarding} currentUser={currentUser} onClose={closeForwarding}/>}
       {/* Messages Window */}
       <div
         key={activeChat.id}
@@ -1798,6 +1877,11 @@ function formatDateDivider(timestamp) {
                     retryMenuMsgId={retryMenuMsgId}
                     setRetryMenuMsgId={setRetryMenuMsgId}
                     setReplyingTo={setReplyingTo}
+                    onEdit={canPost ? beginEdit : undefined}
+                    onForward={beginForward}
+                    onSelect={toggleSelection}
+                    selectionMode={selection !== null}
+                    selected={selection?.has(msg.id) || false}
                     setOpenedImageUrl={setOpenedImageUrl}
                     deleteMessage={deleteMessage}
                     toggleReaction={toggleReaction}
@@ -1838,7 +1922,11 @@ function formatDateDivider(timestamp) {
         <ImageViewer imageUrl={openedImageUrl} onClose={() => setOpenedImageUrl(null)} />
       )}
 
+      {(operationError || draftError) && <p role="alert" className="message-operation-error">{operationError || draftError}</p>}
       <ChatComposer {...{
+        editingMessage,
+        sending,
+        onCancelEdit: () => { setEditingMessage(null); setOperationError(''); },
         activeChat,
         canPost,
         canSendMedia,

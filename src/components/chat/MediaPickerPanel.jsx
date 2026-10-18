@@ -29,6 +29,7 @@ const DEFAULT_RECENTS = ['😀', '😂', '😍', '👍', '🔥', '🎉', '👏',
 
 export default function MediaPickerPanel({
   isOpen,
+  emojiOnly = false,
   onClose,
   onSelectEmoji,
   onSelectSticker,
@@ -37,6 +38,7 @@ export default function MediaPickerPanel({
   onOpenStickerSettings
 }) {
   const [activeTab, setActiveTab] = useState('emoji'); // 'emoji' | 'sticker' | 'gif'
+  useEffect(() => { if (emojiOnly) setActiveTab('emoji'); }, [emojiOnly]);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('smileys');
   const [activeStickerPackId, setActiveStickerPackId] = useState(null);
@@ -356,6 +358,7 @@ export default function MediaPickerPanel({
           <Smile size={16} />
           <span>Смайлы</span>
         </button>
+        {!emojiOnly && <>
         <button
           type="button"
           className={`picker-top-tab ${activeTab === 'sticker' ? 'active' : ''}`}
@@ -380,6 +383,7 @@ export default function MediaPickerPanel({
           <Film size={16} />
           <span>GIF</span>
         </button>
+        </>}
       </div>
 
       {/* Unified Search Bar */}

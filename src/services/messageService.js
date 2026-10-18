@@ -60,6 +60,8 @@ export const createMessageService = ({
           reads: messageReads.map((receipt) => receipt.profile_id),
           reactions: message.reactions || [],
           createdAt: message.created_at,
+          editedAt: message.edited_at,
+          forwardedFromRaw: message.forwarded_from,
           timestamp: new Date(message.created_at)
         };
       }).reverse();
@@ -120,6 +122,18 @@ export const createMessageService = ({
       reactions: []
     }).select().single();
     if (error) throw error;
+    return data;
+  },
+
+  editMessage: async (messageId, text, expectedEditedAt = null) => {
+    if (!configured) return { text, edited_at: new Date().toISOString() };
+    const { data: current, error: readError } = await client.from('messages').select('text, edited_at').eq('id', messageId).single();
+    if (readError) throw readError;
+    const { data, error } = await client.rpc('edit_message_text', {
+      p_message_id: messageId, p_text: text, p_expected_text: current.text, p_expected_edited_at: expectedEditedAt
+    });
+    if (error) throw error;
+    if (!data) throw new Error('Сообщение изменено или удалено. Обновите чат и попробуйте снова.');
     return data;
   },
 

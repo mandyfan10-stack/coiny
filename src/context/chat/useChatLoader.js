@@ -1,3 +1,4 @@
+import { hasNewerMessageRevision, preserveMessageRevisions } from '../../utils/messageContent.ts';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { dataService } from '../../services/dataLayer';
 import {
@@ -213,11 +214,13 @@ export function useChatLoader({
 
             // Prefer decrypted local plaintext when already unlocked; always take
             // server-side delivery/read/reaction state so receipts survive refresh.
-            const keepLocalBody = !message.isLocked || refreshed.isLocked;
+            const keepLocalBody = (!message.isLocked || refreshed.isLocked) && !hasNewerMessageRevision(refreshed, message);
             return {
               ...message,
               ...refreshed,
               text: keepLocalBody ? message.text : refreshed.text,
+              editedAt: keepLocalBody ? message.editedAt : refreshed.editedAt,
+              forwardedFrom: keepLocalBody ? message.forwardedFrom : refreshed.forwardedFrom,
               media: keepLocalBody ? message.media : refreshed.media,
               isLocked: keepLocalBody ? message.isLocked : refreshed.isLocked,
               read: Boolean(message.read || refreshed.read),
@@ -296,11 +299,13 @@ export function useChatLoader({
           const confirmed = { ...incoming, isPending: false, isOptimistic: false, isFailed: false };
           const existing = existingById.get(incoming.id);
           if (!existing) return confirmed;
-          const keepLocalBody = !existing.isLocked || incoming.isLocked;
+          const keepLocalBody = (!existing.isLocked || incoming.isLocked) && !hasNewerMessageRevision(incoming, existing);
           return {
             ...existing,
             ...confirmed,
             text: keepLocalBody ? existing.text : incoming.text,
+            editedAt: keepLocalBody ? existing.editedAt : incoming.editedAt,
+            forwardedFrom: keepLocalBody ? existing.forwardedFrom : incoming.forwardedFrom,
             media: keepLocalBody ? existing.media : incoming.media,
             isLocked: keepLocalBody ? existing.isLocked : incoming.isLocked,
             read: Boolean(existing.read || incoming.read),
@@ -329,9 +334,10 @@ export function useChatLoader({
           && !retainedIds.has(message.id)
           && (!request.baselineIds.has(message.id) || request.pendingIds.has(message.id)));
         for (const message of [...concurrent, ...pending]) snapshot.ids.add(message.id);
-        const finalMessages = [...olderHistory, ...merged, ...pending, ...concurrent].sort(
+        const candidates = [...olderHistory, ...merged, ...pending, ...concurrent].sort(
           compareMessages
         );
+        const finalMessages = preserveMessageRevisions(c.messages || [], candidates);
 
         saveCachedMessagesBatch(chatId, finalMessages, currentUserId, snapshot);
         return { ...c, messages: finalMessages };
@@ -383,7 +389,8 @@ export function useChatLoader({
           if (c.id !== chatId) return c;
           const currentMessages = Array.isArray(c.messages) ? c.messages : [];
           const known = new Set(currentMessages.map((message) => message.id));
-          const finalMessages = [...unseenCached.filter((message) => !known.has(message.id)), ...currentMessages].sort(compareMessages);
+          const candidates = [...unseenCached.filter((message) => !known.has(message.id)), ...currentMessages].sort(compareMessages);
+          const finalMessages = preserveMessageRevisions(c.messages || [], candidates);
           return { ...c, messages: finalMessages };
         }));
         setMessagePagination((prev) => ({ ...prev, [chatId]: {
@@ -419,7 +426,8 @@ export function useChatLoader({
         if (c.id !== chatId) return c;
         const currentMessages = Array.isArray(c.messages) ? c.messages : [];
         const known = new Set(currentMessages.map((message) => message.id));
-        const finalMessages = [...decrypted.filter((message) => !known.has(message.id)), ...currentMessages].sort(compareMessages);
+        const candidates = [...decrypted.filter((message) => !known.has(message.id)), ...currentMessages].sort(compareMessages);
+        const finalMessages = preserveMessageRevisions(c.messages || [], candidates);
         saveCachedMessagesBatch(chatId, finalMessages, currentUserId);
         return { ...c, messages: finalMessages };
       }));
@@ -470,10 +478,12 @@ export function useChatLoader({
           const merged = eligibleCache.map((message) => {
             const current = currentById.get(message.id);
             if (!current) return message;
-            const keepCurrentBody = !current.isLocked || message.isLocked;
+            const keepCurrentBody = (!current.isLocked || message.isLocked) && !hasNewerMessageRevision(message, current);
             return {
               ...message, ...current,
               text: keepCurrentBody ? current.text : message.text,
+              editedAt: keepCurrentBody ? current.editedAt : message.editedAt,
+              forwardedFrom: keepCurrentBody ? current.forwardedFrom : message.forwardedFrom,
               media: keepCurrentBody ? current.media : message.media,
               isLocked: keepCurrentBody ? current.isLocked : message.isLocked,
               read: Boolean(current.read || message.read),
@@ -481,7 +491,8 @@ export function useChatLoader({
             };
           });
           const additional = currentMsgs.filter((message) => !cachedIds.has(message.id));
-          const finalMessages = [...merged, ...additional].sort(compareMessages);
+          const candidates = [...merged, ...additional].sort(compareMessages);
+          const finalMessages = preserveMessageRevisions(c.messages || [], candidates);
           if (snapshot) saveCachedMessagesBatch(activeChatId, finalMessages, currentUserId, snapshot);
           return { ...c, messages: finalMessages };
         }));

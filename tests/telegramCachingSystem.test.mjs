@@ -82,8 +82,8 @@ test('normalizeCachedMessage and denormalizeCachedMessage convert timestamps and
   assert.equal(roundtripped.timestamp.toISOString(), '2026-09-05T12:00:00.000Z');
 });
 
-test('indexedDbHelper defines schema version 8 and v2 cache stores with proper indexes', () => {
-  assert.match(indexedDbHelperCode, /const DB_VERSION\s*=\s*8/);
+test('indexedDbHelper defines schema version 9 and v2 cache stores with proper indexes', () => {
+  assert.match(indexedDbHelperCode, /const DB_VERSION\s*=\s*9/);
   assert.match(indexedDbHelperCode, /const MESSAGES_CACHE_V2_STORE_NAME\s*=\s*'messages-cache-v2'/);
   assert.match(indexedDbHelperCode, /const CHATS_CACHE_STORE_NAME\s*=\s*'chats-cache'/);
   assert.match(indexedDbHelperCode, /const MEDIA_CACHE_STORE_NAME\s*=\s*'media-cache'/);
@@ -119,12 +119,12 @@ test('useChatLoader implements instant 0ms chat list startup and SWR message hyd
 test('useChatRealtime immediately updates IndexedDB cache on INSERT, UPDATE, and DELETE', () => {
   assert.match(useChatRealtimeCode, /saveCachedMessage\(formattedMsg,\s*newMsg\.chat_id,\s*currentUser\.id\)/);
   assert.match(useChatRealtimeCode, /deleteCachedMessage\(deletedMsgId\)/);
-  assert.match(useChatRealtimeCode, /updateCachedMessageFields\(updatedMsg\.id/);
+  assert.match(useChatRealtimeCode, /updateCachedMessageFields\(row\.id/);
   assert.match(useChatRealtimeCode, /updateCachedMessageFields\(receipt\.message_id/);
 });
 
 test('useChatActions writes optimistic and confirmed messages to cache', () => {
-  assert.match(useChatActionsCode, /saveCachedMessage\(optimisticMsg,\s*activeChatId,\s*currentUser\.id\)/);
+  assert.match(useChatActionsCode, /saveCachedMessage\(optimisticMsg,\s*targetChatId,\s*currentUser\.id\)/);
   assert.match(useChatActionsCode, /deleteCachedMessage\(messageId\)/);
   assert.match(useChatActionsCode, /updateCachedMessageFields\(messageId,\s*\{\s*reactions:/);
   assert.match(useChatActionsCode, /updateCachedMessageFields\(m\.id,\s*\{\s*read:\s*true\s*\}\)/);

@@ -263,3 +263,15 @@ test('a previous account cannot hydrate the current account', async ({ page }) =
   await expect(page.getByText('Ответ другого аккаунта')).toHaveCount(0);
   await expect(page.getByText('Кэш другого аккаунта')).toHaveCount(0);
 });
+
+test('late history and cache cannot undo an edit received while loading', async ({ page }) => {
+  await openChat(page);
+  const stale = message('edited', 'До редактирования');
+  await complete(page, 'cache', 'a', [stale]);
+  const edited = { ...stale, text: 'Исправлено собеседником', editedAt: '2026-10-18T12:00:00.123456Z' };
+  await page.evaluate(row => window.__messengerTest.replaceMessages('a', [row]), edited);
+  await complete(page, 'network', 'a', [stale]);
+  await expect(page.locator('[data-message-id="edited"]')).toContainText(edited.text);
+  await expect(page.getByText(stale.text, { exact: true })).toHaveCount(0);
+  await expect.poll(() => page.evaluate(async () => (await window.__messengerTest.cache.read())[0]?.text)).toBe(edited.text);
+});

@@ -8,7 +8,10 @@ import {
   AlertCircle,
   Camera,
   Video,
-  Mic
+  Mic,
+  Pencil,
+  Forward,
+  CheckSquare
 } from 'lucide-react';
 import { normalizeReaction } from '../../utils/reactionUtils';
 import { SingleCheck, DoubleCheck, PendingClock } from './messageStatusIcons';
@@ -27,6 +30,7 @@ import useMessageTouch from '../../hooks/useMessageTouch';
 import { getMessageGrouping } from '../../utils/messageGrouping';
 import { getReplyType } from '../../utils/mobileActionSheetUtils';
 import './Message.css';
+import { canEditMessage } from '../../utils/messageContent.ts';
 
 
 const SENDER_COLOR_COUNT = 8;
@@ -58,6 +62,11 @@ export default function MessageBubble({
   retryMenuMsgId,
   setRetryMenuMsgId,
   setReplyingTo,
+  onEdit,
+  onForward,
+  onSelect,
+  selectionMode = false,
+  selected = false,
   setOpenedImageUrl,
   deleteMessage,
   toggleReaction,
@@ -68,6 +77,8 @@ export default function MessageBubble({
   isSearchMatchTarget = false
 }) {
   const isMe = msg.senderId === currentUser?.id || msg.senderId === 'current';
+  const editable = Boolean(onEdit && canEditMessage(msg, currentUser?.id));
+  const forwardable = Boolean(onForward && msg.cryptoVersion !== 2 && !msg.isLocked && !msg.isPending && !msg.isOptimistic && !msg.isFailed && !msg.requiresUpdate);
   const isGroupOther = activeChat?.type === 'group' && !isMe;
   const replyMsg = msg.replyTo ? activeChat.messages.find(m => m.id === msg.replyTo) : null;
 
@@ -340,6 +351,7 @@ export default function MessageBubble({
 
   const renderMetadata = (extraClass = '') => (
     <span className={`bubble-metadata ${extraClass}`.trim()}>
+      {msg.editedAt && <span className="message-edited">изменено</span>}
       <span className="message-time">{getFormatTime(msg.timestamp)}</span>
       {isMe && <span className="check-icons">{renderStatusIcons()}</span>}
     </span>
@@ -349,6 +361,7 @@ export default function MessageBubble({
   // The visible metadata can then sit at the right edge of the final text line.
   const renderMetadataSpacer = () => (
     <span className="bubble-metadata-spacer" aria-hidden="true">
+      {msg.editedAt && <span>изменено</span>}
       <span>{getFormatTime(msg.timestamp)}</span>
       {isMe && <span style={{ width: msg.isFailed ? 12 : 10 }} />}
     </span>
@@ -357,7 +370,7 @@ export default function MessageBubble({
   return (
     <div
       key={msg.id}
-      className={`message-row ${isMe ? 'row-me' : 'row-other'} ${isFirstInGroup ? 'group-first' : ''} ${isLastInGroup ? 'group-last' : ''}`}
+      className={`message-row ${isMe ? 'row-me' : 'row-other'} ${isFirstInGroup ? 'group-first' : ''} ${isLastInGroup ? 'group-last' : ''} ${selected ? 'message-selected' : ''}`}
       data-message-id={msg.id}
       data-message-timestamp={msg.timestamp == null ? undefined : new Date(msg.timestamp).getTime()}
       data-message-sender-id={msg.senderId}
@@ -367,6 +380,7 @@ export default function MessageBubble({
         }
       }}
     >
+      {selectionMode && <input type="checkbox" className="message-select-control" aria-label="Выбрать сообщение" checked={selected} disabled={!forwardable} onChange={() => onSelect?.(msg)}/>}
       {/* Group Avatar for incoming messages */}
       {isGroupOther && (
         <div className="message-avatar-col">
@@ -388,7 +402,7 @@ export default function MessageBubble({
       {/* Bubble */}
       <div
         ref={bubbleRef}
-        className={`message-bubble ${isMe ? 'bubble-me' : 'bubble-other'} ${isVideoNote ? 'bubble-video' : ''} ${isRegularVideo ? 'bubble-regular-video' : ''} ${isSticker ? 'bubble-sticker' : ''} ${isPureImage || isPureVideo ? 'bubble-media-only' : ''} ${showSenderName ? 'has-sender-name' : ''} ${isImageWithCaption || isVideoWithCaption ? 'bubble-media-with-caption' : ''} ${hasTail ? 'has-tail' : ''} ${isSearchMatchTarget ? 'search-match-target' : ''}`}
+        className={`message-bubble ${isMe ? 'bubble-me' : 'bubble-other'} ${isVideoNote ? 'bubble-video' : ''} ${isRegularVideo ? 'bubble-regular-video' : ''} ${isSticker ? 'bubble-sticker' : ''} ${isPureImage || isPureVideo ? 'bubble-media-only' : ''} ${showSenderName ? 'has-sender-name' : ''} ${isImageWithCaption || isVideoWithCaption ? 'bubble-media-with-caption' : ''} ${msg.forwardedFrom ? 'has-forward-origin' : ''} ${hasTail ? 'has-tail' : ''} ${isSearchMatchTarget ? 'search-match-target' : ''}`}
         style={{
           transform: swipeOffset ? `translateX(${swipeOffset}px)` : undefined,
           transition: isSwiping ? 'none' : 'transform 0.22s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
@@ -437,6 +451,7 @@ export default function MessageBubble({
           </span>
         )}
 
+        {msg.forwardedFrom && <span className="message-forward-origin">Переслано от {msg.forwardedFrom.name}</span>}
         {/* Reply Context in Bubble */}
         {replyMsg && (
           <div className="reply-preview-bubble">
@@ -607,6 +622,9 @@ export default function MessageBubble({
           >
             <Smile size={14} />
           </button>
+          {editable && <button type="button" className="hover-action-btn" title="Изменить" onClick={() => onEdit(msg)}><Pencil size={14}/></button>}
+          {forwardable && <button type="button" className="hover-action-btn" title="Переслать" onClick={() => onForward(msg)}><Forward size={14}/></button>}
+          {forwardable && onSelect && <button type="button" className="hover-action-btn" title="Выбрать" onClick={() => onSelect(msg)}><CheckSquare size={14}/></button>}
           <button
             type="button"
             className="hover-action-btn delete"
@@ -690,6 +708,9 @@ export default function MessageBubble({
           isOutgoing={isMe}
           onClose={() => setShowMsgActionsId(null)}
           onReply={setReplyingTo}
+          onEdit={editable ? onEdit : undefined}
+          onForward={forwardable ? onForward : undefined}
+          onSelect={forwardable ? onSelect : undefined}
           setReplyingTo={setReplyingTo}
           onReactionSelect={(emo) => toggleReaction?.(activeChat?.id, msg.id, emo)}
           toggleReaction={toggleReaction}

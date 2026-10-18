@@ -1,4 +1,4 @@
-import { Send, Paperclip, Smile, Mic, X, Play, Pause, Lock, Trash2, CornerUpLeft, Camera, Video } from 'lucide-react';
+import { Send, Paperclip, Smile, Mic, X, Play, Pause, Lock, Trash2, CornerUpLeft, Camera, Video, Pencil, Check } from 'lucide-react';
 import { CHAT_MEDIA_ACCEPT } from '../../utils/mediaValidation';
 import { getReplyType } from '../../utils/mobileActionSheetUtils';
 import MediaPickerPanel from './MediaPickerPanel';
@@ -9,6 +9,9 @@ import './ChatComposer.css';
 /** Presentational composer; ChatArea retains messaging, recording and scroll state. */
 export default function ChatComposer({
   activeChat,
+  editingMessage,
+  onCancelEdit,
+  sending,
   canPost,
   canSendMedia,
   recipientMissingE2EE,
@@ -70,7 +73,12 @@ export default function ChatComposer({
         )}
 
         {/* Reply Bar Overlay */}
-        {replyingTo && (
+        {editingMessage && <div className="reply-indicator-bar">
+          <Pencil size={16} className="reply-bar-icon"/>
+          <div className="reply-bar-meta"><span className="reply-bar-title">Редактирование</span><p className="reply-bar-desc">{editingMessage.text}</p></div>
+          <IconButton label="Отменить редактирование" className="reply-bar-close" disabled={sending} onClick={onCancelEdit}><X size={16}/></IconButton>
+        </div>}
+        {!editingMessage && replyingTo && (
           <div className="reply-indicator-bar">
             <CornerUpLeft size={16} className="reply-bar-icon" />
             <div className="reply-bar-meta">
@@ -149,7 +157,7 @@ export default function ChatComposer({
           ) : (
             <>
               {/* Attachment button */}
-              {canSendMedia && !recipientMissingE2EE && (
+              {canSendMedia && !recipientMissingE2EE && !editingMessage && (
                 <div className="attach-wrapper">
                   <input
                     type="file"
@@ -187,6 +195,8 @@ export default function ChatComposer({
                   onPaste={handlePaste}
                   rows={1}
                   disabled={recipientMissingE2EE}
+                  readOnly={sending}
+                  aria-busy={sending || undefined}
                 />
 
                 {/* Emoji / Sticker / GIF picker */}
@@ -202,14 +212,17 @@ export default function ChatComposer({
                   </IconButton>
 
                   <MediaPickerPanel
+                    emojiOnly={Boolean(editingMessage)}
                     isOpen={showEmojiPicker}
                     onClose={() => setShowEmojiPicker(false)}
                     onSelectEmoji={handleEmojiClick}
                     onSelectSticker={(stickerTag, fileUrl) => {
+                      if (editingMessage) return;
                       sendMessage(stickerTag, replyingTo?.id, fileUrl);
                       setReplyingTo(null);
                     }}
                     onSelectGif={(gifUrl) => {
+                      if (editingMessage) return;
                       sendMessage('', replyingTo?.id, gifUrl);
                       setReplyingTo(null);
                     }}
@@ -228,11 +241,12 @@ export default function ChatComposer({
             <IconButton
               className="send-message-btn"
               onClick={(event) => { triggerHaptic(15); handleSend(event); }}
-              label="Отправить"
+              label={editingMessage ? 'Сохранить изменения' : 'Отправить'}
+              disabled={sending}
             >
-              <Send size={20} />
+              {editingMessage ? <Check size={20}/> : <Send size={20} />}
             </IconButton>
-          ) : canSendMedia && !recipientMissingE2EE ? (
+          ) : canSendMedia && !recipientMissingE2EE && !editingMessage ? (
             <div style={{ position: 'relative' }}>
               {isRecording && !isRecordingLocked && (
                 <div className={`recording-lock-indicator ${isLockActive ? 'active' : ''}`}>

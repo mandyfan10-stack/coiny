@@ -51,6 +51,7 @@ export const dataService = {
       : v1MessageCompatibilityAdapter.sendMessage(...args)
   ),
   deleteMessage: messageService.deleteMessage,
+  editMessage: messageService.editMessage,
   toggleReaction: messageService.toggleReaction,
   markMessagesAsRead: messageService.markMessagesAsRead,
 

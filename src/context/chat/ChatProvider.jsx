@@ -13,6 +13,7 @@ import { useTyping } from './useTyping';
 import { useChatLoader } from './useChatLoader';
 import { useChatActions } from './useChatActions';
 import { useChatRealtime } from './useChatRealtime';
+import { useChatDrafts } from './useChatDrafts';
 
 const ChatContext = createContext();
 
@@ -24,6 +25,7 @@ export const ChatProvider = ({ children }) => {
   const { e2eePrivateKey, sharedKeysCache, setSharedKeysCache } = useE2EE();
 
   const [chats, setChats] = useState([]);
+  const drafts = useChatDrafts(currentUser?.id);
   const ui = useChatUiState(currentUser);
   const { activeChatId, setActiveChatId } = ui;
   const activeChat = chats.find((c) => c.id === activeChatId);
@@ -140,6 +142,9 @@ export const ChatProvider = ({ children }) => {
       setActiveChatId,
       activeChat,
       sendMessage: actions.sendMessage,
+      editMessage: actions.editMessage,
+      forwardMessages: actions.forwardMessages,
+      ...drafts,
       createChat: actions.createChat,
       joinChatByInvite: actions.joinChatByInvite,
       openSavedMessages: actions.openSavedMessages,

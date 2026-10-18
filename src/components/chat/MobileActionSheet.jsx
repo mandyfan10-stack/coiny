@@ -1,6 +1,6 @@
 import React, { useEffect, useCallback, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { CornerUpLeft, Copy, Trash2, Check } from 'lucide-react';
+import { CornerUpLeft, Copy, Trash2, Check, Pencil, Forward, CheckSquare } from 'lucide-react';
 import { normalizeReaction } from '../../utils/reactionUtils';
 import {
   DEFAULT_QUICK_EMOJIS,
@@ -30,6 +30,9 @@ export default function MobileActionSheet({
   emojis = [],
   onClose,
   onReply,
+  onEdit,
+  onForward,
+  onSelect,
   setReplyingTo,
   onCopy,
   onDelete,
@@ -184,6 +187,7 @@ export default function MobileActionSheet({
 
         {/* Action Menu Items */}
         <div className="mobile-sheet-menu" role="menu">
+          {[[onEdit, Pencil, 'Изменить'], [onForward, Forward, 'Переслать'], [onSelect, CheckSquare, 'Выбрать']].map(([action, Icon, label]) => action && <button key={label} type="button" className="mobile-sheet-item" role="menuitem" onClick={() => { action(msg); onClose?.(); }}><div className="mobile-sheet-item-icon"><Icon size={19}/></div><span className="mobile-sheet-item-label">{label}</span></button>)}
           <button
             type="button"
             className="mobile-sheet-item"

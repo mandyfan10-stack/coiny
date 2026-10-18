@@ -7,7 +7,7 @@ export const createV1MessageCompatibilityAdapter = ({
   randomUUID = () => crypto.randomUUID(),
   now = () => new Date()
 } = {}) => ({
-  async sendMessage(chatId, senderId, text, replyToId, media, customId = null) {
+  async sendMessage(chatId, senderId, text, replyToId, media, customId = null, metadata = {}) {
     const finalId = customId || randomUUID();
     if (configured) {
       const { data, error } = await client.from('messages').insert({
@@ -16,7 +16,8 @@ export const createV1MessageCompatibilityAdapter = ({
         sender_id: senderId,
         text,
         media,
-        reply_to: replyToId
+        reply_to: replyToId,
+        ...(metadata.forwardedFrom ? { forwarded_from: metadata.forwardedFrom } : {})
       }).select().single();
       if (error) throw error;
       return data;
@@ -25,6 +26,7 @@ export const createV1MessageCompatibilityAdapter = ({
       id: finalId,
       senderId,
       senderName: 'Вы',
+      ...(metadata.forwardedFrom ? { forwardedFromRaw: metadata.forwardedFrom } : {}),
       text,
       timestamp: now(),
       replyTo: replyToId,

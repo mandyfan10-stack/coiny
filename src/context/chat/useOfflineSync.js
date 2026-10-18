@@ -172,6 +172,7 @@ export function useOfflineSync({
               id: data.id,
               senderId: currentUser?.id,
               text: item.text,
+              forwardedFrom: item.forwardedFrom || null,
               media: finalMediaUrl,
               replyTo: item.replyToId,
               createdAt: data.created_at,

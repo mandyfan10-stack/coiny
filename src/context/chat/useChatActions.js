@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { dataService } from '../../services/dataLayer';
 import {
   importPublicKey,
@@ -21,6 +21,9 @@ import {
 } from '../../utils/reactionUtils';
 import { playSound } from '../../utils/sounds';
 import { createOfflineQueueItem } from '../../services/offlineQueueCore.js';
+import { resolveSharedKey } from './decryptHelpers';
+import { canEditMessage, preferMessageBody } from '../../utils/messageContent.ts';
+import { prepareForwardMedia } from '../../services/forwardMedia';
 import { isSavedMessagesChat, requiresPersonalE2EE } from '../../utils/savedMessages';
 
 /**
@@ -32,13 +35,14 @@ export function useChatActions({
   setChats,
   activeChatId,
   setActiveChatId,
-  activeChat,
   fetchChats,
   setOfflineQueue,
   e2eePrivateKeyRef,
   sharedKeysCacheRef,
   setSharedKeysCache
 }) {
+  const ownerRef = useRef(currentUser?.id);
+  ownerRef.current = currentUser?.id;
   const markMessagesAsRead = useCallback(async (chatId) => {
     if (!currentUser || !chatId) return;
     try {
@@ -213,10 +217,14 @@ export function useChatActions({
     }
   }, [fetchChats, setChats]);
 
-  const sendMessage = useCallback(async (text, replyToId = null, media = null, offlineMediaBlob = null, offlineMediaType = null, customMessageId = null) => {
+  const sendMessage = useCallback(async (text, replyToId = null, media = null, offlineMediaBlob = null, offlineMediaType = null, customMessageId = null, options = {}) => {
+    const targetChatId = options.chatId || activeChatId;
+    const sendingChat = chats.find(chat => chat.id === targetChatId);
+    if (!sendingChat || sendingChat.requiresUpdate) return false;
+    const wireText = text || '';
     const cleanText = typeof text === 'string' ? text.trim() : '';
     if (!cleanText && !media && !offlineMediaBlob) return;
-    if (!currentUser || !activeChatId) return;
+    if (!currentUser || !targetChatId) return;
 
     const messageId = customMessageId || crypto.randomUUID();
 
@@ -224,6 +232,7 @@ export function useChatActions({
       id: messageId,
       senderId: currentUser.id,
       senderName: currentUser.name || 'Вы',
+      forwardedFrom: options.forwardedFrom || null,
       text: typeof text === 'string' ? text : '',
       media: media,
       replyTo: replyToId,
@@ -249,20 +258,20 @@ export function useChatActions({
     }
 
     setChats((prevChats) => prevChats.map((c) => {
-      if (c.id === activeChatId) {
+      if (c.id === targetChatId) {
         return { ...c, messages: [...c.messages, optimisticMsg] };
       }
       return c;
     }));
 
-    saveCachedMessage(optimisticMsg, activeChatId, currentUser.id);
+    saveCachedMessage(optimisticMsg, targetChatId, currentUser.id);
 
     playSound('outgoing');
 
-    if (!dataService.isLive() && activeChat) {
-      const isEchoBot = activeChat.id === 'echo_bot' || activeChat.username === 'echo_bot' || activeChat.name === 'echo_bot';
-      const isWeatherBot = activeChat.id === 'weather_bot' || activeChat.username === 'weather_bot' || activeChat.name === 'weather_bot';
-      const isQuizBot = activeChat.id === 'quiz_bot' || activeChat.username === 'quiz_bot' || activeChat.name === 'quiz_bot';
+    if (!dataService.isLive() && sendingChat) {
+      const isEchoBot = sendingChat.id === 'echo_bot' || sendingChat.username === 'echo_bot' || sendingChat.name === 'echo_bot';
+      const isWeatherBot = sendingChat.id === 'weather_bot' || sendingChat.username === 'weather_bot' || sendingChat.name === 'weather_bot';
+      const isQuizBot = sendingChat.id === 'quiz_bot' || sendingChat.username === 'quiz_bot' || sendingChat.name === 'quiz_bot';
 
       let botResponse = '';
       let botId = '';
@@ -296,7 +305,7 @@ export function useChatActions({
             isOptimistic: false,
             isPending: false
           };
-          setChats((prev) => prev.map((c) => (c.id === activeChatId ? { ...c, messages: [...c.messages, botMsg] } : c)));
+          setChats((prev) => prev.map((c) => (c.id === targetChatId ? { ...c, messages: [...c.messages, botMsg] } : c)));
           playSound('incoming');
         }, 1000);
       }
@@ -304,27 +313,29 @@ export function useChatActions({
 
     if (!navigator.onLine || hasOfflineMedia) {
       setOfflineQueue((prev) => [...prev, createOfflineQueueItem({
-        chatId: activeChatId,
+        chatId: targetChatId,
         senderId: currentUser.id,
-        text,
+        text: wireText,
+        forwardedFrom: options.forwardedFrom,
         replyToId,
         media: tempMediaUrl,
         optimisticId: messageId,
         hasOfflineMedia,
         mediaType: offlineMediaType
       })]);
-      return;
+      return messageId;
     }
 
-    (async () => {
+    return (async () => {
       try {
-        let textToSend = text;
+        let textToSend = wireText;
         let mediaToSend = media;
+        let forwardedFromToSend = options.forwardedFrom ? JSON.stringify({ name: options.forwardedFrom.name.slice(0, 128) }) : null;
 
-        const requiresE2EE = requiresPersonalE2EE(activeChat, currentUser.id);
+        const requiresE2EE = requiresPersonalE2EE(sendingChat, currentUser.id);
         if (requiresE2EE) {
-          const otherMember = activeChat.members?.find((m) => m.id !== currentUser.id);
-          let sharedKey = sharedKeysCacheRef.current[activeChatId];
+          const otherMember = sendingChat.members?.find((m) => m.id !== currentUser.id);
+          let sharedKey = sharedKeysCacheRef.current[targetChatId];
 
           if (!sharedKey) {
             if (!e2eePrivateKeyRef.current || !otherMember?.publicKey) {
@@ -332,13 +343,17 @@ export function useChatActions({
             }
             const otherPublicKeyObj = await importPublicKey(otherMember.publicKey);
             sharedKey = await deriveSymmetricKey(e2eePrivateKeyRef.current, otherPublicKeyObj);
-            setSharedKeysCache((prev) => ({ ...prev, [activeChatId]: sharedKey }));
+            setSharedKeysCache((prev) => ({ ...prev, [targetChatId]: sharedKey }));
           }
 
           requireE2EEKey(sharedKey);
-          if (text) {
-            const encryptedText = await encryptMessage(text, sharedKey);
+          if (wireText) {
+            const encryptedText = await encryptMessage(wireText, sharedKey);
             textToSend = `e2ee:aes-gcm:${encryptedText.ciphertext}:${encryptedText.iv}`;
+          }
+          if (forwardedFromToSend) {
+            const encrypted = await encryptMessage(forwardedFromToSend, sharedKey);
+            forwardedFromToSend = `e2ee:aes-gcm:${encrypted.ciphertext}:${encrypted.iv}`;
           }
           if (media) {
             const encryptedMedia = await encryptMessage(media, sharedKey);
@@ -346,14 +361,16 @@ export function useChatActions({
           }
         }
 
-        await dataService.sendMessage(activeChatId, currentUser.id, textToSend, replyToId, mediaToSend, messageId);
+        if (ownerRef.current !== currentUser.id) return false;
+        await dataService.sendMessage(targetChatId, currentUser.id, textToSend, replyToId, mediaToSend, messageId, { forwardedFrom: forwardedFromToSend });
+        if (ownerRef.current !== currentUser.id) return false;
         // Persist confirmed status to IndexedDB cache
         updateCachedMessageFields(messageId, { isOptimistic: false, isPending: false });
 
         // Confirm delivery locally even if the INSERT realtime event is coalesced
         // with an existing optimistic bubble.
         setChats((prevChats) => prevChats.map((c) => {
-          if (c.id !== activeChatId) return c;
+          if (c.id !== targetChatId) return c;
           return {
             ...c,
             messages: c.messages.map((m) => (
@@ -363,13 +380,15 @@ export function useChatActions({
             ))
           };
         }));
+        return messageId;
       } catch (error) {
+        if (ownerRef.current !== currentUser.id) return false;
         console.error('Send failed:', error);
         const isNetwork = !navigator.onLine || error.message?.includes('FetchError') || error.message?.includes('failed to fetch');
         if (isNetwork) {
           updateCachedMessageFields(messageId, { isPending: true });
           setChats((prevChats) => prevChats.map((c) => {
-            if (c.id === activeChatId) {
+            if (c.id === targetChatId) {
               return {
                 ...c,
                 messages: c.messages.map((m) => (m.id === messageId ? { ...m, isPending: true } : m))
@@ -379,27 +398,87 @@ export function useChatActions({
           }));
 
           setOfflineQueue((prev) => [...prev, createOfflineQueueItem({
-            chatId: activeChatId,
+            chatId: targetChatId,
             senderId: currentUser.id,
-            text,
+            text: wireText,
+            forwardedFrom: options.forwardedFrom,
             replyToId,
             media,
             optimisticId: messageId,
             hasOfflineMedia: false
           })]);
+          return messageId;
         } else {
           deleteCachedMessage(messageId);
           setChats((prevChats) => prevChats.map((c) => {
-            if (c.id === activeChatId) {
+            if (c.id === targetChatId) {
               return { ...c, messages: c.messages.filter((m) => m.id !== messageId) };
             }
             return c;
           }));
           alert(`Не удалось отправить сообщение: ${error.message}`);
         }
+        return false;
       }
     })();
-  }, [activeChatId, currentUser, activeChat, setSharedKeysCache, setChats, setOfflineQueue, e2eePrivateKeyRef, sharedKeysCacheRef]);
+  }, [chats, activeChatId, currentUser, setSharedKeysCache, setChats, setOfflineQueue, e2eePrivateKeyRef, sharedKeysCacheRef]);
+
+  const editMessage = useCallback(async (chatId, message, text) => {
+    if (!currentUser || !canEditMessage(message, currentUser.id)) throw new Error('Это сообщение нельзя изменить.');
+    if (message.media && !canEditMessage({ ...message, text }, currentUser.id)) throw new Error('Используйте обычный текст для подписи вложения.');
+    if (!navigator.onLine) throw new Error('Для изменения сообщения подключитесь к интернету.');
+    const chat = chats.find(item => item.id === chatId);
+    if (!chat || chat.requiresUpdate) throw new Error('Чат недоступен.');
+    let wireText = text;
+    if (requiresPersonalE2EE(chat, currentUser.id)) {
+      const key = await resolveSharedKey({ chatId, chat, currentUserId: currentUser.id,
+        e2eePrivateKey: e2eePrivateKeyRef.current, sharedKeysCache: sharedKeysCacheRef.current, setSharedKeysCache });
+      requireE2EEKey(key);
+      const encrypted = await encryptMessage(wireText, key);
+      wireText = `e2ee:aes-gcm:${encrypted.ciphertext}:${encrypted.iv}`;
+    }
+    if (ownerRef.current !== currentUser.id) throw new Error('Аккаунт изменился.');
+    const edited = await dataService.editMessage(message.id, wireText, message.editedAt || null);
+    if (ownerRef.current !== currentUser.id) return false;
+    const fields = { text, editedAt: edited.edited_at };
+    setChats(previous => previous.map(item => item.id === chatId ? { ...item,
+      messages: item.messages.map(old => {
+        if (old.id !== message.id) return old;
+        const updated = preferMessageBody(old, { ...old, ...fields });
+        updateCachedMessageFields(message.id, updated).catch(() => {});
+        return updated;
+      }) } : item));
+    return true;
+  }, [currentUser, chats, setChats, e2eePrivateKeyRef, sharedKeysCacheRef, setSharedKeysCache]);
+
+  const forwardMessages = useCallback(async (sourceChatId, targetChatId, messages, comment = '', onSent = () => {}) => {
+    if (!currentUser || !navigator.onLine) throw new Error('Для пересылки подключитесь к интернету.');
+    const source = chats.find(chat => chat.id === sourceChatId);
+    const target = chats.find(chat => chat.id === targetChatId);
+    if (!source || !target || target.requiresUpdate) throw new Error('Чат недоступен.');
+    const own = target.createdBy === currentUser.id || target.members?.some(member => member.id === currentUser.id && member.role === 'admin');
+    if (target.type === 'channel' && !own || target.settings?.only_admins_can_post && !own) throw new Error('В этот чат могут писать только администраторы.');
+    if (messages.some(message => message.cryptoVersion === 2 || message.isLocked || message.requiresUpdate || message.isPending || message.isOptimistic || message.isFailed)) throw new Error('Одно из сообщений пока недоступно для пересылки.');
+    if (target.type !== 'personal' && messages.some(message => message.media) && target.settings?.allow_media === false && !own) throw new Error('В этом чате запрещена отправка медиа.');
+    const guard = () => { if (ownerRef.current !== currentUser.id) throw new Error('Аккаунт изменился.'); };
+    if (comment.trim()) {
+      guard();
+      if (!await sendMessage(comment, null, null, null, null, null, { chatId: targetChatId })) throw new Error('Не удалось отправить комментарий.');
+      onSent(null);
+    }
+    for (const message of messages) {
+      guard();
+      const id = crypto.randomUUID();
+      const media = await prepareForwardMedia(message, source, target, currentUser.id, id, {
+        e2eePrivateKey: e2eePrivateKeyRef.current, sharedKeysCache: sharedKeysCacheRef.current, setSharedKeysCache, guard
+      });
+      guard();
+      const name = message.forwardedFrom?.name || message.senderName || source.members?.find(member => member.id === message.senderId)?.name || 'Пользователь';
+      if (!await sendMessage(message.text || '', null, media, null, null, id, { chatId: targetChatId, forwardedFrom: { name } })) throw new Error('Не удалось переслать сообщение. Уже отправленные сообщения сохранены.');
+      onSent(message.id);
+    }
+    return true;
+  }, [currentUser, chats, sendMessage, e2eePrivateKeyRef, sharedKeysCacheRef, setSharedKeysCache]);
 
   const deleteMessage = useCallback(async (chatId, messageId) => {
     try {
@@ -533,11 +612,11 @@ export function useChatActions({
     }
   }, [currentUser, setChats]);
 
-  const openSavedMessages = useCallback(async () => {
+  const openSavedMessages = useCallback(async (options = {}) => {
     if (!currentUser) return null;
     const existing = chats.find((c) => isSavedMessagesChat(c, currentUser.id));
     if (existing) {
-      setActiveChatId(existing.id);
+      if (options.activate !== false) setActiveChatId(existing.id);
       return existing;
     }
 
@@ -548,7 +627,7 @@ export function useChatActions({
           .rpc('ensure_saved_messages_chat');
         if (savedErr) throw savedErr;
         if (fetchChats) await fetchChats();
-        if (savedChatId) {
+        if (savedChatId && options.activate !== false) {
           setActiveChatId(savedChatId);
         }
         return savedChatId ? { id: savedChatId, name: 'Избранное' } : null;
@@ -569,7 +648,7 @@ export function useChatActions({
         messages: []
       };
       setChats((prev) => [savedMock, ...prev.filter((c) => c.id !== savedMock.id)]);
-      setActiveChatId(savedMock.id);
+      if (options.activate !== false) setActiveChatId(savedMock.id);
       return savedMock;
     }
   }, [currentUser, chats, fetchChats, setActiveChatId, setChats]);
@@ -600,6 +679,8 @@ export function useChatActions({
     clearChatMessages,
     sendMessage,
     deleteMessage,
+    editMessage,
+    forwardMessages,
     toggleReaction,
     updateChatAvatar,
     updateChatSettings,

@@ -3,6 +3,7 @@ import {
   deriveSymmetricKey,
   decryptMessage
 } from '../../utils/e2eeHelper.js';
+import { decodeMessageContent } from '../../utils/messageContent.ts';
 
 /**
  * Decrypt a single message's text/media fields when E2EE ciphertext is present.
@@ -14,9 +15,17 @@ export async function decryptMessageFields(message, sharedKey, isPersonal) {
   let decryptedText = message.text;
   let decryptedMedia = message.media;
   let isDecrypted = true;
+  let forwardedFromRaw = message.forwardedFromRaw;
+  if (forwardedFromRaw?.startsWith('e2ee:aes-gcm:')) {
+    try {
+      if (!sharedKey) throw new Error('Missing key');
+      const [ciphertext, iv] = forwardedFromRaw.slice('e2ee:aes-gcm:'.length).split(':');
+      forwardedFromRaw = await decryptMessage(ciphertext, iv, sharedKey);
+    } catch { forwardedFromRaw = null; }
+  }
 
   if (!isPersonal) {
-    return { ...message, text: decryptedText, media: decryptedMedia, isLocked: false };
+    return decodeMessageContent({ ...message, text: decryptedText, media: decryptedMedia, ...('forwardedFromRaw' in message ? { forwardedFromRaw } : {}), isLocked: false });
   }
 
   if (message.text && message.text.startsWith('e2ee:aes-gcm:')) {
@@ -47,7 +56,7 @@ export async function decryptMessageFields(message, sharedKey, isPersonal) {
     }
   }
 
-  return { ...message, text: decryptedText, media: decryptedMedia, isLocked: !isDecrypted };
+  return decodeMessageContent({ ...message, text: decryptedText, media: decryptedMedia, ...('forwardedFromRaw' in message ? { forwardedFromRaw } : {}), isLocked: !isDecrypted });
 }
 
 /**

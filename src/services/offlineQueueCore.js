@@ -20,7 +20,8 @@ export function createOfflineQueueItem({
   media = null,
   optimisticId,
   hasOfflineMedia = false,
-  mediaType = null
+  mediaType = null,
+  forwardedFrom = null
 }) {
   return {
     queueId: `queue-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -32,7 +33,7 @@ export function createOfflineQueueItem({
     optimisticId,
     hasOfflineMedia,
     mediaType,
-    isPending: true,
+    ...(forwardedFrom ? { forwardedFrom } : {}),    isPending: true,
     isFailed: false
   };
 }

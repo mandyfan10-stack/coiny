@@ -6,6 +6,8 @@ import {
   deriveSymmetricKey,
   decryptMessage
 } from '../../utils/e2eeHelper';
+import { decodeMessageContent, preferMessageBody } from '../../utils/messageContent.ts';
+import { decryptMessageFields, resolveSharedKey } from './decryptHelpers';
 import { playSound } from '../../utils/sounds';
 import { showIncomingNotification } from '../../services/notificationService';
 import {
@@ -49,6 +51,7 @@ export function useChatRealtime({
   }, [currentUserId, fetchChats, fetchStories]);
 
   useEffect(() => {
+    let disposed = false;
     if (dataService.isLive()) {
       if (currentUser) {
         const msgChannel = supabase
@@ -67,8 +70,9 @@ export function useChatRealtime({
             let decryptedText = newMsg.text;
             let decryptedMedia = newMsg.media;
             let isDecrypted = true;
+            let originKey = sharedKeysCacheRef.current[newMsg.chat_id];
 
-            if (newMsg.text?.startsWith('e2ee:aes-gcm:') || newMsg.media?.startsWith('e2ee:aes-gcm:')) {
+            if (newMsg.text?.startsWith('e2ee:aes-gcm:') || newMsg.media?.startsWith('e2ee:aes-gcm:') || newMsg.forwarded_from?.startsWith('e2ee:aes-gcm:')) {
               let sharedKey = sharedKeysCacheRef.current[newMsg.chat_id];
               if (!sharedKey && e2eePrivateKeyRef.current) {
                 try {
@@ -88,6 +92,7 @@ export function useChatRealtime({
                 }
               }
 
+              originKey = sharedKey;
               if (sharedKey) {
                 if (newMsg.text?.startsWith('e2ee:aes-gcm:')) {
                   try {
@@ -113,13 +118,15 @@ export function useChatRealtime({
               }
             }
 
+            const origin = await decryptMessageFields({ text: null, media: null, forwardedFromRaw: newMsg.forwarded_from }, originKey, true);
+            if (disposed) return;
             setChats((prevChats) => {
               const chat = prevChats.find((c) => c.id === newMsg.chat_id);
               if (!chat) return prevChats;
 
               const senderName = chat.members.find((m) => m.id === newMsg.sender_id)?.name || 'Пользователь';
 
-              const formattedMsg = {
+              const formattedMsg = decodeMessageContent({
                 id: newMsg.id,
                 senderId: newMsg.sender_id,
                 senderName,
@@ -131,11 +138,14 @@ export function useChatRealtime({
                 reads: chat.messages.find((m) => m.id === newMsg.id)?.reads,
                 reactions: newMsg.reactions || [],
                 createdAt: newMsg.created_at,
+                editedAt: newMsg.edited_at,
+                forwardedFrom: origin.forwardedFrom,
+                cryptoVersion: newMsg.crypto_version || 1,
                 timestamp: new Date(newMsg.created_at),
                 isLocked: !isDecrypted,
                 isOptimistic: false,
                 isPending: false
-              };
+              });
 
               const existingIndex = chat.messages.findIndex((m) => m.id === newMsg.id);
               if (existingIndex !== -1) {
@@ -151,7 +161,7 @@ export function useChatRealtime({
                 });
                 const nextMessages = chat.messages.map((m, index) => (
                   index === existingIndex
-                    ? {
+                    ? preferMessageBody(m, {
                         ...formattedMsg,
                         // Keep decrypted plaintext the sender already shows
                         text: isMe && m.text && !String(m.text).startsWith('e2ee:')
@@ -162,7 +172,7 @@ export function useChatRealtime({
                           : formattedMsg.media,
                         read: m.read || formattedMsg.read,
                         reads: m.reads || formattedMsg.reads
-                      }
+                      })
                     : m
                 ));
                 return prevChats.map((c) => (
@@ -208,25 +218,37 @@ export function useChatRealtime({
               messages: c.messages.filter((m) => m.id !== deletedMsgId)
             })));
           })
-          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, (payload) => {
-            const updatedMsg = payload.new;
-            updateCachedMessageFields(updatedMsg.id, {
-              read: updatedMsg.read,
-              reactions: updatedMsg.reactions || []
-            });
-            setChats((prevChats) => prevChats.map((c) => {
-              if (c.id === updatedMsg.chat_id) {
-                return {
-                  ...c,
-                  messages: c.messages.map((m) => (m.id === updatedMsg.id ? {
-                    ...m,
-                    read: updatedMsg.read,
-                    reactions: updatedMsg.reactions || []
-                  } : m))
-                };
-              }
-              return c;
-            }));
+          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, async (payload) => {
+            const row = payload.new;
+            const chat = chatsRef.current.find(item => item.id === row.chat_id);
+            if (!chat) return;
+            const existing = chat.messages.find(message => message.id === row.id);
+            if (!existing) return;
+            // Apply delivery state in event order, before decryption can yield.
+            // A slow edit must not undo a newer reaction or read receipt.
+            setChats(previous => previous.map(item => item.id === row.chat_id ? { ...item,
+              messages: item.messages.map(message => {
+                if (message.id !== row.id) return message;
+                const updated = { ...message, read: message.read || row.read, reactions: row.reactions || [] };
+                updateCachedMessageFields(row.id, updated);
+                return updated;
+              }) } : item));
+            if (row.edited_at && row.edited_at !== existing.editedAt) {
+              const key = await resolveSharedKey({ chatId: row.chat_id, chat, currentUserId: currentUser.id,
+                e2eePrivateKey: e2eePrivateKeyRef.current, sharedKeysCache: sharedKeysCacheRef.current, setSharedKeysCache });
+              const decoded = await decryptMessageFields({ ...existing, text: row.text, media: row.media,
+                replyTo: row.reply_to, forwardedFromRaw: row.forwarded_from, editedAt: row.edited_at }, key, chat.type === 'personal');
+              const fields = { text: decoded.text, media: decoded.media, isLocked: decoded.isLocked,
+                forwardedFrom: decoded.forwardedFrom, editedAt: row.edited_at };
+              if (disposed) return;
+              setChats(previous => previous.map(item => item.id === row.chat_id ? { ...item,
+                messages: item.messages.map(message => {
+                  if (message.id !== row.id) return message;
+                  const updated = preferMessageBody(message, { ...message, ...fields });
+                  updateCachedMessageFields(row.id, updated);
+                  return updated;
+                }) } : item));
+            }
           })
           .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'message_reads' }, (payload) => {
             const receipt = payload.new;
@@ -358,6 +380,7 @@ export function useChatRealtime({
           .subscribe();
 
         return () => {
+          disposed = true;
           window.clearTimeout(memberRefreshTimer);
           for (const timeout of Object.values(typingTimeoutsRef.current)) clearTimeout(timeout);
           typingTimeoutsRef.current = {};

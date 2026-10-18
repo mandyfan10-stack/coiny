@@ -87,6 +87,11 @@ export function useChatUiState(currentUser) {
     if (typeof window === 'undefined') return;
 
     window.handleAndroidBackButton = () => {
+      const forwardClose = document.querySelector('.forward-dialog button[aria-label="Закрыть пересылку"]');
+      if (forwardClose instanceof HTMLElement) {
+        forwardClose.click();
+        return true;
+      }
       // 1. Close open image preview / lightbox
       const activeImageViewerClose = document.querySelector('.chat-image-viewer-close, .image-viewer-close, .lightbox-close');
       if (activeImageViewerClose instanceof HTMLElement) {
@@ -132,6 +137,12 @@ export function useChatUiState(currentUser) {
       if (actionSheetBackdrop instanceof HTMLElement) {
         triggerHaptic(10);
         actionSheetBackdrop.click();
+        return true;
+      }
+
+      const messageOperation = document.querySelector('button[aria-label="Отменить редактирование"], .message-selection-bar button[aria-label="Отменить выбор"]');
+      if (messageOperation instanceof HTMLElement) {
+        messageOperation.click();
         return true;
       }
 

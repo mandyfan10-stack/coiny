@@ -21,6 +21,8 @@ export interface ChatMessage {
   reactions?: MessageReaction[];
   timestamp: Date | string;
   createdAt?: string;
+  editedAt?: string | null;
+  forwardedFrom?: { name: string } | null;
   isOptimistic?: boolean;
   isPending?: boolean;
   isFailed?: boolean;
@@ -39,6 +41,7 @@ export interface OfflineQueueItem {
   replyToId?: MessageId | null;
   media?: string | null;
   optimisticId: MessageId;
+  forwardedFrom?: { name: string } | null;
   hasOfflineMedia?: boolean;
   mediaType?: string | null;
   isPending?: boolean;
