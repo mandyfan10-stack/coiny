@@ -1,0 +1,3 @@
+(function(){let e=null;async function t(t){let n=await import(
+/* @vite-ignore */
+t);typeof n.default==`function`&&await n.default(),e=n}async function n(n,r){if(n===`initialize`)return await t(String(r.moduleUrl||`/openmls/openmls_wasm.js`)),{ready:!0};if(!e)throw Error(`Pinned OpenMLS WASM runtime is unavailable. E2EE v2 remains fail-closed.`);let i=e[n];if(typeof i!=`function`)throw Error(`Unsupported MLS worker operation: ${n}`);return i(r)}self.onmessage=async({data:e})=>{try{let t=await n(e.operation,e.payload);self.postMessage({id:e.id,result:t})}catch(t){self.postMessage({id:e.id,error:t instanceof Error?t.message:`MLS worker operation failed`})}}})();
