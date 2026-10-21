@@ -230,6 +230,7 @@ export function useChatActions({
     const cleanText = typeof text === 'string' ? text.trim() : '';
     if (!cleanText && !media && !offlineMediaBlob) return;
     if (!currentUser || !targetChatId) return;
+    if (options.requireConfirmation && !navigator.onLine) return false;
 
     const messageId = customMessageId || crypto.randomUUID();
 
@@ -390,7 +391,7 @@ export function useChatActions({
         if (ownerRef.current !== currentUser.id) return false;
         console.error('Send failed:', error);
         const isNetwork = !navigator.onLine || error.message?.includes('FetchError') || error.message?.includes('failed to fetch');
-        if (isNetwork) {
+        if (isNetwork && !options.requireConfirmation) {
           updateCachedMessageFields(messageId, { isPending: true });
           setChats((prevChats) => prevChats.map((c) => {
             if (c.id === targetChatId) {
@@ -421,7 +422,7 @@ export function useChatActions({
             }
             return c;
           }));
-          alert(`Не удалось отправить сообщение: ${error.message}`);
+          if (!options.requireConfirmation) alert(`Не удалось отправить сообщение: ${error.message}`);
         }
         return false;
       }
@@ -451,7 +452,7 @@ export function useChatActions({
     // A just-created chat may not have reached the next render yet. Carry its
     // verified destination and keys explicitly instead of using the active chat.
     const result = await sendMessage(`Ответ на историю: ${body}`, null, null, null, null, null,
-      { chatId: targetChat.id, chat: targetChat });
+      { chatId: targetChat.id, chat: targetChat, requireConfirmation: true });
     ensureOwner();
     if (!result) throw new Error('Не удалось отправить ответ. Текст сохранён.');
     return result;

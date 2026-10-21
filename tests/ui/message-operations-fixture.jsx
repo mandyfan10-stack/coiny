@@ -40,6 +40,7 @@ control.emit = (table, event, row) => Promise.all([...channels].flat().filter(li
 control.listenerCount = () => [...channels].flat().filter(listener => listener.filter.table === 'messages').length;
 dataService.sendMessage = async (chatId, senderId, text, replyTo, media, id) => {
  control.requests.push({ kind: 'send', chatId, senderId, text, replyTo, media, id });
+ if (control.failNetwork) throw new Error('failed to fetch');
  if (control.failSend || control.failSendAt === control.requests.filter(request => request.kind === 'send').length) throw new Error('Тестовая ошибка отправки');
  return { id };
 };

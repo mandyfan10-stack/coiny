@@ -41,3 +41,28 @@ test('story reply retains text on failure and retries without a false success', 
   await expect.poll(() => page.evaluate(() => window.__messageOperations.chats.find(chat => chat.id === 'story-private').messages.length)).toBe(1);
   await expect(reply).toBeEnabled({ timeout: 5000 });
 });
+
+for (const offline of [true, false]) {
+  test(`story reply needs server confirmation when ${offline ? 'already offline' : 'the request loses its connection'}`, async ({ page }) => {
+    await page.goto(fixture);
+    await page.evaluate(async offline => {
+      await window.__messageOperations.openStory();
+      if (offline) Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false });
+      else window.__messageOperations.failNetwork = true;
+    }, offline);
+    const reply = page.getByRole('textbox', { name: 'Ответить на историю', exact: true });
+    await reply.fill('Ответ после восстановления сети');
+    await reply.press('Enter');
+    await expect(page.getByRole('alert')).toContainText('Не удалось отправить');
+    await expect(reply).toHaveValue('Ответ после восстановления сети');
+    await expect(page.getByPlaceholder('Ответ отправлен!')).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => window.__messageOperations.chats.find(chat => chat.id === 'story-private').messages.length)).toBe(0);
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => true });
+      window.__messageOperations.failNetwork = false;
+    });
+    await reply.press('Enter');
+    await expect(page.getByPlaceholder('Ответ отправлен!')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => window.__messageOperations.chats.find(chat => chat.id === 'story-private').messages.length)).toBe(1);
+  });
+}
