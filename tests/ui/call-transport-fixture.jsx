@@ -26,6 +26,12 @@ const realReplaceTrack = RTCRtpSender.prototype.replaceTrack;
 RTCRtpSender.prototype.replaceTrack = async function(track) {
   const previousTrack = this.track;
   const owner = control.pcs.find(pc => pc.getSenders().includes(this))?.fixtureOwner;
+  if (control.holdDisplayReplace && !control.releaseDisplayReplace && owner === 'A'
+    && control.captures.some(capture => capture.kind === 'display' && capture.stream.getVideoTracks().includes(track))) {
+    await realReplaceTrack.call(this, track);
+    await new Promise(resolve => { control.releaseDisplayReplace = resolve; });
+    return;
+  }
   if (control.holdAudioRepair && !control.heldRepair && track === null && previousTrack?.kind === 'audio' && owner === 'A') {
     // The native detachment really happens; only its promise completion is held.
     // This exposes the same null sender seen during an in-flight browser repair.

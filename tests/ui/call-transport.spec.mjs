@@ -549,13 +549,9 @@ test('joining a group during native display replacement receives the committed l
   await expect.poll(() => page.evaluate(() => window.__callTransportTest.pcs.every(pc => pc.signalingState === 'stable'))).toBe(true);
   await page.evaluate(() => {
     const control = window.__callTransportTest;
-    const pc = control.pcs.find(item => item.fixtureOwner === 'A');
-    const sender = pc.getSenders().find(item => item.track?.kind === 'video');
-    const original = sender.replaceTrack.bind(sender);
-    sender.replaceTrack = async track => {
-      await original(track);
-      await new Promise(resolve => { control.releaseDisplayReplace = resolve; });
-    };
+    // The fixture intercepts the native method at its prototype. An override
+    // on an unretained WebKit sender wrapper can disappear during capture.
+    control.holdDisplayReplace = true;
   });
   await page.getByRole('button', { name: 'Screen A', exact: true }).click();
   await expect.poll(() => page.evaluate(() => typeof window.__callTransportTest.releaseDisplayReplace)).toBe('function');
