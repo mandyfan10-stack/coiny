@@ -16,6 +16,7 @@ import { useChatRealtime } from './useChatRealtime';
 import { useChatDrafts } from './useChatDrafts';
 
 const ChatContext = createContext();
+const EMPTY_CHATS = [];
 
 export { formatLastSeen };
 export { ChatContext };
@@ -24,11 +25,33 @@ export const ChatProvider = ({ children }) => {
   const { currentUser } = useAuth();
   const { e2eePrivateKey, sharedKeysCache, setSharedKeysCache } = useE2EE();
 
-  const [chats, setChats] = useState([]);
+  const userId = currentUser?.id ?? null;
+  const chatSessionRef = useRef({ userId });
+  if (chatSessionRef.current.userId !== userId) chatSessionRef.current = { userId };
+  const chatSession = chatSessionRef.current;
+  const [chatState, setChatState] = useState(() => ({ session: chatSession, values: [] }));
+  // A new session must never render the previous account's chats, even before
+  // effects run or its first chat-list request completes.
+  const chats = chatState.session === chatSession ? chatState.values : EMPTY_CHATS;
+  const setChats = useCallback((updater) => {
+    if (chatSessionRef.current !== chatSession) return;
+    setChatState((previous) => {
+      if (chatSessionRef.current !== chatSession) return previous;
+      const values = previous.session === chatSession ? previous.values : EMPTY_CHATS;
+      const next = typeof updater === 'function' ? updater(values) : updater;
+      return previous.session === chatSession && next === values
+        ? previous : { session: chatSession, values: next };
+    });
+  }, [chatSession]);
   const drafts = useChatDrafts(currentUser?.id);
   const ui = useChatUiState(currentUser);
   const { activeChatId, setActiveChatId } = ui;
   const activeChat = chats.find((c) => c.id === activeChatId);
+
+  useEffect(() => {
+    setChats([]);
+    setActiveChatId(null);
+  }, [chatSession, setChats, setActiveChatId]);
 
   const chatsRef = useRef(chats);
   const sharedKeysCacheRef = useRef(sharedKeysCache);

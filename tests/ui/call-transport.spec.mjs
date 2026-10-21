@@ -380,3 +380,213 @@ test('removing a remote group member closes its existing media path without coop
   }).toBe(true);
   expect((await snapshot(page)).peers).toHaveLength(before.peers.length);
 });
+
+for (const group of [false, true]) {
+  test(`${group ? 'group' : 'personal'} screen source metadata follows camera replacement and restoration`, async ({ page }) => {
+    await open(page, group ? '?group=1' : '');
+    await start(page);
+    await connected(page);
+    const remoteKind = () => page.evaluate(group => {
+      const remote = window.__callTransportTest.apis.B;
+      if (!group) return remote.remoteVideoStream ? remote.callState.isRemoteScreenSharing ? 'screen' : 'camera' : null;
+      const member = remote.groupCallParticipants.find(item => item.id === 'A');
+      if (!member?.videoStream) return null;
+      return member.screenStream && member.isScreenSharing && !member.cameraStream ? 'screen'
+        : member.cameraStream && member.isCameraActive && !member.screenStream ? 'camera' : 'inconsistent';
+    }, group);
+    await page.getByRole('button', { name: 'Screen A', exact: true }).click();
+    await expect.poll(remoteKind).toBe('screen');
+    const display = await page.evaluate(() => window.__callTransportTest.apis.A.localVideoStream.getVideoTracks()[0].id);
+    await page.getByRole('button', { name: 'Camera A', exact: true }).click();
+    await expect.poll(remoteKind).toBe('camera');
+    expect(await page.evaluate(() => window.__callTransportTest.apis.A.isScreenSharing)).toBe(false);
+    expect(await page.evaluate(id => window.__callTransportTest.captures.flatMap(capture => capture.stream.getVideoTracks())
+      .find(track => track.id === id)?.readyState, display)).toBe('ended');
+    await page.getByRole('button', { name: 'Screen A', exact: true }).click();
+    await expect.poll(remoteKind).toBe('screen');
+    await page.getByRole('button', { name: 'Screen A', exact: true }).click();
+    await expect.poll(remoteKind).toBe('camera');
+    await advancing(page, await snapshot(page));
+  });
+}
+
+test('denied camera permission preserves the current display and its remote source', async ({ page }) => {
+  await open(page);
+  await start(page);
+  await connected(page);
+  await page.getByRole('button', { name: 'Screen A', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.__callTransportTest.apis.B.callState.isRemoteScreenSharing)).toBe(true);
+  const id = await page.evaluate(() => {
+    const control = window.__callTransportTest;
+    control.rejectNextCamera = true;
+    return control.apis.A.localVideoStream.getVideoTracks()[0].id;
+  });
+  await page.getByRole('button', { name: 'Camera A', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.__callTransportTest.apis.A.mediaError)).toContain('камере');
+  expect(await page.evaluate(id => {
+    const api = window.__callTransportTest.apis.A;
+    const track = api.localVideoStream.getVideoTracks()[0];
+    return api.isScreenSharing && track.id === id && track.readyState === 'live';
+  }, id)).toBe(true);
+  expect(await page.evaluate(() => window.__callTransportTest.apis.B.callState.isRemoteScreenSharing)).toBe(true);
+  await advancing(page, await snapshot(page));
+});
+
+test('legacy SDP without source metadata remains compatible and uses ordinary video presentation', async ({ page }) => {
+  await open(page);
+  await page.evaluate(() => { window.__callTransportTest.stripVideoKinds = true; });
+  await start(page);
+  await connected(page);
+  await page.getByRole('button', { name: 'Screen A', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => Boolean(window.__callTransportTest.apis.B.remoteVideoStream))).toBe(true);
+  expect(await page.evaluate(() => window.__callTransportTest.apis.B.callState.isRemoteScreenSharing)).toBe(false);
+  expect((await snapshot(page)).peers.flatMap(peer => peer.errors)).toEqual([]);
+  await advancing(page, await snapshot(page));
+});
+
+test('foreign account and old-call metadata cannot change the current remote source', async ({ page }) => {
+  await open(page);
+  await start(page);
+  await connected(page);
+  await page.getByRole('button', { name: 'Screen A', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.__callTransportTest.apis.B.callState.isRemoteScreenSharing)).toBe(true);
+  await page.evaluate(() => {
+    const control = window.__callTransportTest;
+    for (const channel of control.channels.filter(item => item.connected && item.topic.endsWith(':media'))) {
+      for (const listener of channel.listeners.filter(item => item.event === 'signal')) {
+        listener.callback({ payload: { type: 'offer', senderId: 'outsider', callId: control.apis.A.callState.callId,
+          negotiationId: 'foreign', videoKind: 'camera', sdp: 'invalid' } });
+        listener.callback({ payload: { type: 'offer', senderId: 'A', callId: 'previous-call',
+          negotiationId: 'stale', videoKind: 'camera', sdp: 'invalid' } });
+      }
+    }
+  });
+  expect(await page.evaluate(() => window.__callTransportTest.apis.B.callState.isRemoteScreenSharing)).toBe(true);
+  expect((await snapshot(page)).peers.flatMap(peer => peer.errors)).toEqual([]);
+});
+
+test('group video metadata addressed to another member cannot change the current remote source', async ({ page }) => {
+  await open(page, '?group=1');
+  await start(page);
+  await connected(page);
+  await page.getByRole('button', { name: 'Screen A', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.__callTransportTest.apis.B.groupCallParticipants
+    .some(item => item.id === 'A' && item.isScreenSharing))).toBe(true);
+  await page.evaluate(() => {
+    for (const channel of window.__callTransportTest.channels.filter(item => item.connected && item.topic.endsWith(':media'))) {
+      for (const listener of channel.listeners.filter(item => item.event === 'signal')) {
+        listener.callback({ payload: { type: 'offer', senderId: 'A', targetId: 'C',
+          negotiationId: 'another-target', videoKind: 'camera', sdp: 'invalid' } });
+      }
+    }
+  });
+  expect(await page.evaluate(() => window.__callTransportTest.apis.B.groupCallParticipants
+    .some(item => item.id === 'A' && item.isScreenSharing))).toBe(true);
+  expect((await snapshot(page)).peers.flatMap(peer => peer.errors)).toEqual([]);
+});
+
+test('encrypted video metadata is retained when another member joins an active screen share', async ({ page }) => {
+  await open(page, '?group=1&encrypted=1');
+  await start(page);
+  await connected(page);
+  await page.getByRole('button', { name: 'Screen A', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.__callTransportTest.apis.B.groupCallParticipants
+    .some(item => item.id === 'A' && item.isScreenSharing))).toBe(true);
+  await page.getByRole('button', { name: 'Accept C', exact: true }).click();
+  await connected(page, 6);
+  await expect.poll(() => page.evaluate(() => window.__callTransportTest.apis.C.groupCallParticipants
+    .some(item => item.id === 'A' && item.isScreenSharing && item.screenStream && !item.cameraStream))).toBe(true);
+  await page.evaluate(() => window.__callTransportTest.rejoin());
+  await advancing(page, await snapshot(page));
+  expect(await page.evaluate(() => window.__callTransportTest.apis.C.groupCallParticipants
+    .some(item => item.id === 'A' && item.isScreenSharing && item.screenStream))).toBe(true);
+});
+
+test('native display stop while SDP negotiation is awaiting restores the previous camera', async ({ page }) => {
+  await open(page);
+  await start(page);
+  await connected(page);
+  await page.getByRole('button', { name: 'Camera A', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => Boolean(window.__callTransportTest.apis.B.remoteVideoStream))).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__callTransportTest.pcs.every(pc => pc.signalingState === 'stable'))).toBe(true);
+  await page.evaluate(() => {
+    const control = window.__callTransportTest;
+    for (const pc of control.pcs) {
+      const original = pc.createOffer.bind(pc);
+      let held = false;
+      pc.createOffer = async (...args) => {
+        if (!held) { held = true; await new Promise(resolve => { control.releaseScreenOffer = resolve; }); }
+        return original(...args);
+      };
+    }
+  });
+  await page.getByRole('button', { name: 'Screen A', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => typeof window.__callTransportTest.releaseScreenOffer)).toBe('function');
+  const stoppedId = await page.evaluate(() => {
+    const track = window.__callTransportTest.apis.A.localVideoStream.getVideoTracks()[0];
+    track.stop(); track.dispatchEvent(new Event('ended'));
+    return track.id;
+  });
+  await page.evaluate(() => window.__callTransportTest.releaseScreenOffer());
+  await expect.poll(() => page.evaluate(id => {
+    const api = window.__callTransportTest.apis.A;
+    const track = api.localVideoStream?.getVideoTracks()[0];
+    return !api.isScreenSharing && track?.readyState === 'live' && track.id !== id;
+  }, stoppedId)).toBe(true);
+  await expect.poll(() => page.evaluate(() => {
+    const api = window.__callTransportTest.apis.B;
+    return Boolean(api.remoteVideoStream) && !api.callState.isRemoteScreenSharing;
+  })).toBe(true);
+  await advancing(page, await snapshot(page));
+});
+
+test('joining a group during native display replacement receives the committed live capture', async ({ page }) => {
+  await open(page, '?group=1');
+  await start(page);
+  await connected(page);
+  await page.getByRole('button', { name: 'Camera A', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.__callTransportTest.apis.B.groupCallParticipants.some(item => item.id === 'A' && item.videoStream))).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__callTransportTest.pcs.every(pc => pc.signalingState === 'stable'))).toBe(true);
+  await page.evaluate(() => {
+    const control = window.__callTransportTest;
+    const pc = control.pcs.find(item => item.fixtureOwner === 'A');
+    const sender = pc.getSenders().find(item => item.track?.kind === 'video');
+    const original = sender.replaceTrack.bind(sender);
+    sender.replaceTrack = async track => {
+      await original(track);
+      await new Promise(resolve => { control.releaseDisplayReplace = resolve; });
+    };
+  });
+  await page.getByRole('button', { name: 'Screen A', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => typeof window.__callTransportTest.releaseDisplayReplace)).toBe('function');
+  await page.getByRole('button', { name: 'Accept C', exact: true }).click();
+  await connected(page, 6);
+  await page.evaluate(() => window.__callTransportTest.releaseDisplayReplace());
+  await expect.poll(() => page.evaluate(() => {
+    const control = window.__callTransportTest;
+    const track = control.apis.A.localVideoStream?.getVideoTracks()[0];
+    return control.apis.A.isScreenSharing && control.pcs.filter(pc => pc.fixtureOwner === 'A').every(pc =>
+      pc.getSenders().some(sender => sender.track === track && sender.track.readyState === 'live'));
+  })).toBe(true);
+  await expect.poll(() => page.evaluate(() => ['B', 'C'].every(id => window.__callTransportTest.apis[id].groupCallParticipants
+    .some(item => item.id === 'A' && item.isScreenSharing && item.screenStream && !item.cameraStream)))).toBe(true);
+  await advancing(page, await snapshot(page));
+});
+
+for (const first of ['A', 'B']) {
+  test(`simultaneous personal dialing started by ${first} converges on one real audio call`, async ({ page }) => {
+    await open(page);
+    await page.evaluate(() => {
+      window.__callTransportTest.delays['incoming-call'] = 500;
+      window.__callTransportTest.drops['call-accepted'] = 1;
+    });
+    await page.getByRole('button', { name: `Start ${first}`, exact: true }).click();
+    await page.getByRole('button', { name: `Start ${first === 'A' ? 'B' : 'A'}`, exact: true }).click();
+    await connected(page);
+    expect(await page.evaluate(() => {
+      const { A, B } = window.__callTransportTest.apis;
+      return A.callState.callId === B.callState.callId && A.callState.isOutgoing && !B.callState.isOutgoing;
+    })).toBe(true);
+    await advancing(page, await snapshot(page));
+  });
+}

@@ -123,7 +123,7 @@ test('offline syncing is single-flight, session-scoped, and preserves newly queu
   assert.match(sync, /sessionRef\.current\.generation === session\.generation/);
   assert.match(sync, /if \(!isCurrentSession\(\)\) break/);
   assert.match(sync, /prev\.filter\(\(q\) => q\.queueId !== item\.queueId\)/);
-  assert.match(sync, /queueOwnerId !== \(currentUser\?\.id \?\? null\)/);
+  assert.match(sync, /if \(!currentUser\?\.id \|\| !queueLoaded \|\| queueOwnerId !== currentUser\.id\) return/);
 });
 
 test('image and sticker Edge Functions enforce content validation and bounded processing', async () => {

@@ -66,10 +66,11 @@ export function useChatActions({
     }
   }, [currentUser, setChats]);
 
-  const createChat = useCallback(async (target, type = 'personal', initialMembers = []) => {
+  const createChat = useCallback(async (target, type = 'personal', initialMembers = [], options = {}) => {
     if (!currentUser) return null;
     try {
       const newChat = await dataService.createChat(currentUser.id, target, type, initialMembers);
+      if (ownerRef.current !== currentUser.id) return null;
       if (newChat) {
         let createdChat = newChat;
         if (!dataService.isLive()) {
@@ -115,6 +116,8 @@ export function useChatActions({
               avatarColor: targetProfile.avatar_color || targetProfile.avatarColor || newChat.avatarColor,
               bio: targetProfile.bio || newChat.bio || '',
               banner: targetProfile.banner || newChat.banner || null,
+              publicKey: targetProfile.public_key || targetProfile.publicKey || null,
+              hasE2ee: targetProfile.has_e2ee || targetProfile.hasE2ee || false,
               role: 'member'
             }].filter((member) => member.id),
             settings: {
@@ -173,11 +176,12 @@ export function useChatActions({
           ));
           fetchChats().catch((error) => console.error('Failed to refresh chats after creation:', error));
         }
-        setActiveChatId(createdChat.id);
+        if (options.activate !== false) setActiveChatId(createdChat.id);
         return createdChat;
       }
       return null;
     } catch (e) {
+      if (options.throwOnError) throw e;
       alert(e.message);
       return null;
     }
@@ -219,7 +223,8 @@ export function useChatActions({
 
   const sendMessage = useCallback(async (text, replyToId = null, media = null, offlineMediaBlob = null, offlineMediaType = null, customMessageId = null, options = {}) => {
     const targetChatId = options.chatId || activeChatId;
-    const sendingChat = chats.find(chat => chat.id === targetChatId);
+    const sendingChat = chats.find(chat => chat.id === targetChatId)
+      || (options.chat?.id === targetChatId ? options.chat : null);
     if (!sendingChat || sendingChat.requiresUpdate) return false;
     const wireText = text || '';
     const cleanText = typeof text === 'string' ? text.trim() : '';
@@ -422,6 +427,35 @@ export function useChatActions({
       }
     })();
   }, [chats, activeChatId, currentUser, setSharedKeysCache, setChats, setOfflineQueue, e2eePrivateKeyRef, sharedKeysCacheRef]);
+
+  const sendStoryReply = useCallback(async (story, text) => {
+    const body = typeof text === 'string' ? text.trim() : '';
+    if (!currentUser || !story?.userId || story.userId === currentUser.id || !body) {
+      throw new Error('Не удалось определить получателя ответа.');
+    }
+    const ensureOwner = () => {
+      if (ownerRef.current !== currentUser.id) throw new Error('Аккаунт изменился.');
+    };
+    let targetChat = chats.find(chat => chat.type === 'personal'
+      && chat.members?.some(member => member.id === currentUser.id)
+      && chat.members?.some(member => member.id === story.userId));
+    if (!targetChat) {
+      const profile = dataService.isLive() ? await dataService.fetchProfile(story.userId)
+        : { id: story.userId, name: story.userName, avatar: story.userAvatar };
+      ensureOwner();
+      if (!profile || profile.id !== story.userId) throw new Error('Профиль автора истории недоступен.');
+      targetChat = await createChat(profile, 'personal', [], { activate: false, throwOnError: true });
+    }
+    ensureOwner();
+    if (!targetChat) throw new Error('Не удалось открыть личный чат.');
+    // A just-created chat may not have reached the next render yet. Carry its
+    // verified destination and keys explicitly instead of using the active chat.
+    const result = await sendMessage(`Ответ на историю: ${body}`, null, null, null, null, null,
+      { chatId: targetChat.id, chat: targetChat });
+    ensureOwner();
+    if (!result) throw new Error('Не удалось отправить ответ. Текст сохранён.');
+    return result;
+  }, [currentUser, chats, createChat, sendMessage]);
 
   const editMessage = useCallback(async (chatId, message, text) => {
     if (!currentUser || !canEditMessage(message, currentUser.id)) throw new Error('Это сообщение нельзя изменить.');
@@ -678,6 +712,7 @@ export function useChatActions({
     deleteChat,
     clearChatMessages,
     sendMessage,
+    sendStoryReply,
     deleteMessage,
     editMessage,
     forwardMessages,

@@ -219,7 +219,7 @@ export const CallProvider = ({ children }) => {
   useCallTransport({
     status: callState.status, callId: callState.callId, userId: currentUser?.id,
     callChatRef, callStateRef, currentUserRef, encryptEvent, decryptEvent,
-    peerSessionsRef, pcRef, pcsRef, localStreamRef, localVideoStreamRef,
+    peerSessionsRef, pcRef, pcsRef, localStreamRef, localVideoStreamRef, screenStreamRef,
     activeCallChannelRef, audioAnalyzersRef, endingSignalingRef,
     setCallState, setGroupCallParticipants, setRemoteVideoStream, setMediaError,
     setCallQuality, teardownMedia, endCallLocally

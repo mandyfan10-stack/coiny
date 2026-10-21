@@ -19,8 +19,7 @@ import { triggerHaptic } from '../hooks/useMessageTouch';
 export default function StoryViewer() {
   const {
     currentUser,
-    chats,
-    sendMessage,
+    sendStoryReply,
     stories,
     activeStoryId,
     setActiveStoryId,
@@ -37,9 +36,16 @@ export default function StoryViewer() {
   const [imageRenderError, setImageRenderError] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [replySentFeedback, setReplySentFeedback] = useState(false);
+  const [replySending, setReplySending] = useState(false);
+  const [replyError, setReplyError] = useState('');
+  const replyRequestRef = useRef(null);
+  const replyFeedbackTimerRef = useRef(null);
+  const replyScope = `${currentUser?.id}:${activeStoryId}`;
+  const replyScopeRef = useRef(replyScope);
+  replyScopeRef.current = replyScope;
   const [floatingReaction, setFloatingReaction] = useState(null);
 
-  const isPaused = isManualPaused || isHolding;
+  const isPaused = isManualPaused || isHolding || replySending || Boolean(replyText);
 
   useEffect(() => {
     if (activeStoryId) {
@@ -85,8 +91,13 @@ export default function StoryViewer() {
     setImageRenderError(false);
     setReplyText('');
     setReplySentFeedback(false);
+    setReplySending(false);
+    setReplyError('');
+    replyRequestRef.current = null;
+    clearTimeout(replyFeedbackTimerRef.current);
     setFloatingReaction(null);
-  }, [displayStoryId]);
+    return () => clearTimeout(replyFeedbackTimerRef.current);
+  }, [displayStoryId, replyScope]);
 
   const retryMedia = () => {
     setImageRenderError(false);
@@ -359,20 +370,25 @@ export default function StoryViewer() {
 
   const handleSendReply = async (e) => {
     if (e) e.preventDefault();
-    if (!replyText.trim() || !displayStory) return;
-
-    triggerHaptic(15);
-    const targetChat = chats?.find(
-      (c) => c.type === 'personal' && c.members?.some((m) => m.id === displayStory.userId)
-    );
-
-    if (targetChat && sendMessage) {
-      await sendMessage(targetChat.id, `Ответ на историю: ${replyText.trim()}`);
+    if (!replyText.trim() || !activeStoryId || !displayStory || replyRequestRef.current) return;
+    const request = { scope: replyScope };
+    replyRequestRef.current = request;
+    setReplySending(true); setReplyError('');
+    const isCurrent = () => replyScopeRef.current === request.scope && replyRequestRef.current === request;
+    try {
+      if (!sendStoryReply) throw new Error('Отправка ответа недоступна.');
+      await sendStoryReply(displayStory, replyText);
+      if (!isCurrent()) return;
+      triggerHaptic(15);
+      setReplyText(''); setReplySentFeedback(true);
+      replyFeedbackTimerRef.current = setTimeout(() => {
+        if (replyScopeRef.current === request.scope) setReplySentFeedback(false);
+      }, 2000);
+    } catch (error) {
+      if (isCurrent()) setReplyError(error.message || 'Не удалось отправить ответ.');
+    } finally {
+      if (isCurrent()) { setReplySending(false); replyRequestRef.current = null; }
     }
-
-    setReplyText('');
-    setReplySentFeedback(true);
-    setTimeout(() => setReplySentFeedback(false), 2000);
   };
 
   if (!displayStory) return null;
@@ -583,17 +599,21 @@ export default function StoryViewer() {
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
                   disabled={replySentFeedback}
+                  readOnly={replySending}
+                  aria-label="Ответить на историю"
                 />
                 {replyText.trim() && (
                   <button
                     type="submit"
                     className="story-reply-send-btn"
                     title="Отправить ответ"
+                    disabled={replySending}
                   >
                     <Send size={15} />
                   </button>
                 )}
               </form>
+              {replyError && <p role="alert" className="story-reply-error">{replyError}</p>}
             </div>
           )}
         </div>

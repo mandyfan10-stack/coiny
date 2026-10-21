@@ -26,7 +26,18 @@ const OFFLINE_QUEUE_KEY_ID = 'offline-queue-aes-gcm-v1';
 const LEGACY_QUEUE_STORAGE_KEY = 'tg-offline-queue';
 
 let dbPromise = null;
+let activeDatabase = null;
+let databaseCleanup = null;
+let databaseGeneration = 0;
 const localKeyPromises = new Map();
+
+function assertDatabaseGeneration(generation) {
+  if (databaseCleanup || generation !== databaseGeneration) {
+    const error = new Error('Локальное хранилище очищается. Повторите действие после завершения выхода.');
+    error.code = 'COINY_STORAGE_CLEARING';
+    throw error;
+  }
+}
 
 function ensureStores(db) {
   for (const storeName of [
@@ -64,6 +75,7 @@ function openDatabase(version) {
     return Promise.reject(new Error('IndexedDB is not supported in this environment'));
   }
   return new Promise((resolve, reject) => {
+    const generation = databaseGeneration;
     const request = typeof version === 'number'
       ? indexedDB.open(DB_NAME, version)
       : indexedDB.open(DB_NAME);
@@ -71,15 +83,20 @@ function openDatabase(version) {
     request.onupgradeneeded = (event) => ensureStores(event.target.result);
     request.onsuccess = (event) => {
       const db = event.target.result;
+      try { assertDatabaseGeneration(generation); }
+      catch (error) { db.close(); reject(error); return; }
+      activeDatabase = db;
+      const forgetConnection = () => {
+        if (activeDatabase !== db) return;
+        activeDatabase = null;
+        dbPromise = null;
+        localKeyPromises.clear();
+      };
       db.onversionchange = () => {
         db.close();
-        dbPromise = null;
-        localKeyPromises.clear();
+        forgetConnection();
       };
-      db.onclose = () => {
-        dbPromise = null;
-        localKeyPromises.clear();
-      };
+      db.onclose = forgetConnection;
       resolve(db);
     };
     request.onerror = (event) => reject(event.target.error || new Error('IndexedDB open failed'));
@@ -97,12 +114,16 @@ function requestResult(request) {
 }
 
 async function getStoreValue(storeName, key) {
+  const generation = databaseGeneration;
   const db = await initOfflineDB();
+  assertDatabaseGeneration(generation);
   return requestResult(db.transaction(storeName, 'readonly').objectStore(storeName).get(key));
 }
 
 async function putStoreValue(storeName, key, value) {
+  const generation = databaseGeneration;
   const db = await initOfflineDB();
+  assertDatabaseGeneration(generation);
   const transaction = db.transaction(storeName, 'readwrite');
   const result = await requestResult(transaction.objectStore(storeName).put(value, key));
   await transactionComplete(transaction);
@@ -110,7 +131,9 @@ async function putStoreValue(storeName, key, value) {
 }
 
 async function deleteStoreValue(storeName, key) {
+  const generation = databaseGeneration;
   const db = await initOfflineDB();
+  assertDatabaseGeneration(generation);
   const transaction = db.transaction(storeName, 'readwrite');
   const result = await requestResult(transaction.objectStore(storeName).delete(key));
   await transactionComplete(transaction);
@@ -119,13 +142,17 @@ async function deleteStoreValue(storeName, key) {
 
 async function getLocalCryptoKey() {
   if (!localKeyPromises.has(OFFLINE_QUEUE_KEY_ID)) {
-    localKeyPromises.set(OFFLINE_QUEUE_KEY_ID, (async () => {
+    const generation = databaseGeneration;
+    const pending = (async () => {
       const existing = await getStoreValue(LOCAL_KEY_STORE_NAME, OFFLINE_QUEUE_KEY_ID);
+      assertDatabaseGeneration(generation);
       if (typeof CryptoKey !== 'undefined' && existing instanceof CryptoKey) return existing;
       const generated = await generateOfflineQueueKey();
+      assertDatabaseGeneration(generation);
       // Other tabs can generate a candidate concurrently. Select/store the key
       // in one serialized read-write transaction so an existing key never changes.
       const db = await initOfflineDB();
+      assertDatabaseGeneration(generation);
       const transaction = db.transaction(LOCAL_KEY_STORE_NAME, 'readwrite');
       const store = transaction.objectStore(LOCAL_KEY_STORE_NAME);
       const current = await requestResult(store.get(OFFLINE_QUEUE_KEY_ID));
@@ -134,9 +161,10 @@ async function getLocalCryptoKey() {
       await transactionComplete(transaction);
       return selected;
     })().catch((error) => {
-      localKeyPromises.delete(OFFLINE_QUEUE_KEY_ID);
+      if (localKeyPromises.get(OFFLINE_QUEUE_KEY_ID) === pending) localKeyPromises.delete(OFFLINE_QUEUE_KEY_ID);
       throw error;
-    }));
+    });
+    localKeyPromises.set(OFFLINE_QUEUE_KEY_ID, pending);
   }
   return localKeyPromises.get(OFFLINE_QUEUE_KEY_ID);
 }
@@ -146,12 +174,15 @@ function userContext(userId) {
 }
 
 export function initOfflineDB() {
+  try { assertDatabaseGeneration(databaseGeneration); }
+  catch (error) { return Promise.reject(error); }
   if (dbPromise) return dbPromise;
-  dbPromise = openDatabase(DB_VERSION).catch((error) => {
+  const pending = openDatabase(DB_VERSION).catch((error) => {
     if (error?.name === 'VersionError') return openDatabase(undefined);
-    dbPromise = null;
+    if (dbPromise === pending) dbPromise = null;
     throw error;
   });
+  dbPromise = pending;
   return dbPromise;
 }
 
@@ -160,9 +191,11 @@ export function getOfflineDbSchemaVersion() {
 }
 
 export async function saveEncryptedOfflineQueue(userId, queue) {
+  const generation = databaseGeneration;
   const context = `queue:${userContext(userId)}`;
   const key = await getLocalCryptoKey();
   const record = await encryptOfflineQueuePayload(Array.isArray(queue) ? queue : [], key, context);
+  assertDatabaseGeneration(generation);
   await putStoreValue(OFFLINE_QUEUE_STORE_NAME, context, record);
 }
 
@@ -194,8 +227,10 @@ export async function loadEncryptedOfflineQueue(userId) {
 }
 
 export async function saveOfflineAttachment(optimisticId, blob, userId = 'anonymous') {
+  const generation = databaseGeneration;
   const context = `attachment:${userContext(userId)}:${optimisticId}`;
   const encryptedBlob = await encryptOfflineAttachment(blob, await getLocalCryptoKey(), context);
+  assertDatabaseGeneration(generation);
   await putStoreValue(ATTACHMENT_STORE_NAME, optimisticId, {
     version: 1,
     blob: encryptedBlob,
@@ -310,15 +345,34 @@ export async function loadConversationCryptoState(userId, chatId) {
 }
 
 export async function clearOfflineDatabase() {
-  const db = await initOfflineDB().catch(() => null);
-  db?.close();
-  dbPromise = null;
-  localKeyPromises.clear();
+  if (!databaseCleanup) {
+    // Invalidate pending reads/encryption before yielding. Creating a database
+    // just to delete it, or letting a cache fallback reopen it, races WebKit's
+    // pending transactions during sign-out.
+    const opening = dbPromise;
+    databaseGeneration += 1;
+    dbPromise = null;
+    localKeyPromises.clear();
+    const cleanup = (async () => {
+      const db = await opening?.catch(() => null);
+      db?.close();
+      if (activeDatabase === db) activeDatabase = null;
+      await new Promise((resolve, reject) => {
+        const request = indexedDB.deleteDatabase(DB_NAME);
+        request.onsuccess = () => resolve();
+        request.onerror = (event) => reject(event.target.error || new Error('IndexedDB delete failed'));
+        // "blocked" may only mean a closing connection still has a transaction.
+        // Wait for success; a real blocker is reported by the bounded wait below.
+      });
+    })();
+    databaseCleanup = cleanup;
+    const finish = () => { if (databaseCleanup === cleanup) databaseCleanup = null; };
+    void cleanup.then(finish, finish);
+  }
+  const cleanup = databaseCleanup;
   await new Promise((resolve, reject) => {
-    const request = indexedDB.deleteDatabase(DB_NAME);
-    request.onsuccess = () => resolve();
-    request.onerror = (event) => reject(event.target.error || new Error('IndexedDB delete failed'));
-    request.onblocked = () => reject(new Error('IndexedDB delete is blocked by another Coiny tab.'));
+    const timer = setTimeout(() => reject(new Error('Не удалось очистить локальные данные: закройте другие вкладки Coiny и повторите выход.')), 5000);
+    cleanup.then(() => { clearTimeout(timer); resolve(); }, (error) => { clearTimeout(timer); reject(error); });
   });
 }
 
@@ -390,7 +444,9 @@ export async function saveCachedMessage(message, chatId, userId) {
 export async function saveCachedMessagesBatch(chatId, messages, userId, snapshot = null) {
   if (!chatId || !Array.isArray(messages) || (!messages.length && !snapshot) || typeof indexedDB === 'undefined') return;
   try {
+    const generation = databaseGeneration;
     const db = await initOfflineDB();
+    assertDatabaseGeneration(generation);
     const tx = db.transaction(MESSAGES_CACHE_V2_STORE_NAME, 'readwrite');
     const store = tx.objectStore(MESSAGES_CACHE_V2_STORE_NAME);
 
@@ -415,6 +471,7 @@ export async function saveCachedMessagesBatch(chatId, messages, userId, snapshot
     await transactionComplete(tx);
 
     // Also update legacy store for backwards compatibility
+    assertDatabaseGeneration(generation);
     await saveCachedMessages(chatId, messages, userId);
   } catch (err) {
     console.warn('Failed to save messages batch in IndexedDB:', err);
@@ -426,8 +483,11 @@ export async function saveCachedMessagesBatch(chatId, messages, userId, snapshot
  */
 export async function getCachedMessagesForChat(chatId, userId, limit = 200) {
   if (!chatId || typeof indexedDB === 'undefined') return [];
+  const generation = databaseGeneration;
+  const canRead = () => !databaseCleanup && generation === databaseGeneration;
   try {
     const db = await initOfflineDB();
+    if (!canRead()) return [];
     const tx = db.transaction(MESSAGES_CACHE_V2_STORE_NAME, 'readonly');
     const store = tx.objectStore(MESSAGES_CACHE_V2_STORE_NAME);
     const index = store.index('by-chat-timestamp');
@@ -441,6 +501,7 @@ export async function getCachedMessagesForChat(chatId, userId, limit = 200) {
       let lastTimestamp = null;
       const req = index.openCursor(range, 'prev'); // Most recent first
       req.onsuccess = (e) => {
+        if (!canRead()) { resolve([]); return; }
         const cursor = e.target.result;
         if (cursor && (results.length < limit || cursor.value.timestampIso === lastTimestamp)) {
           if (cursor.value.userId === userContext(userId)) {
@@ -460,12 +521,14 @@ export async function getCachedMessagesForChat(chatId, userId, limit = 200) {
         }
       };
       req.onerror = () => {
+        if (!canRead()) { resolve([]); return; }
         getCachedMessages(chatId, userId).then((legacy) => {
           resolve(Array.isArray(legacy) ? legacy : []);
         }).catch(() => resolve([]));
       };
     });
   } catch (err) {
+    if (!canRead()) return [];
     console.warn('Failed to read messages-cache-v2:', err);
     return getCachedMessages(chatId, userId).catch(() => []);
   }
@@ -942,9 +1005,11 @@ export async function clearCachedMessages(chatId, userId) {
 // Draft bodies use the same device-local, non-exportable key as the offline queue.
 export async function saveChatDraft(userId, chatId, draft) {
   if (!userId || !chatId) return;
+  const generation = databaseGeneration;
   const id = JSON.stringify([userId, chatId]);
   if (!draft?.text && !draft?.replyTo) return deleteStoreValue(DRAFT_STORE_NAME, id);
   const encrypted = await encryptOfflineQueuePayload(draft, await getLocalCryptoKey(), `draft:${id}`);
+  assertDatabaseGeneration(generation);
   return putStoreValue(DRAFT_STORE_NAME, id, encrypted);
 }
 export async function loadChatDrafts(userId) {

@@ -17,7 +17,7 @@ test('chat list refresh preserves an already loaded message history', () => {
 test('active encrypted chat reloads after the private key becomes available', () => {
   assert.match(
     chatLoader,
-    /\[activeChatId, e2eePrivateKey, loadActiveChatMessages\]/,
+    /\[activeChatId, e2eePrivateKey, isCurrentSession, loadActiveChatMessages\]/,
   );
 });
 

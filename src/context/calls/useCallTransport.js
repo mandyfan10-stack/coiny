@@ -7,7 +7,7 @@ import { createCallPeerSession } from './callPeerSession';
 import { createCallQualitySampler } from './callQuality';
 import { CALL_AUDIO_CONSTRAINTS } from './voiceEnhancement';
 import { startAudioAnalyzer } from './audioAnalyzer';
-import { attachRemoteAudioElement, isScreenTrack } from './mediaTrackHelpers';
+import { attachRemoteAudioElement } from './mediaTrackHelpers';
 
 /** One media lifetime per account/call. Profile and crypto callback updates do
  * not close a working transport; all asynchronous work is session-scoped. */
@@ -43,6 +43,7 @@ export function useCallTransport(options) {
     const sampler = createCallQualitySampler();
     const sessions = refs.peerSessionsRef.current;
     const peerStates = new Map();
+    const remoteVideoResetters = new Map();
     const live = () => active && latest.current.userId === selfId;
     const members = () => latest.current.callChatRef.current?.members || [];
     const isMember = id => id !== selfId && members().some(member => member.id === id);
@@ -78,6 +79,7 @@ export function useCallTransport(options) {
       stopMissing(id);
       sessions.get(id)?.dispose();
       sessions.delete(id);
+      remoteVideoResetters.delete(id);
       const pc = refs.pcsRef.current[id];
       delete refs.pcsRef.current[id];
       if (pc) { sampler.reset(pc); pc.close(); }
@@ -122,12 +124,41 @@ export function useCallTransport(options) {
       if (group) { refs.pcsRef.current[id] = pc; ensureParticipant(id); }
       else refs.pcRef.current = pc;
       const peerLive = () => live() && (!group || (isMember(id) && refs.pcsRef.current[id] === pc));
+      let remoteVideo = null;
+      let remoteVideoTrack = null;
+      let remoteVideoKind = 'camera';
+      const presentRemoteVideo = () => {
+        if (!peerLive()) return;
+        const stream = remoteVideoKind === null ? null : remoteVideo;
+        const screen = Boolean(stream && remoteVideoKind === 'screen');
+        if (group) participants(previous => previous.map(item => item.id === id ? {
+          ...item, videoStream: stream, cameraStream: screen ? null : stream,
+          screenStream: screen ? stream : null,
+          isCameraActive: Boolean(stream && !screen), isScreenSharing: screen
+        } : item));
+        else {
+          refs.setRemoteVideoStream(stream);
+          setCall(previous => ({ ...previous, isRemoteScreenSharing: screen }));
+        }
+      };
+      remoteVideoResetters.set(id, () => {
+        remoteVideo = null;
+        remoteVideoTrack = null;
+        remoteVideoKind = null;
+        presentRemoteVideo();
+      });
       localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
       refs.localVideoStreamRef.current?.getVideoTracks().filter(track => track.readyState === 'live')
         .forEach(track => pc.addTrack(track, refs.localVideoStreamRef.current));
       const engine = createCallPeerSession({
         pc, group, polite: String(selfId) < String(id), isCurrent: peerLive,
         getAudioTrack: () => refs.localStreamRef.current?.getAudioTracks()[0],
+        getVideoKind: () => {
+          const video = refs.localVideoStreamRef.current;
+          if (!video?.getVideoTracks().some(track => track.readyState === 'live')) return null;
+          return refs.screenStreamRef.current === video ? 'screen' : 'camera';
+        },
+        onRemoteVideoKind: kind => { remoteVideoKind = kind; presentRemoteVideo(); },
         send: payload => send({ ...payload, ...(group ? { targetId: id } : {}) }),
         prepareRestart: async () => {
           const configuration = await refreshIceConfiguration({ allowDirectConnection: true, cacheKey: selfId, forceRefresh: true });
@@ -159,20 +190,14 @@ export function useCallTransport(options) {
             delete refs.audioAnalyzersRef.current[key];
           };
         } else if (track.kind === 'video') {
-          const stream = event.streams[0] || new MediaStream([track]);
-          const screen = isScreenTrack(track);
-          if (group) participants(previous => previous.map(item => item.id === id ? {
-            ...item, videoStream: stream,
-            ...(screen ? { screenStream: stream, isScreenSharing: true } : { cameraStream: stream, isCameraActive: true })
-          } : item));
-          else { refs.setRemoteVideoStream(stream); setCall(previous => ({ ...previous, isRemoteScreenSharing: screen })); }
+          remoteVideo = event.streams[0] || new MediaStream([track]);
+          remoteVideoTrack = track;
+          presentRemoteVideo();
           track.onended = () => {
-            if (!peerLive()) return;
-            if (group) participants(previous => previous.map(item => item.id === id ? {
-              ...item, videoStream: screen ? item.cameraStream : item.screenStream,
-              ...(screen ? { screenStream: null, isScreenSharing: false } : { cameraStream: null, isCameraActive: false })
-            } : item));
-            else refs.setRemoteVideoStream(null);
+            if (!peerLive() || remoteVideoTrack !== track) return;
+            remoteVideo = null;
+            remoteVideoTrack = null;
+            presentRemoteVideo();
           };
         }
         // ontrack announces an SDP track; it does not establish connectivity.
@@ -256,14 +281,7 @@ export function useCallTransport(options) {
               : (payload.callId && payload.callId !== callId) || (payload.senderId && payload.senderId !== peerId)) return;
             const engine = addPeer(id);
             if (payload.type === 'video-stopped') {
-              if (group) participants(previous => previous.map(item => item.id === id ? {
-                ...item, videoStream: null, cameraStream: null, screenStream: null,
-                isCameraActive: false, isScreenSharing: false
-              } : item));
-              else {
-                refs.setRemoteVideoStream(null);
-                setCall(previous => ({ ...previous, isRemoteScreenSharing: false }));
-              }
+              remoteVideoResetters.get(id)?.();
             } else if (payload.type === 'ready') {
               engine.signalReady();
               if (refs.callStateRef.current.isOutgoing && refs.pcRef.current?.connectionState !== 'connected') void engine.negotiate();

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import '../../src/index.css';
 import Sidebar from '../../src/components/Sidebar';
 import ChatArea from '../../src/components/ChatArea';
+import StoryViewer from '../../src/components/StoryViewer';
 import { AuthContext } from '../../src/context/AuthContext';
 import { E2EEContext } from '../../src/context/E2EEContext';
 import { ChatContext } from '../../src/context/ChatContext';
@@ -47,14 +48,28 @@ dataService.editMessage = async (id, text, revision) => {
  if (control.failEdit) throw new Error('Тестовая ошибка редактирования');
  return { text, edited_at: new Date().toISOString() };
 };
+dataService.createChat = async (_userId, target) => {
+ control.requests.push({ kind: 'create', target: target.id });
+ if (control.failCreate) throw new Error('Тестовая ошибка создания чата');
+ return { id: 'story-private', type: 'personal', name: peer.name, members: [self, peer], messages: [], settings: {} };
+};
 function Harness() {
  const [user, setUser] = useState(self);
  const [chats, setChats] = useState(initial);
  const [queue, setQueue] = useState([]);
+ const [activeStoryId, setActiveStoryId] = useState(null);
+ const stories = [{ id: 'story-peer', userId: peer.id, userName: peer.name, userAvatar: 'А', media: '/code_story.png', caption: 'Тестовая история' }];
  const ui = useChatUiState(user);
  const { setActiveChatId } = ui;
  const drafts = useChatDrafts(user.id);
  const key = useRef(null); const keys = useRef({});
+ control.openStory = async (existing = true) => {
+  const sharedKey = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  keys.current['story-private'] = sharedKey; control.storyKey = sharedKey;
+  if (existing) setChats(previous => [...previous.filter(chat => chat.id !== 'story-private'),
+   { id: 'story-private', type: 'personal', name: peer.name, members: [self, peer], messages: [], settings: {} }]);
+  setActiveStoryId('story-peer');
+ };
  const typingChannel = useRef(null); const typingTimeouts = useRef({});
  const activeId = useRef(ui.activeChatId); activeId.current = ui.activeChatId;
  const [realtimeEnabled, setRealtimeEnabled] = useState(false);
@@ -77,11 +92,11 @@ function Harness() {
  control.select = ui.setActiveChatId; control.setUser = setUser; control.chats = chats; control.queue = queue;
  control.removeSaved = () => setChats(previous => previous.filter(chat => chat.id !== 'saved'));
  const value = { ...ui, ...actions, ...drafts, currentUser: user, chats, setChats, activeChat,
-  renderAvatar, getChatStatus: () => 'Группа', onlineUsers: new Set(), stories: [], typingStatuses: {},
+  renderAvatar, getChatStatus: () => 'Группа', onlineUsers: new Set(), stories, activeStoryId, setActiveStoryId, typingStatuses: {},
   installedStickers: [], sendTypingStatus: noop, viewStory: noop, isOnline: true, isChatLoading: {},
   historyLoadStatus: {}, messagePagination: {}, loadOlderMessages: noop, isSyncing: {} };
  return <AuthContext.Provider value={{ currentUser: user }}><E2EEContext.Provider value={{ sharedKeysCache: {}, setSharedKeysCache: noop, e2eePrivateKey: null }}>
-  <ChatContext.Provider value={value}><div className={`app-container${activeChat ? ' active-chat-selected' : ''}`}><Sidebar/><ChatArea/></div></ChatContext.Provider>
+  <ChatContext.Provider value={value}><div className={`app-container${activeChat ? ' active-chat-selected' : ''}`}><Sidebar/><ChatArea/></div><StoryViewer/></ChatContext.Provider>
  </E2EEContext.Provider></AuthContext.Provider>;
 }
 createRoot(document.getElementById('root')).render(<Harness/>);

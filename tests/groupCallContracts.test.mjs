@@ -94,7 +94,8 @@ test('dead useCallWebRtc extract is removed (C5)', async () => {
 test('group UI keeps participant and video controls (C6)', () => {
   assert.match(callOverlay, /isGroupCall/);
   assert.match(callOverlay, /showVideoControls/);
-  assert.match(callTransport, /cameraStream: stream/);
+  assert.match(callOverlay, /p\.cameraStream/);
+  assert.match(callOverlay, /p\.screenStream/);
 });
 
 test('ICE failure exposes retry path and clearer copy (C7)', () => {

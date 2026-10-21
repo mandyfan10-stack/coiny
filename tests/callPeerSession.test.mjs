@@ -295,3 +295,55 @@ test('TURN refresh errors never apply an incomplete configuration and retries st
   assert.equal(h.errors.length, 4); assert.equal(h.pc.offers.length, 0); assert.equal(h.pc.configurations.length, 0);
   assert.equal(h.timers.size, 0); h.session.dispose();
 });
+
+test('video source metadata follows accepted SDP and changes when replaceTrack renegotiates', async () => {
+  let kind = 'camera';
+  const accepted = [];
+  const caller = harness({ polite: false, getVideoKind: () => kind });
+  const receiver = harness({ getVideoKind: () => null, onRemoteVideoKind: value => accepted.push(value) });
+  await caller.session.negotiate(); await drain();
+  const first = caller.sent[0];
+  assert.equal(first.videoKind, 'camera');
+  await receiver.session.receive(first); await drain();
+  assert.equal(receiver.sent[0].videoKind, null);
+  await caller.session.receive(receiver.sent[0]);
+  kind = 'screen';
+  await caller.session.negotiate(); await drain();
+  const screen = caller.sent.at(-1);
+  assert.equal(screen.videoKind, 'screen');
+  await receiver.session.receive(screen);
+  // A delayed repeat of the previously accepted offer must not undo screen.
+  await receiver.session.receive({ ...first, videoKind: 'camera' });
+  assert.deepEqual(accepted, ['camera', 'screen']);
+  caller.session.dispose(); receiver.session.dispose();
+});
+
+test('old, invalid and unaccepted metadata cannot declare an unrelated screen', async () => {
+  const accepted = [];
+  const h = harness({ polite: false, onRemoteVideoKind: kind => accepted.push(kind) });
+  await h.session.negotiate(); await drain();
+  await h.session.receive({ ...answer(h.sent[0]), negotiationId: 'wrong', videoKind: 'screen' });
+  assert.deepEqual(accepted, []);
+  await h.session.receive({ ...answer(h.sent[0]), videoKind: { participantId: 'other', kind: 'screen' } });
+  assert.deepEqual(accepted, ['camera']);
+  await h.session.receive({ type: 'offer', negotiationId: 'legacy', sdp: 'v=0\r\na=ice-ufrag:legacy\r\n' });
+  assert.deepEqual(accepted, ['camera', 'camera']);
+  h.session.dispose();
+});
+
+test('a replaced call cannot apply source metadata after native SDP work completes', async () => {
+  let current = true;
+  const accepted = [];
+  const pc = new Peer();
+  let release;
+  const setRemote = pc.setRemoteDescription.bind(pc);
+  pc.setRemoteDescription = async description => {
+    await setRemote(description);
+    await new Promise(resolve => { release = resolve; });
+  };
+  const h = harness({ pc, isCurrent: () => current, onRemoteVideoKind: kind => accepted.push(kind) });
+  const pending = h.session.receive({ type: 'offer', negotiationId: 'first', sdp: 'v=0\r\na=ice-ufrag:first\r\n', videoKind: 'screen' });
+  await drain(); current = false; release(); await pending;
+  assert.deepEqual(accepted, []);
+  h.session.dispose();
+});

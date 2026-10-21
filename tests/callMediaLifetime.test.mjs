@@ -170,3 +170,91 @@ test('group camera stop addresses every active peer before renegotiating', async
   assert.equal(h.renegotiations, 1);
   for (const pc of Object.values(h.options.pcsRef.current)) assert.equal(pc.senders.length, 0);
 });
+
+test('the camera action replaces a live display only after camera permission succeeds', async t => {
+  const h = setup(t);
+  const display = stream();
+  h.options.localVideoStreamRef.current = display;
+  h.options.screenStreamRef.current = display;
+  h.options.wasCameraActiveRef.current = true;
+  h.pc.addTrack(display.track);
+  const pending = h.render().toggleCallVideo();
+  assert.equal(h.camera.length, 1);
+  assert.equal(display.track.readyState, 'live');
+  assert.equal(h.options.screenStreamRef.current, display);
+  const camera = stream();
+  h.camera[0].resolve(camera);
+  await pending;
+  assert.equal(h.options.localVideoStreamRef.current, camera);
+  assert.equal(h.options.screenStreamRef.current, null);
+  assert.equal(h.pc.senders[0].track, camera.track);
+  assert.equal(display.track.readyState, 'ended');
+  assert.equal(h.options.wasCameraActiveRef.current, false);
+});
+
+test('denied camera permission keeps the working display and its sender', async t => {
+  const h = setup(t);
+  const display = stream();
+  h.options.localVideoStreamRef.current = display;
+  h.options.screenStreamRef.current = display;
+  h.pc.addTrack(display.track);
+  const pending = h.render().toggleCallVideo();
+  h.camera[0].reject(new Error('Permission denied'));
+  await pending;
+  assert.equal(h.options.localVideoStreamRef.current, display);
+  assert.equal(h.options.screenStreamRef.current, display);
+  assert.equal(h.pc.senders[0].track, display.track);
+  assert.equal(display.track.readyState, 'live');
+});
+
+test('a group peer joining during display replacement receives the current live track', async t => {
+  const h = setup(t, true);
+  delete h.options.pcsRef.current.C;
+  const camera = stream();
+  h.options.localVideoStreamRef.current = camera;
+  const sender = h.pc.addTrack(camera.track);
+  const replacement = defer();
+  sender.replaceTrack = async function(track) { this.track = track; await replacement.promise; };
+  const pending = h.render().toggleCallScreenShare();
+  const display = stream();
+  h.display[0].resolve(display);
+  await new Promise(resolve => setImmediate(resolve));
+  const joiningPeer = peer();
+  joiningPeer.addTrack(camera.track);
+  h.options.pcsRef.current.C = joiningPeer;
+  replacement.resolve();
+  await pending;
+  assert.equal(camera.track.readyState, 'ended');
+  for (const pc of Object.values(h.options.pcsRef.current)) {
+    assert.equal(pc.senders[0].track, display.track);
+    assert.equal(pc.senders[0].track.readyState, 'live');
+  }
+});
+
+test('native display stop during pending negotiation clears display and restores the camera', async t => {
+  const h = setup(t);
+  const camera = stream();
+  h.options.localVideoStreamRef.current = camera;
+  h.pc.addTrack(camera.track);
+  const negotiation = defer();
+  let renegotiations = 0;
+  h.options.renegotiateMedia = () => ++renegotiations === 1 ? negotiation.promise : Promise.resolve();
+  const pending = h.render().toggleCallScreenShare();
+  const display = stream();
+  h.display[0].resolve(display);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(typeof display.track.onended, 'function');
+  display.track.readyState = 'ended';
+  display.track.onended();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.options.screenStreamRef.current, null);
+  assert.equal(h.camera.length, 1);
+  const restored = stream();
+  h.camera[0].resolve(restored);
+  await new Promise(resolve => setImmediate(resolve));
+  negotiation.resolve();
+  await pending;
+  assert.equal(h.options.localVideoStreamRef.current, restored);
+  assert.equal(h.pc.senders[0].track, restored.track);
+  assert.equal(restored.track.readyState, 'live');
+});

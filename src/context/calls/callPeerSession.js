@@ -5,6 +5,7 @@ const ufrags = (sdp = '') => new Set([...sdp.matchAll(/^a=ice-ufrag:([^\r\n]+)/g
 export function createCallPeerSession({
   pc, polite, send, prepareRestart = async () => null,
   getAudioTrack = () => null,
+  getVideoKind, onRemoteVideoKind = () => {},
   onState = () => {}, onError = () => {}, isCurrent = () => true, group = false,
   schedule = setTimeout, cancel = clearTimeout,
   retryDelays = RETRY_DELAYS, recoveryGraceMs = 3_000
@@ -39,6 +40,17 @@ export function createCallPeerSession({
   const report = (error) => { if (active()) onError(error); };
   const state = (value) => {
     if (active() && announcedState !== value) { announcedState = value; onState(value); }
+  };
+  const describeVideo = signal => {
+    if (!getVideoKind) return signal;
+    const kind = getVideoKind();
+    return kind === null || kind === 'camera' || kind === 'screen' ? { ...signal, videoKind: kind } : signal;
+  };
+  const applyRemoteVideo = signal => {
+    // Older clients have no source metadata. A remote track's label is a
+    // browser-generated value, so use the ordinary video presentation instead.
+    const kind = signal.videoKind;
+    onRemoteVideoKind(kind === null || kind === 'screen' ? kind : 'camera');
   };
   const enqueue = (work) => {
     const next = queue.then(() => active() ? work() : undefined).catch(report);
@@ -157,7 +169,7 @@ export function createCallPeerSession({
     rememberLocal(description, id);
     await pc.setLocalDescription(description);
     if (!active()) return;
-    const signal = { type: group || !negotiated ? 'offer' : 'renegotiate-offer', sdp: pc.localDescription.sdp, negotiationId: id };
+    const signal = describeVideo({ type: group || !negotiated ? 'offer' : 'renegotiate-offer', sdp: pc.localDescription.sdp, negotiationId: id });
     if (iceRestart) signal.iceRestart = true;
     pending = { signal, attempt: 0 };
     clearCandidateRetry();
@@ -288,6 +300,7 @@ export function createCallPeerSession({
       }
       await pc.setRemoteDescription({ type: 'offer', sdp: signal.sdp });
       if (!active()) return;
+      applyRemoteVideo(signal);
       if (remoteId && remoteId !== id) remember(retired, remoteId);
       remoteId = id ?? null;
       await flushCandidates();
@@ -301,7 +314,7 @@ export function createCallPeerSession({
       // rollback. Rebind that track; never acquire or stop a microphone here.
       if (collision || needsAudioRepair) await repairAudioSenders();
       if (!active()) return;
-      const response = { type: signal.type === 'renegotiate-offer' && !group ? 'renegotiate-answer' : 'answer', sdp: pc.localDescription.sdp };
+      const response = describeVideo({ type: signal.type === 'renegotiate-offer' && !group ? 'renegotiate-answer' : 'answer', sdp: pc.localDescription.sdp });
       if (id) response.negotiationId = id;
       remember(answers, key, response);
       clearCandidateRetry();
@@ -313,6 +326,7 @@ export function createCallPeerSession({
       const answeredId = pending.signal.negotiationId;
       await pc.setRemoteDescription({ type: 'answer', sdp: signal.sdp });
       if (!active()) return;
+      applyRemoteVideo(signal);
       if (needsAudioRepair) await repairAudioSenders();
       if (!active()) return;
       clearRetry();

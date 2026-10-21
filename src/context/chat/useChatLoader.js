@@ -37,15 +37,30 @@ export function useChatLoader({
   const [historyLoadStatus, setHistoryLoadStatus] = useState({});
   const loadRequestsRef = useRef(new Map());
   const historySnapshotsRef = useRef(new Map());
-  const sessionUserRef = useRef(currentUser?.id);
-  sessionUserRef.current = currentUser?.id;
+  const currentUserId = currentUser?.id;
+  const sessionRef = useRef({ userId: currentUserId, active: true });
+  if (sessionRef.current.userId !== currentUserId) {
+    sessionRef.current = { userId: currentUserId, active: true };
+  }
+  const session = sessionRef.current;
+  const isCurrentSession = useCallback(() => sessionRef.current === session && session.active, [session]);
+  const setSessionSharedKeys = useCallback((updater) => {
+    if (!isCurrentSession()) return;
+    setSharedKeysCache((previous) => {
+      if (!isCurrentSession()) return previous;
+      return typeof updater === 'function' ? updater(previous) : updater;
+    });
+  }, [isCurrentSession, setSharedKeysCache]);
+
+  useEffect(() => {
+    session.active = true;
+    return () => { session.active = false; };
+  }, [session]);
 
   const activeChatIdRef = useRef(activeChatId);
   useEffect(() => {
     activeChatIdRef.current = activeChatId;
   }, [activeChatId]);
-
-  const currentUserId = currentUser?.id;
 
   useEffect(() => {
     const requests = loadRequestsRef.current;
@@ -56,30 +71,34 @@ export function useChatLoader({
     setIsChatLoading({});
     setIsSyncing({});
     return () => { requests.clear(); };
-  }, [currentUserId]);
+  }, [session]);
 
   // Instant 0ms Chat List Hydration from IndexedDB
   useEffect(() => {
     if (!currentUserId) return;
+    let active = true;
     getCachedChatList(currentUserId).then((cached) => {
-      if (Array.isArray(cached) && cached.length > 0) {
-        setChats((prev) => (!prev || prev.length === 0 ? cached : prev));
+      if (active && isCurrentSession() && Array.isArray(cached) && cached.length > 0) {
+        setChats((prev) => (active && isCurrentSession() && (!prev || prev.length === 0) ? cached : prev));
       }
     }).catch(() => {});
-  }, [currentUserId, setChats]);
+    return () => { active = false; };
+  }, [currentUserId, isCurrentSession, setChats]);
 
   const prewarmTopChats = useCallback((chatList) => {
-    if (!Array.isArray(chatList) || chatList.length === 0 || !currentUser) return;
+    if (!Array.isArray(chatList) || chatList.length === 0 || !currentUser || !isCurrentSession()) return;
     const topChats = chatList.slice(0, 5);
 
     const runPrewarm = async () => {
       for (const chat of topChats) {
+        if (!isCurrentSession()) return;
         if (!chat || chat.id === activeChatIdRef.current) continue;
         try {
           const cached = await getCachedMessages(chat.id, currentUserId);
+          if (!isCurrentSession()) return;
           if (cached && cached.length > 1) {
             setChats((prev) => (Array.isArray(prev) ? prev : []).map((c) => {
-              if (c.id === chat.id && (!c.messages || c.messages.length <= 1)) {
+              if (isCurrentSession() && c.id === chat.id && (!c.messages || c.messages.length <= 1)) {
                 return { ...c, messages: cached };
               }
               return c;
@@ -88,6 +107,7 @@ export function useChatLoader({
           }
 
           const msgsRaw = await dataService.loadChatMessages(chat.id, 50);
+          if (!isCurrentSession()) return;
           const msgs = Array.isArray(msgsRaw) ? msgsRaw : [];
           if (msgs.length === 0) continue;
 
@@ -97,16 +117,17 @@ export function useChatLoader({
             currentUserId: currentUser.id,
             e2eePrivateKey: e2eePrivateKeyRef.current,
             sharedKeysCache: sharedKeysCacheRef.current,
-            setSharedKeysCache
+            setSharedKeysCache: setSessionSharedKeys
           });
 
           const decrypted = await Promise.all(
             msgs.map((m) => decryptMessageFields(m, sharedKey, chat.type === 'personal'))
           );
+          if (!isCurrentSession()) return;
 
           saveCachedMessages(chat.id, decrypted, currentUserId);
           setChats((prev) => (Array.isArray(prev) ? prev : []).map((c) => {
-            if (c.id === chat.id && (!c.messages || c.messages.length <= 1)) {
+            if (isCurrentSession() && c.id === chat.id && (!c.messages || c.messages.length <= 1)) {
               return { ...c, messages: decrypted };
             }
             return c;
@@ -122,12 +143,13 @@ export function useChatLoader({
     } else {
       setTimeout(runPrewarm, 500);
     }
-  }, [currentUser, currentUserId, setChats, setSharedKeysCache, e2eePrivateKeyRef, sharedKeysCacheRef]);
+  }, [currentUser, currentUserId, isCurrentSession, setChats, setSessionSharedKeys, e2eePrivateKeyRef, sharedKeysCacheRef]);
 
   const fetchChats = useCallback(async () => {
-    if (!currentUserId) return;
+    if (!currentUserId || !isCurrentSession()) return;
     try {
       const data = await dataService.fetchChats(currentUserId);
+      if (!isCurrentSession()) return;
       // Guard non-array payloads (RPC/edge/proxy) so we never throw "X is not iterable".
       const list = Array.isArray(data) ? data : [];
 
@@ -148,7 +170,7 @@ export function useChatLoader({
               currentUserId,
               e2eePrivateKey: e2eePrivateKeyRef.current,
               sharedKeysCache: sharedKeysCacheRef.current,
-              setSharedKeysCache
+              setSharedKeysCache: setSessionSharedKeys
             });
           }
         }
@@ -159,14 +181,17 @@ export function useChatLoader({
 
         return { ...chat, members, messages };
       }));
+      if (!isCurrentSession()) return;
 
       const parsed = await loadOfflineQueue(currentUserId);
+      if (!isCurrentSession()) return;
       const localQueue = Array.isArray(parsed) ? parsed : [];
 
       for (const q of localQueue) {
         if (q?.hasOfflineMedia && q.optimisticId) {
           try {
             const blob = await getOfflineAttachment(q.optimisticId, currentUserId);
+            if (!isCurrentSession()) return;
             if (blob) q.media = createManagedObjectUrl(`offline:${q.optimisticId}`, blob);
           } catch (e) {
             console.error(e);
@@ -198,6 +223,7 @@ export function useChatLoader({
       });
 
       setChats((previousChats) => {
+        if (!isCurrentSession()) return previousChats;
         const prev = Array.isArray(previousChats) ? previousChats : [];
         return updatedChats.map((nextChat) => {
           const existingChat = prev.find((chat) => chat.id === nextChat.id);
@@ -247,12 +273,12 @@ export function useChatLoader({
       prewarmTopChats(updatedChats);
       saveCachedChatList(updatedChats, currentUserId);
     } catch (e) {
-      console.error('Failed to load chats', e);
+      if (isCurrentSession()) console.error('Failed to load chats', e);
     }
-  }, [currentUserId, currentUser?.name, setSharedKeysCache, setChats, e2eePrivateKeyRef, sharedKeysCacheRef, prewarmTopChats]);
+  }, [currentUserId, currentUser?.name, isCurrentSession, setSessionSharedKeys, setChats, e2eePrivateKeyRef, sharedKeysCacheRef, prewarmTopChats]);
 
   const loadActiveChatMessages = useCallback(async (chatId) => {
-    if (!chatId || !currentUser) return;
+    if (!chatId || !currentUser || !isCurrentSession()) return;
     const existingChat = chatsRef.current.find((chat) => chat.id === chatId);
     const initialMessages = existingChat?.messages || [];
     const request = {
@@ -260,7 +286,7 @@ export function useChatLoader({
       pendingIds: new Set(initialMessages.filter((message) => message.isPending || message.isOptimistic || message.isFailed).map((message) => message.id))
     };
     loadRequestsRef.current.set(chatId, request);
-    const isCurrentRequest = () => sessionUserRef.current === currentUserId
+    const isCurrentRequest = () => isCurrentSession()
       && loadRequestsRef.current.get(chatId) === request;
     setIsChatLoading((prev) => ({ ...prev, [chatId]: !existingChat?.messages?.length }));
     setIsSyncing((prev) => ({ ...prev, [chatId]: true }));
@@ -279,7 +305,7 @@ export function useChatLoader({
         currentUserId: currentUser.id,
         e2eePrivateKey: e2eePrivateKeyRef.current,
         sharedKeysCache: sharedKeysCacheRef.current,
-        setSharedKeysCache
+        setSharedKeysCache: setSessionSharedKeys
       });
 
       const decryptedMsgs = await Promise.all(
@@ -358,9 +384,10 @@ export function useChatLoader({
         setIsChatLoading((prev) => ({ ...prev, [chatId]: false }));
       }
     }
-  }, [currentUser, currentUserId, setSharedKeysCache, setChats, chatsRef, e2eePrivateKeyRef, sharedKeysCacheRef]);
+  }, [currentUser, currentUserId, isCurrentSession, setSessionSharedKeys, setChats, chatsRef, e2eePrivateKeyRef, sharedKeysCacheRef]);
 
   const loadOlderMessages = useCallback(async (chatId) => {
+    if (!currentUser || !isCurrentSession()) return 0;
     const chat = chatsRef.current.find((c) => c.id === chatId);
     const pagination = messagePagination[chatId];
     if (!chat || pagination?.loading || pagination?.hasMore === false || !chat.messages?.length) return 0;
@@ -382,11 +409,12 @@ export function useChatLoader({
 
       // 1. Instant 0ms pagination from local IndexedDB cache
       const cachedOlder = await getCachedMessagesBeforeTimestamp(chatId, oldestCursor, 30, currentUserId);
+      if (!isCurrentSession()) return 0;
       const knownIds = new Set(chat.messages.map((message) => message.id));
       const unseenCached = cachedOlder.filter((message) => !knownIds.has(message.id));
       if (unseenCached.length > 0) {
         setChats((prev) => (Array.isArray(prev) ? prev : []).map((c) => {
-          if (c.id !== chatId) return c;
+          if (c.id !== chatId || !isCurrentSession()) return c;
           const currentMessages = Array.isArray(c.messages) ? c.messages : [];
           const known = new Set(currentMessages.map((message) => message.id));
           const candidates = [...unseenCached.filter((message) => !known.has(message.id)), ...currentMessages].sort(compareMessages);
@@ -406,6 +434,7 @@ export function useChatLoader({
       }
 
       const olderRaw = await dataService.loadChatMessages(chatId, 30, oldestCursor);
+      if (!isCurrentSession()) return 0;
       if (!Array.isArray(olderRaw)) throw new Error('Некорректный ответ сервера при загрузке истории.');
       const older = olderRaw;
 
@@ -415,15 +444,16 @@ export function useChatLoader({
         currentUserId: currentUser.id,
         e2eePrivateKey: e2eePrivateKeyRef.current,
         sharedKeysCache: sharedKeysCacheRef.current,
-        setSharedKeysCache
+        setSharedKeysCache: setSessionSharedKeys
       });
 
       const decrypted = await Promise.all(
         older.map((message) => decryptMessageFields(message, sharedKey, chat.type === 'personal'))
       );
+      if (!isCurrentSession()) return 0;
 
       setChats((prev) => (Array.isArray(prev) ? prev : []).map((c) => {
-        if (c.id !== chatId) return c;
+        if (c.id !== chatId || !isCurrentSession()) return c;
         const currentMessages = Array.isArray(c.messages) ? c.messages : [];
         const known = new Set(currentMessages.map((message) => message.id));
         const candidates = [...decrypted.filter((message) => !known.has(message.id)), ...currentMessages].sort(compareMessages);
@@ -436,15 +466,16 @@ export function useChatLoader({
       } }));
       return decrypted.length;
     } catch (error) {
+      if (!isCurrentSession()) return 0;
       console.error('Failed to load older messages', error);
       setMessagePagination((prev) => ({ ...prev, [chatId]: { ...prev[chatId], loading: false } }));
       return 0;
     }
-  }, [currentUser, currentUserId, messagePagination, setSharedKeysCache, setChats, chatsRef, e2eePrivateKeyRef, sharedKeysCacheRef]);
+  }, [currentUser, currentUserId, isCurrentSession, messagePagination, setSessionSharedKeys, setChats, chatsRef, e2eePrivateKeyRef, sharedKeysCacheRef]);
 
   // Stale-While-Revalidate: Telegram-style instant 0ms history hydration on chat selection
   useEffect(() => {
-    if (!activeChatId) return;
+    if (!activeChatId || !currentUserId || !isCurrentSession()) return;
 
     let isMounted = true;
     const currentChat = chatsRef.current.find((c) => c.id === activeChatId);
@@ -457,12 +488,12 @@ export function useChatLoader({
 
     // Always hydrate from IndexedDB to show full cached history (not just preview messages)
     readCachedMessages(activeChatId, currentUserId).then((cached) => {
-      if (!isMounted) return;
+      if (!isMounted || !isCurrentSession()) return;
       if (Array.isArray(cached) && cached.length > 0) {
         const snapshot = historySnapshotsRef.current.get(activeChatId);
         const eligibleCache = snapshot ? cached.filter((message) => retainCachedMessage(message, snapshot)) : cached;
         setChats((prev) => (Array.isArray(prev) ? prev : []).map((c) => {
-          if (c.id !== activeChatId || !isMounted) return c;
+          if (c.id !== activeChatId || !isMounted || !isCurrentSession()) return c;
           const currentMsgs = Array.isArray(c.messages) ? c.messages : [];
 
           // Late cache hydration must not overwrite newer bodies, receipts or reactions.
@@ -503,7 +534,7 @@ export function useChatLoader({
     return () => {
       isMounted = false;
     };
-  }, [activeChatId, currentUserId, setChats, chatsRef, readCachedMessages]);
+  }, [activeChatId, currentUserId, isCurrentSession, setChats, chatsRef, readCachedMessages]);
 
   // Contract: active encrypted chat reloads after the private key becomes available
   useEffect(() => {
@@ -513,11 +544,12 @@ export function useChatLoader({
     }
     return () => {
       if (!activeChatId) return;
+      if (!isCurrentSession()) return;
       requests.delete(activeChatId);
       setIsSyncing((prev) => ({ ...prev, [activeChatId]: false }));
       setIsChatLoading((prev) => ({ ...prev, [activeChatId]: false }));
     };
-  }, [activeChatId, e2eePrivateKey, loadActiveChatMessages]);
+  }, [activeChatId, e2eePrivateKey, isCurrentSession, loadActiveChatMessages]);
 
   return {
     messagePagination,

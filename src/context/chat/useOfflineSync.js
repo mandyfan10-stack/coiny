@@ -72,6 +72,10 @@ export function useOfflineSync({
     setQueueLoaded(false);
     setQueueOwnerId(null);
     updateOfflineQueue([]);
+    if (!userId) {
+      setQueueLoaded(true);
+      return () => { active = false; };
+    }
     loadOfflineQueue(userId)
       .then((queue) => {
         if (active) {
@@ -103,7 +107,7 @@ export function useOfflineSync({
   }, []);
 
   useEffect(() => {
-    if (!queueLoaded || queueOwnerId !== (currentUser?.id ?? null)) return;
+    if (!currentUser?.id || !queueLoaded || queueOwnerId !== currentUser.id) return;
     saveOfflineQueue(currentUser?.id, offlineQueue)
       .catch((error) => console.error('Failed to persist encrypted offline queue:', error));
   }, [currentUser?.id, offlineQueue, queueLoaded, queueOwnerId]);

@@ -14,6 +14,8 @@ export interface CallState {
   status: CallStatus;
   callId?: string;
   ownerId?: ProfileId;
+  /** The other invitation won a simultaneous dial to this same participant. */
+  crossDialAccepted?: boolean;
   expiresAt?: number;
   chatId: ChatId | null;
   /** Legacy field; live timer is local to CallOverlay (C9). */

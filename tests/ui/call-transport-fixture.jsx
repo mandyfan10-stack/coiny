@@ -81,6 +81,11 @@ window.RTCPeerConnection = class extends RealPC {
 async function captureVideo(kind) {
   const attempt = { kind, stage: 'requested' };
   control.captureAttempts.push(attempt);
+  if (kind === 'camera' && control.rejectNextCamera) {
+    control.rejectNextCamera = false;
+    attempt.stage = 'failed';
+    throw new DOMException('Fixture camera permission denied', 'NotAllowedError');
+  }
   let stream;
   try {
     if (nativeMockCapture) stream = await nativeMediaDevices.getUserMedia({ video: true });
@@ -153,6 +158,7 @@ supabase.channel = (topic, options = {}) => {
     },
     async send(message) {
       const plain = message.payload?.envelope?.decoded?.payload || message.payload;
+      if (control.stripVideoKinds && plain?.sdp) delete plain.videoKind;
       const type = plain?.type || message.event;
       if (plain?.sdp && plain.senderId) {
         const fragment = plain.sdp.match(/^a=ice-ufrag:([^\r\n]+)/m)?.[1];

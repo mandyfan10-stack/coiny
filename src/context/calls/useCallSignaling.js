@@ -141,6 +141,12 @@ export function useCallSignaling({
   const callStatus = callState?.status;
   const callId = callState?.callId;
   const otherUserId = callState?.otherUserId;
+  const crossDialAccepted = callState?.crossDialAccepted;
+  useEffect(() => {
+    if (crossDialAccepted && callStatus === 'connected' && callId && currentUserId) {
+      sendSignalingMessage(callState.chatId, 'call-accepted', { responderId: currentUserId, callId });
+    }
+  }, [crossDialAccepted, callStatus, callId, currentUserId, callState?.chatId, sendSignalingMessage]);
   useEffect(() => {
     if (!callStatus || ['idle', 'ended'].includes(callStatus)
       || (callStatus === 'connected' && otherUserId)) {
@@ -200,9 +206,17 @@ export function useCallSignaling({
           if (callId) sendSignalingMessageRef.current(chatId, 'call-received', { callId, responderId: currentUserId });
           // Busy guard: never clobber an active call (C2).
           setCallState((prev) => {
-            if (BUSY_CALL_STATUSES.has(prev.status)) return prev;
+            // Two users may dial each other before either invitation arrives.
+            // Keep the lower caller id's invitation on both clients. Both have
+            // already asked to call, so the yielding client accepts that call.
+            const crossDial = chatRecord.type === 'personal' && prev.status === 'calling'
+              && prev.isOutgoing && prev.chatId === chatId && prev.otherUserId === callerId
+              && callId && prev.callId && callId !== prev.callId;
+            const acceptCrossDial = crossDial && String(callerId) < String(currentUserId);
+            if (BUSY_CALL_STATUSES.has(prev.status) && !acceptCrossDial) return prev;
             return {
-              status: 'incoming',
+              status: acceptCrossDial ? 'connected' : 'incoming',
+              ...(acceptCrossDial ? { crossDialAccepted: true } : {}),
               ownerId: currentUserId,
               chatId,
               callId,
@@ -216,7 +230,7 @@ export function useCallSignaling({
                 avatarColor: caller.avatarColor || callerAvatarColor
               },
               otherUserId: callerId,
-              webrtcState: 'disconnected',
+              webrtcState: acceptCrossDial ? 'connecting' : 'disconnected',
               isRemoteScreenSharing: false,
               isLocalSpeaking: false,
               isRemoteSpeaking: false

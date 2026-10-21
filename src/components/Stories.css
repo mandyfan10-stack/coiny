@@ -251,6 +251,8 @@
   text-align: center;
 }
 
+.story-reply-error { margin: 6px 0 0; color: #ffb4b4; font-size: 13px; }
+
 .story-caption {
   font-size: 14px;
   color: white;
