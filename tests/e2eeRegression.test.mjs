@@ -17,7 +17,6 @@ import {
   decryptFile
 } from '../src/utils/e2eeHelper.js';
 
-const chatInfo = readFileSync(new URL('../src/components/ChatInfo.jsx', import.meta.url), 'utf8');
 const e2eeTab = readFileSync(new URL('../src/components/settings/E2EETab.jsx', import.meta.url), 'utf8');
 const e2eeContext = readFileSync(new URL('../src/context/E2EEContext.jsx', import.meta.url), 'utf8');
 
@@ -92,10 +91,7 @@ test('media blob decrypt round-trip after re-derive', async () => {
   assert.equal(decrypted.type, 'image/png');
 });
 
-test('UI exposes Safety Number and public key fingerprint surfaces', () => {
-  assert.match(chatInfo, /computeSafetyNumber/);
-  assert.match(chatInfo, /Код безопасности \(Safety Number\)/);
-  assert.match(chatInfo, /safetyNumber/);
+test('settings expose the public key fingerprint', () => {
   assert.match(e2eeTab, /settings-fingerprint/);
   assert.match(e2eeTab, /public_key/);
 });
@@ -184,13 +180,4 @@ test('generateRecoveryCode uses 32-char Base32 and bitwise mask without undefine
     assert.match(code, /^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/);
     assert.doesNotMatch(code, /undefined/);
   }
-});
-
-test('ChatInfo computeSafetyNumber uses view.getUint32 across all 5 segments', () => {
-  assert.match(chatInfo, /getUint32\(0\)/);
-  assert.match(chatInfo, /getUint32\(4\)/);
-  assert.match(chatInfo, /getUint32\(8\)/);
-  assert.match(chatInfo, /getUint32\(12\)/);
-  assert.match(chatInfo, /getUint32\(16\)/);
-  assert.doesNotMatch(chatInfo, /getInt32/);
 });

@@ -335,28 +335,6 @@
   color: #4fae4e;
 }
 
-/* Safety Number Card */
-.info-safety-box {
-  background: rgba(36, 129, 204, 0.08);
-  border: 1px solid rgba(36, 129, 204, 0.25);
-  border-radius: 10px;
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.info-safety-code {
-  font-family: monospace;
-  font-size: 14px;
-  letter-spacing: 0.5px;
-  color: var(--text-primary);
-  background: var(--surface-inset);
-  padding: 6px 8px;
-  border-radius: 6px;
-  word-break: break-all;
-}
-
 /* Members Section */
 .info-members-section {
   border-bottom: 1px solid var(--border-color);

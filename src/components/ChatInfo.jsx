@@ -19,7 +19,6 @@ import {
   Trash2,
   LogOut,
   Camera,
-  Lock,
   UserPlus,
   Shield,
   Crown,
@@ -38,25 +37,6 @@ import { copyTextToClipboard } from '../utils/mobileActionSheetUtils';
 import { dataService } from '../services/dataLayer';
 
 import './ChatInfo.css';
-
-const computeSafetyNumber = async (keyA, keyB) => {
-  if (!keyA || !keyB) return '';
-  const sorted = [keyA, keyB].sort();
-  const joined = sorted.join('|');
-
-  const encoder = new TextEncoder();
-  const data = encoder.encode(joined);
-  const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
-  const view = new DataView(hashBuffer);
-
-  const segment1 = String(view.getUint32(0) % 100000).padStart(5, '0');
-  const segment2 = String(view.getUint32(4) % 100000).padStart(5, '0');
-  const segment3 = String(view.getUint32(8) % 100000).padStart(5, '0');
-  const segment4 = String(view.getUint32(12) % 100000).padStart(5, '0');
-  const segment5 = String(view.getUint32(16) % 100000).padStart(5, '0');
-
-  return `${segment1} ${segment2} ${segment3} ${segment4} ${segment5}`;
-};
 
 function MediaGridItem({ item, index, chatId, onOpenPreview }) {
   const sourceUrl = typeof item === 'object' && item?.url ? item.url : item;
@@ -149,7 +129,6 @@ export default function ChatInfo() {
   const [copiedLink, setCopiedLink] = useState(false);
   const [shareInviteLink, setShareInviteLink] = useState('');
   const [shareInviteError, setShareInviteError] = useState('');
-  const [copiedSafety, setCopiedSafety] = useState(false);
   const [copiedUsername, setCopiedUsername] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [memberSearchQuery, setMemberSearchQuery] = useState('');
@@ -157,7 +136,6 @@ export default function ChatInfo() {
   const [newMemberUsername, setNewMemberUsername] = useState('');
   const [addingMember, setAddingMember] = useState(false);
   const [addMemberError, setAddMemberError] = useState('');
-  const [safetyNumber, setSafetyNumber] = useState('');
 
   const isOwner =
     activeChat &&
@@ -231,18 +209,6 @@ export default function ChatInfo() {
     };
   }, [isInfoOpen, activeChat?.id, loadOlderMessages]);
 
-  // Compute E2EE Safety Number for personal chats
-  useEffect(() => {
-    if (activeChat?.type === 'personal') {
-      const otherMember = activeChat.members?.find((m) => m.id !== currentUser?.id);
-      const keyA = currentUser?.public_key;
-      const keyB = otherMember?.publicKey;
-      if (keyA && keyB) {
-        computeSafetyNumber(keyA, keyB).then(setSafetyNumber).catch(console.error);
-      }
-    }
-  }, [activeChat, currentUser]);
-
   const handleAvatarChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -274,13 +240,6 @@ export default function ChatInfo() {
     await copyTextToClipboard(`@${activeChat.username}`);
     setCopiedUsername(true);
     setTimeout(() => setCopiedUsername(false), 2000);
-  };
-
-  const handleCopySafety = async () => {
-    if (!safetyNumber) return;
-    await copyTextToClipboard(safetyNumber);
-    setCopiedSafety(true);
-    setTimeout(() => setCopiedSafety(false), 2000);
   };
 
   const handleAddMemberSubmit = async (e) => {
@@ -590,32 +549,6 @@ export default function ChatInfo() {
                 >
                   {copiedLink ? <Check size={14} /> : <Copy size={14} />}
                 </button>
-              </div>
-            )}
-
-            {/* E2EE Safety Number for Personal Chat */}
-            {isPersonal && safetyNumber && (
-              <div className="info-safety-box">
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Lock size={14} style={{ color: 'var(--accent-color)' }} />
-                    <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--accent-color)' }}>
-                      Код безопасности (Safety Number)
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    className={`info-copy-pill-btn ${copiedSafety ? 'copied' : ''}`}
-                    onClick={handleCopySafety}
-                    title="Скопировать код"
-                  >
-                    {copiedSafety ? <Check size={14} /> : <Copy size={14} />}
-                  </button>
-                </div>
-                <div className="info-safety-code">{safetyNumber}</div>
-                <span style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: '1.3' }}>
-                  Сравните код с собеседником для подтверждения сквозного шифрования.
-                </span>
               </div>
             )}
           </div>
