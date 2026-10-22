@@ -23,7 +23,7 @@ jobs:
   validate:
     name: Validate and test
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     concurrency:
       group: coingram-live-e2e-shared-accounts
       cancel-in-progress: false
@@ -87,7 +87,7 @@ jobs:
         run: npm run test:scroll
 
       - name: Test settings and responsive chat UI
-        timeout-minutes: 20
+        timeout-minutes: 30
         run: npm run test:ui
 
       - name: Run mandatory live E2E

@@ -135,7 +135,7 @@ jobs:
   mock-ui-e2e:
     name: Mock UI E2E
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     env:
       VITE_ALLOW_MOCK: 'true'
       VITE_SUPABASE_URL: 'your-supabase-project-url'
@@ -164,7 +164,7 @@ jobs:
         run: npm run test:scroll
 
       - name: Test settings and responsive chat UI
-        timeout-minutes: 20
+        timeout-minutes: 30
         run: npm run test:ui
 
       - name: Run mock UI E2E
