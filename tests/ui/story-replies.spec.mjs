@@ -3,6 +3,47 @@ test.beforeEach(async ({ page }) => { await page.routeWebSocket(/.*/, () => {});
 const fixture = '/tests/ui/message-operations-fixture.html';
 
 for (const existing of [true, false]) {
+  test(`real AuthProvider and ChatProvider send an encrypted story reply via ${existing ? 'an existing' : 'a new'} personal chat`, async ({ page }) => {
+    await page.goto('/tests/ui/account-isolation-fixture.html?story=1');
+    await expect(page.getByTestId('owner')).toHaveText('signed-out');
+    await page.evaluate(() => window.__accountIsolation.login('story-owner', 'fixture-password'));
+    await expect(page.getByTestId('owner')).toHaveText('story-owner');
+    await expect.poll(() => page.evaluate(() => window.__accountIsolation.requests.some(row => row.kind === 'chats'))).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.__accountIsolation.chat.stories.some(story => story.id === 'peer-story'))).toBe(true);
+    await page.evaluate(existing => {
+      const control = window.__accountIsolation;
+      const group = { id: 'source', type: 'group', name: 'Группа', members: [], messages: [] };
+      const peer = { id: 'story-peer', publicKey: control.storyKeys.peerPublic, hasE2ee: true };
+      const personal = { id: 'story-private', type: 'personal', members: [{ id: 'story-owner' }, peer], messages: [] };
+      control.complete(0, existing ? [group, personal] : [group]);
+      control.holdSend = true;
+    }, existing);
+    await expect.poll(() => page.evaluate(() => window.__accountIsolation.chat.chats.some(chat => chat.id === 'source'))).toBe(true);
+    await page.evaluate(() => window.__accountIsolation.chat.setActiveChatId('source'));
+    await page.getByRole('button', { name: 'Открыть историю', exact: true }).click();
+    const reply = page.getByRole('textbox', { name: 'Ответить на историю', exact: true });
+    await reply.fill('Проверка настоящего контекста');
+    await reply.press('Enter');
+    await expect.poll(() => page.evaluate(() => window.__accountIsolation.sent.length)).toBe(1);
+    await expect(page.getByPlaceholder('Ответ отправлен!')).toHaveCount(0);
+    const sent = await page.evaluate(async () => {
+      const control = window.__accountIsolation;
+      const { importPublicKey, deriveSymmetricKey, decryptMessage } = await import('/src/utils/e2eeHelper.js');
+      const key = await deriveSymmetricKey(control.storyKeys.peer.privateKey, await importPublicKey(control.storyKeys.ownerPublic));
+      const row = control.sent[0];
+      const [body, iv] = row.text.slice('e2ee:aes-gcm:'.length).split(':');
+      return { chatId: row.chatId, senderId: row.senderId, replyTo: row.replyTo,
+        text: await decryptMessage(body, iv, key), created: control.created,
+        active: control.chat.activeChatId, sourceMessages: control.chat.chats.find(chat => chat.id === 'source').messages.length };
+    });
+    expect(sent).toEqual({ chatId: 'story-private', senderId: 'story-owner', replyTo: null,
+      text: 'Ответ на историю: Проверка настоящего контекста', created: existing ? [] : ['story-peer'], active: 'source', sourceMessages: 0 });
+    await page.evaluate(() => window.__accountIsolation.confirmSend());
+    await expect(page.getByPlaceholder('Ответ отправлен!')).toBeVisible();
+  });
+}
+
+for (const existing of [true, false]) {
   test(`story reply reaches its author with ${existing ? 'an existing' : 'a newly created'} personal chat while another group is active`, async ({ page }) => {
     await page.goto(fixture);
     const composer = page.getByRole('textbox', { name: 'Сообщение', exact: true });

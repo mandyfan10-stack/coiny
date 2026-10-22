@@ -5,7 +5,7 @@ const ufrags = (sdp = '') => new Set([...sdp.matchAll(/^a=ice-ufrag:([^\r\n]+)/g
 export function createCallPeerSession({
   pc, polite, send, prepareRestart = async () => null,
   getAudioTrack = () => null,
-  getVideoKind, onRemoteVideoKind = () => {},
+  getVideoKind, getVideoRevision, onRemoteVideoKind = () => {},
   onState = () => {}, onError = () => {}, isCurrent = () => true, group = false,
   schedule = setTimeout, cancel = clearTimeout,
   retryDelays = RETRY_DELAYS, recoveryGraceMs = 3_000
@@ -44,13 +44,17 @@ export function createCallPeerSession({
   const describeVideo = signal => {
     if (!getVideoKind) return signal;
     const kind = getVideoKind();
-    return kind === null || kind === 'camera' || kind === 'screen' ? { ...signal, videoKind: kind } : signal;
+    if (kind !== null && kind !== 'camera' && kind !== 'screen') return signal;
+    const revision = getVideoRevision?.();
+    return { ...signal, videoKind: kind,
+      ...(Number.isSafeInteger(revision) && revision >= 0 ? { videoRevision: revision } : {}) };
   };
   const applyRemoteVideo = signal => {
     // Older clients have no source metadata. A remote track's label is a
     // browser-generated value, so use the ordinary video presentation instead.
     const kind = signal.videoKind;
-    onRemoteVideoKind(kind === null || kind === 'screen' ? kind : 'camera');
+    const revision = Number.isSafeInteger(signal.videoRevision) && signal.videoRevision >= 0 ? signal.videoRevision : undefined;
+    onRemoteVideoKind(kind === null || kind === 'screen' ? kind : 'camera', revision);
   };
   const enqueue = (work) => {
     const next = queue.then(() => active() ? work() : undefined).catch(report);

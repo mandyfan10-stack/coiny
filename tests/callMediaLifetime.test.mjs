@@ -57,7 +57,7 @@ function setup(t, group = false) {
     localVideoStreamRef: { current: null }, screenStreamRef: { current: null }, wasCameraActiveRef: { current: false },
     pcRef: { current: pc }, pcsRef: { current: group ? { B: pc, C: peer() } : {} },
     activeCallChannelRef: { current: { async send(message) { signals.push(message); return 'ok'; } } },
-    mediaGenerationRef: { current: 1 }, callStateRef: { current: null },
+    mediaGenerationRef: { current: 1 }, videoRevisionRef: { current: 0 }, callStateRef: { current: null },
     setLocalVideoStream(value) { states.push(value); }, setIsScreenSharing() {}, setMediaError() {},
     async renegotiateMedia() { renegotiations++; }
   };
@@ -79,6 +79,7 @@ for (const kind of ['camera', 'display']) test(`late ${kind} permission after im
   assert.equal(h.options.localVideoStreamRef.current, null);
   assert.equal(h.pc.senders.length, 0);
   assert.equal(h.renegotiations, 0);
+  assert.equal(h.options.videoRevisionRef.current, 0);
   assert.deepEqual(h.states, []);
 });
 
@@ -154,6 +155,7 @@ test('partial group display replacement restores the camera for every sender', a
   assert.equal(rejected.track.readyState, 'ended');
   assert.equal(camera.track.readyState, 'live');
   assert.equal(h.options.localVideoStreamRef.current, camera);
+  assert.equal(h.options.videoRevisionRef.current, 0);
   for (const pc of Object.values(h.options.pcsRef.current)) assert.equal(pc.senders[0].track, camera.track);
 });
 
@@ -164,7 +166,7 @@ test('group camera stop addresses every active peer before renegotiating', async
   for (const pc of Object.values(h.options.pcsRef.current)) pc.addTrack(camera.track);
   await h.render().toggleCallVideo();
   assert.deepEqual(h.signals.map(signal => signal.payload), ['B', 'C'].map(targetId => ({
-    type: 'video-stopped', callId: 'first', senderId: 'A', targetId
+    type: 'video-stopped', callId: 'first', sessionId: 'first', senderId: 'A', videoRevision: 1, targetId
   })));
   assert.equal(camera.track.readyState, 'ended');
   assert.equal(h.renegotiations, 1);

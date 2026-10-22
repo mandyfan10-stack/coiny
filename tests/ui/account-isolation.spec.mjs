@@ -176,3 +176,50 @@ test('queued draft encryption cannot recreate private data after a real logout',
   expect(await page.evaluate(() => window.__opensAfterLogout)).toBe(0);
   expect(await page.evaluate(async () => (await import('/src/utils/indexedDbHelper.js')).loadChatDrafts('old-owner'))).toEqual({});
 });
+
+for (const destination of ['signed-out', 'new-owner', 'old-owner']) {
+  for (const online of [false, true]) {
+    test(`pending media preparation cannot outlive logout into ${destination} (${online ? 'online' : 'offline'})`, async ({ page }) => {
+      await login(page, 'old-owner');
+      await complete(page, 0, [chat('shared')]);
+      await expect.poll(() => state(page).then(value => value.chats.length)).toBe(1);
+      await page.evaluate(online => {
+        const control = window.__accountIsolation;
+        control.chat.setActiveChatId('shared');
+        Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => online });
+        window.dispatchEvent(new Event(online ? 'online' : 'offline'));
+        const original = crypto.subtle.encrypt.bind(crypto.subtle);
+        crypto.subtle.encrypt = async (...args) => {
+          if (new TextDecoder().decode(args[0].additionalData).startsWith('attachment:')) {
+            window.__attachmentHeld = true;
+            await new Promise(resolve => { window.__releaseAttachment = resolve; });
+          }
+          return original(...args);
+        };
+      }, online);
+      await expect.poll(() => state(page).then(value => value.active)).toBe('shared');
+      await page.evaluate(() => {
+        const send = window.__accountIsolation.chat.sendMessage;
+        window.__oldSend = send;
+        window.__pendingSend = send('PRIVATE OLD CAPTION', null, null, new Blob(['private media'], { type: 'image/png' }), 'image');
+      });
+      await expect.poll(() => page.evaluate(() => Boolean(window.__attachmentHeld))).toBe(true);
+      await page.evaluate(() => window.__accountIsolation.logout());
+      await expect(page.getByTestId('owner')).toHaveText('signed-out');
+      if (destination !== 'signed-out') {
+        await login(page, destination);
+        const index = (await requests(page)).findIndex(row => row.kind === 'chats' && row.owner === destination && !row.done);
+        await complete(page, index, [chat('shared')]);
+        await expect.poll(() => state(page).then(value => value.chats.length)).toBe(1);
+      }
+      expect(await page.evaluate(async () => { window.__releaseAttachment(); return window.__pendingSend; })).toBe(false);
+      expect(await page.evaluate(() => window.__oldSend('STALE CALLBACK', null, null, null, null, null, { chatId: 'shared' }))).toBe(false);
+      const result = await page.evaluate(async destination => {
+        const storage = await import('/src/utils/indexedDbHelper.js');
+        return { sent: window.__accountIsolation.sent, oldCache: await storage.getCachedMessagesForChat('shared', 'old-owner'),
+          queue: await storage.loadEncryptedOfflineQueue(destination === 'signed-out' ? 'old-owner' : destination) };
+      }, destination);
+      expect(result).toEqual({ sent: [], oldCache: [], queue: [] });
+    });
+  }
+}

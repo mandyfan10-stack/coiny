@@ -44,6 +44,24 @@ export function useCallTransport(options) {
     const sessions = refs.peerSessionsRef.current;
     const peerStates = new Map();
     const remoteVideoResetters = new Map();
+    // A group member can leave and rejoin while everybody else keeps talking.
+    // Membership alone cannot authorise delayed signals from their old call.
+    const peerLifetimes = new Map();
+    let presentMembers = new Set();
+    const validSessionId = value => {
+      return typeof value === 'string' && value.length > 0 && value.length <= 128 ? value : null;
+    };
+    const sessionIdOf = payload => validSessionId(payload?.sessionId);
+    const lifetimeFor = id => {
+      let lifetime = peerLifetimes.get(id);
+      if (!lifetime) peerLifetimes.set(id, lifetime = { id: null, ended: new Set(), closed: false, sawAbsent: false });
+      return lifetime;
+    };
+    const retireLifetime = (lifetime, id) => {
+      if (!id) return;
+      lifetime.ended.add(id);
+      if (lifetime.ended.size > 32) lifetime.ended.delete(lifetime.ended.values().next().value);
+    };
     const live = () => active && latest.current.userId === selfId;
     const members = () => latest.current.callChatRef.current?.members || [];
     const isMember = id => id !== selfId && members().some(member => member.id === id);
@@ -62,7 +80,8 @@ export function useCallTransport(options) {
     const updateState = () => {
       if (!live()) return;
       const pcs = group ? Object.values(refs.pcsRef.current) : [refs.pcRef.current].filter(Boolean);
-      const connected = pcs.some(pc => pc.connectionState === 'connected');
+      const connected = pcs.some(pc => pc.connectionState === 'connected')
+        || (group && subscribed && localStream && pcs.length === 0);
       const failed = pcs.length > 0 && pcs.every(pc => pc.connectionState === 'failed' || pc.connectionState === 'closed'
         || peerStates.get(pc) === 'failed');
       setCall(previous => ({ ...previous, webrtcState: connected ? 'connected' : failed ? 'failed' : 'connecting' }));
@@ -93,6 +112,49 @@ export function useCallTransport(options) {
       participants(previous => previous.filter(item => item.id !== id));
       updateState();
     };
+    const acceptLifetime = (id, payload, source) => {
+      if (!group) return true;
+      const lifetime = lifetimeFor(id);
+      const nextId = sessionIdOf(payload);
+      if (nextId) {
+        if (lifetime.ended.has(nextId)) return false;
+        if (lifetime.id && lifetime.id !== nextId) {
+          retireLifetime(lifetime, lifetime.id);
+          removePeer(id);
+        }
+        lifetime.id = nextId;
+        lifetime.closed = false;
+        lifetime.sawAbsent = false;
+        return true;
+      }
+      // Old clients include callId only on video-stopped, never on their SDP
+      // or presence. Bind that control event without upgrading their protocol.
+      const controlId = payload?.type === 'video-stopped' ? validSessionId(payload.callId) : null;
+      if (controlId) return !lifetime.closed && !lifetime.ended.has(controlId)
+        && (!lifetime.id || lifetime.id === controlId);
+      if (lifetime.closed) {
+        // Older clients have no session metadata. Only a genuine presence
+        // leave/rejoin may reopen them; an old offer or join broadcast cannot.
+        if (source !== 'presence' || !lifetime.sawAbsent || !presentMembers.has(id)) return false;
+        lifetime.id = null;
+        lifetime.closed = false;
+        lifetime.sawAbsent = false;
+      }
+      // Profile/mute presence from an older client may omit metadata. It must
+      // not downgrade an already identified peer or authorise unbound SDP.
+      return !lifetime.id || source === 'presence';
+    };
+    const endPeerLifetime = (id, payload) => {
+      const lifetime = lifetimeFor(id);
+      const endedId = sessionIdOf(payload) ?? validSessionId(payload?.callId);
+      retireLifetime(lifetime, endedId);
+      // A delayed hangup from an earlier call must preserve the fresh peer.
+      if (endedId && lifetime.id && endedId !== lifetime.id) return;
+      retireLifetime(lifetime, lifetime.id);
+      lifetime.closed = true;
+      lifetime.sawAbsent = !presentMembers.has(id);
+      removePeer(id);
+    };
     const reconcileMembership = () => {
       if (!live() || !group) return;
       for (const id of sessions.keys()) if (!isMember(id)) removePeer(id);
@@ -113,7 +175,7 @@ export function useCallTransport(options) {
       if (!live() || !subscribed || !channel) throw new Error('Call signaling is reconnecting.');
       if (group && !isMember(payload.targetId)) return 'cancelled';
       const result = await channel.send({ type: 'broadcast', event: 'signal', payload: {
-        ...payload, senderId: selfId, ...(!group ? { callId } : {})
+        ...payload, senderId: selfId, ...(group ? { sessionId: callId } : { callId })
       } });
       if (result !== 'ok') throw new Error('Call signal was not acknowledged.');
     };
@@ -127,6 +189,14 @@ export function useCallTransport(options) {
       let remoteVideo = null;
       let remoteVideoTrack = null;
       let remoteVideoKind = 'camera';
+      let remoteVideoRevision = -1;
+      const acceptVideoRevision = revision => {
+        if (Number.isSafeInteger(revision) && revision >= 0) {
+          if (revision < remoteVideoRevision) return false;
+          remoteVideoRevision = revision;
+        }
+        return true;
+      };
       const presentRemoteVideo = () => {
         if (!peerLive()) return;
         const stream = remoteVideoKind === null ? null : remoteVideo;
@@ -141,7 +211,8 @@ export function useCallTransport(options) {
           setCall(previous => ({ ...previous, isRemoteScreenSharing: screen }));
         }
       };
-      remoteVideoResetters.set(id, () => {
+      remoteVideoResetters.set(id, revision => {
+        if (!acceptVideoRevision(revision)) return;
         remoteVideo = null;
         remoteVideoTrack = null;
         remoteVideoKind = null;
@@ -153,12 +224,17 @@ export function useCallTransport(options) {
       const engine = createCallPeerSession({
         pc, group, polite: String(selfId) < String(id), isCurrent: peerLive,
         getAudioTrack: () => refs.localStreamRef.current?.getAudioTracks()[0],
+        getVideoRevision: () => refs.videoRevisionRef?.current,
         getVideoKind: () => {
           const video = refs.localVideoStreamRef.current;
           if (!video?.getVideoTracks().some(track => track.readyState === 'live')) return null;
           return refs.screenStreamRef.current === video ? 'screen' : 'camera';
         },
-        onRemoteVideoKind: kind => { remoteVideoKind = kind; presentRemoteVideo(); },
+        onRemoteVideoKind: (kind, revision) => {
+          if (!acceptVideoRevision(revision)) return;
+          remoteVideoKind = kind;
+          presentRemoteVideo();
+        },
         send: payload => send({ ...payload, ...(group ? { targetId: id } : {}) }),
         prepareRestart: async () => {
           const configuration = await refreshIceConfiguration({ allowDirectConnection: true, cacheKey: selfId, forceRefresh: true });
@@ -253,10 +329,15 @@ export function useCallTransport(options) {
         if (group) channel
           .on('presence', { event: 'sync' }, () => {
             if (!live() || !subscribed) return;
+            const entries = Object.values(channel.presenceState()).flat().filter(entry => isMember(entry.id));
+            presentMembers = new Set(entries.map(entry => entry.id));
+            for (const [id, lifetime] of peerLifetimes) {
+              if (lifetime.closed && !presentMembers.has(id)) lifetime.sawAbsent = true;
+            }
             const present = new Set();
-            for (const entries of Object.values(channel.presenceState())) for (const entry of entries) {
+            for (const entry of entries) {
               const id = entry.id;
-              if (!isMember(id)) continue;
+              if (!acceptLifetime(id, entry, 'presence')) continue;
               present.add(id); stopMissing(id); ensureParticipant(id);
               participants(previous => previous.map(item => item.id === id ? { ...item, muted: Boolean(entry.muted) } : item));
               const engine = addPeer(id);
@@ -266,7 +347,7 @@ export function useCallTransport(options) {
             for (const id of sessions.keys()) if (!present.has(id)) markMissing(id);
           })
           .on('broadcast', { event: 'join-group-call' }, ({ payload }) => {
-            if (!live() || !isMember(payload?.senderId)) return;
+            if (!live() || !isMember(payload?.senderId) || !acceptLifetime(payload.senderId, payload, 'join')) return;
             stopMissing(payload.senderId);
             const engine = addPeer(payload.senderId);
             engine.signalReady();
@@ -279,9 +360,10 @@ export function useCallTransport(options) {
             const id = group ? payload.senderId : peerId;
             if (group ? payload.targetId !== selfId || !isMember(id)
               : (payload.callId && payload.callId !== callId) || (payload.senderId && payload.senderId !== peerId)) return;
+            if (!acceptLifetime(id, payload, 'signal')) return;
             const engine = addPeer(id);
             if (payload.type === 'video-stopped') {
-              remoteVideoResetters.get(id)?.();
+              remoteVideoResetters.get(id)?.(payload.videoRevision);
             } else if (payload.type === 'ready') {
               engine.signalReady();
               if (refs.callStateRef.current.isOutgoing && refs.pcRef.current?.connectionState !== 'connected') void engine.negotiate();
@@ -289,7 +371,7 @@ export function useCallTransport(options) {
           })
           .on('broadcast', { event: 'hangup' }, ({ payload }) => {
             if (!live()) return;
-            if (group) { if (isMember(payload?.senderId)) removePeer(payload.senderId); }
+            if (group) { if (isMember(payload?.senderId)) endPeerLifetime(payload.senderId, payload); }
             else if ((!payload?.callId || payload.callId === callId)
               && (!payload?.senderId || payload.senderId === peerId)) endCallLocally();
           })
@@ -299,10 +381,10 @@ export function useCallTransport(options) {
             if (!subscribed) return; // A signaling outage must preserve working media.
             try {
               if (group) {
-                await channel.track({ id: selfId, name: refs.currentUserRef.current?.name || 'Вы',
+                await channel.track({ id: selfId, sessionId: callId, name: refs.currentUserRef.current?.name || 'Вы',
                   avatar: refs.currentUserRef.current?.avatar, muted: refs.callStateRef.current.muted });
                 if (!live()) return;
-                await channel.send({ type: 'broadcast', event: 'join-group-call', payload: { senderId: selfId } });
+                await channel.send({ type: 'broadcast', event: 'join-group-call', payload: { senderId: selfId, sessionId: callId } });
               } else {
                 const engine = sessions.get(peerId);
                 engine.signalReady();

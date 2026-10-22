@@ -41,8 +41,11 @@ export function useChatActions({
   sharedKeysCacheRef,
   setSharedKeysCache
 }) {
-  const ownerRef = useRef(currentUser?.id);
-  ownerRef.current = currentUser?.id;
+  // A logout invalidates old operations even when the same account signs in again.
+  const sessionRef = useRef({ userId: currentUser?.id });
+  if (sessionRef.current.userId !== currentUser?.id) sessionRef.current = { userId: currentUser?.id };
+  const session = sessionRef.current;
+  const isCurrentSession = useCallback(() => sessionRef.current === session, [session]);
   const markMessagesAsRead = useCallback(async (chatId) => {
     if (!currentUser || !chatId) return;
     try {
@@ -70,7 +73,7 @@ export function useChatActions({
     if (!currentUser) return null;
     try {
       const newChat = await dataService.createChat(currentUser.id, target, type, initialMembers);
-      if (ownerRef.current !== currentUser.id) return null;
+      if (!isCurrentSession()) return null;
       if (newChat) {
         let createdChat = newChat;
         if (!dataService.isLive()) {
@@ -185,7 +188,7 @@ export function useChatActions({
       alert(e.message);
       return null;
     }
-  }, [currentUser, fetchChats, setChats, setActiveChatId]);
+  }, [currentUser, isCurrentSession, fetchChats, setChats, setActiveChatId]);
 
   const deleteChat = useCallback(async (chatId) => {
     if (!currentUser || !chatId) return false;
@@ -229,7 +232,7 @@ export function useChatActions({
     const wireText = text || '';
     const cleanText = typeof text === 'string' ? text.trim() : '';
     if (!cleanText && !media && !offlineMediaBlob) return;
-    if (!currentUser || !targetChatId) return;
+    if (!currentUser || !targetChatId || !isCurrentSession()) return false;
     if (options.requireConfirmation && !navigator.onLine) return false;
 
     const messageId = customMessageId || crypto.randomUUID();
@@ -254,11 +257,13 @@ export function useChatActions({
     if (offlineMediaBlob) {
       try {
         await saveOfflineAttachment(messageId, offlineMediaBlob, currentUser.id);
+        if (!isCurrentSession()) return false;
         tempMediaUrl = createManagedObjectUrl(`offline:${messageId}`, offlineMediaBlob);
         optimisticMsg.media = tempMediaUrl;
         hasOfflineMedia = true;
         optimisticMsg.isPending = true;
       } catch (e) {
+        if (!isCurrentSession()) return false;
         console.error('Offline media cache failed:', e);
       }
     }
@@ -348,7 +353,9 @@ export function useChatActions({
               requireE2EEKey(null);
             }
             const otherPublicKeyObj = await importPublicKey(otherMember.publicKey);
+            if (!isCurrentSession()) return false;
             sharedKey = await deriveSymmetricKey(e2eePrivateKeyRef.current, otherPublicKeyObj);
+            if (!isCurrentSession()) return false;
             setSharedKeysCache((prev) => ({ ...prev, [targetChatId]: sharedKey }));
           }
 
@@ -367,9 +374,9 @@ export function useChatActions({
           }
         }
 
-        if (ownerRef.current !== currentUser.id) return false;
+        if (!isCurrentSession()) return false;
         await dataService.sendMessage(targetChatId, currentUser.id, textToSend, replyToId, mediaToSend, messageId, { forwardedFrom: forwardedFromToSend });
-        if (ownerRef.current !== currentUser.id) return false;
+        if (!isCurrentSession()) return false;
         // Persist confirmed status to IndexedDB cache
         updateCachedMessageFields(messageId, { isOptimistic: false, isPending: false });
 
@@ -388,7 +395,7 @@ export function useChatActions({
         }));
         return messageId;
       } catch (error) {
-        if (ownerRef.current !== currentUser.id) return false;
+        if (!isCurrentSession()) return false;
         console.error('Send failed:', error);
         const isNetwork = !navigator.onLine || error.message?.includes('FetchError') || error.message?.includes('failed to fetch');
         if (isNetwork && !options.requireConfirmation) {
@@ -427,7 +434,7 @@ export function useChatActions({
         return false;
       }
     })();
-  }, [chats, activeChatId, currentUser, setSharedKeysCache, setChats, setOfflineQueue, e2eePrivateKeyRef, sharedKeysCacheRef]);
+  }, [chats, activeChatId, currentUser, isCurrentSession, setSharedKeysCache, setChats, setOfflineQueue, e2eePrivateKeyRef, sharedKeysCacheRef]);
 
   const sendStoryReply = useCallback(async (story, text) => {
     const body = typeof text === 'string' ? text.trim() : '';
@@ -435,7 +442,7 @@ export function useChatActions({
       throw new Error('Не удалось определить получателя ответа.');
     }
     const ensureOwner = () => {
-      if (ownerRef.current !== currentUser.id) throw new Error('Аккаунт изменился.');
+      if (!isCurrentSession()) throw new Error('Аккаунт изменился.');
     };
     let targetChat = chats.find(chat => chat.type === 'personal'
       && chat.members?.some(member => member.id === currentUser.id)
@@ -456,7 +463,7 @@ export function useChatActions({
     ensureOwner();
     if (!result) throw new Error('Не удалось отправить ответ. Текст сохранён.');
     return result;
-  }, [currentUser, chats, createChat, sendMessage]);
+  }, [currentUser, isCurrentSession, chats, createChat, sendMessage]);
 
   const editMessage = useCallback(async (chatId, message, text) => {
     if (!currentUser || !canEditMessage(message, currentUser.id)) throw new Error('Это сообщение нельзя изменить.');
@@ -472,9 +479,9 @@ export function useChatActions({
       const encrypted = await encryptMessage(wireText, key);
       wireText = `e2ee:aes-gcm:${encrypted.ciphertext}:${encrypted.iv}`;
     }
-    if (ownerRef.current !== currentUser.id) throw new Error('Аккаунт изменился.');
+    if (!isCurrentSession()) throw new Error('Аккаунт изменился.');
     const edited = await dataService.editMessage(message.id, wireText, message.editedAt || null);
-    if (ownerRef.current !== currentUser.id) return false;
+    if (!isCurrentSession()) return false;
     const fields = { text, editedAt: edited.edited_at };
     setChats(previous => previous.map(item => item.id === chatId ? { ...item,
       messages: item.messages.map(old => {
@@ -484,7 +491,7 @@ export function useChatActions({
         return updated;
       }) } : item));
     return true;
-  }, [currentUser, chats, setChats, e2eePrivateKeyRef, sharedKeysCacheRef, setSharedKeysCache]);
+  }, [currentUser, isCurrentSession, chats, setChats, e2eePrivateKeyRef, sharedKeysCacheRef, setSharedKeysCache]);
 
   const forwardMessages = useCallback(async (sourceChatId, targetChatId, messages, comment = '', onSent = () => {}) => {
     if (!currentUser || !navigator.onLine) throw new Error('Для пересылки подключитесь к интернету.');
@@ -495,7 +502,7 @@ export function useChatActions({
     if (target.type === 'channel' && !own || target.settings?.only_admins_can_post && !own) throw new Error('В этот чат могут писать только администраторы.');
     if (messages.some(message => message.cryptoVersion === 2 || message.isLocked || message.requiresUpdate || message.isPending || message.isOptimistic || message.isFailed)) throw new Error('Одно из сообщений пока недоступно для пересылки.');
     if (target.type !== 'personal' && messages.some(message => message.media) && target.settings?.allow_media === false && !own) throw new Error('В этом чате запрещена отправка медиа.');
-    const guard = () => { if (ownerRef.current !== currentUser.id) throw new Error('Аккаунт изменился.'); };
+    const guard = () => { if (!isCurrentSession()) throw new Error('Аккаунт изменился.'); };
     if (comment.trim()) {
       guard();
       if (!await sendMessage(comment, null, null, null, null, null, { chatId: targetChatId })) throw new Error('Не удалось отправить комментарий.');
@@ -513,7 +520,7 @@ export function useChatActions({
       onSent(message.id);
     }
     return true;
-  }, [currentUser, chats, sendMessage, e2eePrivateKeyRef, sharedKeysCacheRef, setSharedKeysCache]);
+  }, [currentUser, isCurrentSession, chats, sendMessage, e2eePrivateKeyRef, sharedKeysCacheRef, setSharedKeysCache]);
 
   const deleteMessage = useCallback(async (chatId, messageId) => {
     try {

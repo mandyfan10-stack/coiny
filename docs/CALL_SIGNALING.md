@@ -22,6 +22,13 @@ chat/call/peer. Older clients without call IDs retain their existing behavior;
 new senders retry until answer/termination/deadline if an old receiver cannot
 send the new receipt.
 
+Each v2 channel instance binds a random stream ID into its encrypted signal.
+Replay windows remain bounded per sender device and compare stream ID plus
+counter. Counters start at a random safe integer so an older receiver, which
+only compares counters, can also receive a recreated sender's signals. The
+same envelope is still rejected as a replay; adding another chat or reloading
+the sender does not require clearing the receiver's replay window.
+
 Acceptance is repeated for up to 60 seconds until `call-accepted-received`
 confirms receipt by the inviting application. Repeated acceptance is
 idempotent. Other signaling events use the subscription queue with a
@@ -58,6 +65,16 @@ attempts expose the retry action rather than an indefinite connecting state.
 Confirmed roster removal closes that participant's connection immediately,
 even if their client keeps signaling. Current membership also gates queued
 negotiation and encrypted sends; healthy remaining participants stay connected.
+
+Group presence, joins and media signals carry the sender's call session ID.
+An ended session cannot recreate a connection through delayed SDP, ICE or
+presence updates. A fresh session can rejoin while other members retain their
+media paths. Legacy clients without a session ID retain a compatibility path.
+
+Committed camera/screen changes also carry a monotonically increasing video
+revision in SDP and video-stop signals. A delayed stop cannot hide a newer
+camera or screen share. Revision state belongs to one peer connection;
+unversioned signals from older clients retain their existing behavior.
 
 TURN credentials are cached per account/client until their server expiry,
 with a 30-second safety margin. Concurrent requests share one operation;

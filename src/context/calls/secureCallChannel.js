@@ -16,7 +16,11 @@ export function secureCallChannel(channel, {
 }) {
   if (cryptoVersion !== 2) return channel;
 
-  let sendCounter = 0;
+  const streamId = crypto.randomUUID();
+  // A peer can keep its subscription while this client reloads or adds a chat.
+  // Older peers only compare counters; randomize the start to avoid overlap.
+  const counterSeed = crypto.getRandomValues(new Uint32Array(2));
+  let sendCounter = (counterSeed[0] & 0x000fffff) * 0x100000000 + counterSeed[1];
   const replayWindows = new Map();
   let proxy;
 
@@ -25,6 +29,7 @@ export function secureCallChannel(channel, {
     const envelope = await encryptEvent(chatId, 'call-signal', {
       event,
       payload,
+      streamId,
       counter: sendCounter,
       dtlsFingerprint: sdpFingerprint(payload)
     });
@@ -40,10 +45,15 @@ export function secureCallChannel(channel, {
     if (decoded?.event !== expectedEvent || !Number.isSafeInteger(decoded?.counter) || decoded.counter < 1) {
       throw new Error('Invalid call signaling event.');
     }
+    if (decoded.streamId !== undefined && (typeof decoded.streamId !== 'string'
+      || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(decoded.streamId))) {
+      throw new Error('Invalid call signaling stream.');
+    }
     const sender = wrapped.envelope.senderDeviceId;
+    const replayId = JSON.stringify([decoded.streamId ?? null, decoded.counter]);
     const seen = replayWindows.get(sender) || [];
-    if (seen.includes(decoded.counter)) throw new Error('Replayed call signaling event.');
-    seen.push(decoded.counter);
+    if (seen.includes(replayId)) throw new Error('Replayed call signaling event.');
+    seen.push(replayId);
     if (seen.length > 256) seen.shift();
     replayWindows.set(sender, seen);
     if (decoded.dtlsFingerprint !== sdpFingerprint(decoded.payload)) {

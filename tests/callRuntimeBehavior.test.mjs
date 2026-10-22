@@ -297,6 +297,10 @@ test('v2 call channel encrypts broadcasts and preserves the channel API', async 
   await proxy.send(offer);
   await proxy.send({ ...offer, event: 'answer' });
 
+  const { counter, streamId } = encrypted[0].payload;
+  assert.ok(Number.isSafeInteger(counter) && counter > 0);
+  assert.match(streamId, /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/);
+
   assert.deepEqual(encrypted, [
     {
       chatId: 'chat-1',
@@ -304,7 +308,8 @@ test('v2 call channel encrypts broadcasts and preserves the channel API', async 
       payload: {
         event: 'offer',
         payload: offer.payload,
-        counter: 1,
+        streamId,
+        counter,
         dtlsFingerprint: 'sha-256 AA:BB'
       }
     },
@@ -314,14 +319,15 @@ test('v2 call channel encrypts broadcasts and preserves the channel API', async 
       payload: {
         event: 'answer',
         payload: offer.payload,
-        counter: 2,
+        streamId,
+        counter: counter + 1,
         dtlsFingerprint: 'sha-256 AA:BB'
       }
     }
   ]);
   assert.deepEqual(sent.slice(1), [
-    { ...offer, payload: { e2ee: 2, envelope: { cipherText: 'encrypted-1' } } },
-    { ...offer, event: 'answer', payload: { e2ee: 2, envelope: { cipherText: 'encrypted-2' } } }
+    { ...offer, payload: { e2ee: 2, envelope: { cipherText: `encrypted-${counter}` } } },
+    { ...offer, event: 'answer', payload: { e2ee: 2, envelope: { cipherText: `encrypted-${counter + 1}` } } }
   ]);
 });
 
@@ -426,4 +432,87 @@ test('v2 call channel rejects plaintext, replayed, cross-chat, and fingerprint-m
   assert.match(errors[2], /Invalid call signaling event/);
   assert.match(errors[3], /Replayed call signaling event/);
   assert.match(errors[4], /DTLS fingerprint binding mismatch/);
+});
+
+test('fresh v2 streams from a recreated sender reach an unchanged receiver', async () => {
+  const { channel, listeners } = createChannel();
+  const received = [];
+  const receiver = secureCallChannel(channel, {
+    chatId: 'chat-1', cryptoVersion: 2,
+    encryptEvent: async () => assert.fail('receiver must not encrypt'),
+    decryptEvent: async envelope => envelope.decoded
+  });
+  receiver.on('broadcast', { event: 'incoming-call' }, message => received.push(message.payload.callId));
+  const streams = new Set();
+  for (let recreation = 0; recreation < 3; recreation++) {
+    const { channel: transport, sent } = createChannel();
+    const sender = secureCallChannel(transport, {
+      chatId: 'chat-1', cryptoVersion: 2,
+      encryptEvent: async (chatId, eventType, decoded) => ({ chatId, eventType, senderDeviceId: 'same-device', decoded }),
+      decryptEvent: async () => assert.fail('sender must not decrypt')
+    });
+    await sender.send({ type: 'broadcast', event: 'incoming-call', payload: { callId: `call-${recreation}` } });
+    streams.add(sent[0].payload.envelope.decoded.streamId);
+    await listeners[0].callback(sent[0]);
+  }
+  assert.deepEqual(received, ['call-0', 'call-1', 'call-2']);
+  assert.equal(streams.size, 3);
+});
+
+test('v2 stream replay windows bind counters to both the stream and sender device, while accepting legacy events', async () => {
+  const { channel, listeners } = createChannel();
+  const received = [], errors = [];
+  const originalError = console.error;
+  console.error = (...args) => errors.push(args.join(' '));
+  try {
+    secureCallChannel(channel, {
+      chatId: 'chat-1', cryptoVersion: 2,
+      encryptEvent: async () => ({}), decryptEvent: async envelope => envelope.decoded
+    }).on('broadcast', { event: 'incoming-call' }, message => received.push(message.payload.callId));
+    const deliver = (senderDeviceId, streamId, callId) => listeners[0].callback({ payload: { e2ee: 2, envelope: {
+      chatId: 'chat-1', eventType: 'call-signal', senderDeviceId,
+      decoded: { event: 'incoming-call', payload: { callId }, counter: 1, dtlsFingerprint: null,
+        ...(streamId === undefined ? {} : { streamId }) }
+    } } });
+    const first = 'a36c3235-d19d-43a0-b95a-a00512c30224';
+    const second = 'bf09ce84-0160-43ac-baa8-a185610a0482';
+    await deliver('device-a', first, 'first-stream');
+    await deliver('device-a', first, 'replayed-first-stream');
+    await deliver('device-a', second, 'second-stream');
+    await deliver('device-a', second, 'replayed-second-stream');
+    await deliver('device-b', first, 'another-device');
+    await deliver('device-a', undefined, 'legacy');
+    await deliver('device-a', undefined, 'replayed-legacy');
+    for (const invalid of ['', null, 4, {}, 'not-a-session']) await deliver('device-a', invalid, 'invalid');
+    assert.deepEqual(received, ['first-stream', 'second-stream', 'another-device', 'legacy']);
+    assert.equal(errors.filter(error => error.includes('Replayed call signaling event.')).length, 3);
+    assert.equal(errors.filter(error => error.includes('Invalid call signaling stream.')).length, 5);
+  } finally { console.error = originalError; }
+});
+
+test('recreated v2 senders remain compatible with receivers using the legacy counter-only window', async () => {
+  const legacySeen = Array.from({ length: 256 }, (_, index) => index + 1);
+  const accepted = [];
+  for (let recreation = 0; recreation < 3; recreation++) {
+    const { channel, sent } = createChannel();
+    const sender = secureCallChannel(channel, {
+      chatId: 'chat-1', cryptoVersion: 2,
+      encryptEvent: async (_chatId, _type, decoded) => ({ decoded }),
+      decryptEvent: async () => ({})
+    });
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await sender.send({ type: 'broadcast', event: 'incoming-call', payload: { callId: `call-${recreation}` } });
+      const counter = sent.at(-1).payload.envelope.decoded.counter;
+      assert.ok(Number.isSafeInteger(counter) && counter > 0);
+      assert.equal(legacySeen.includes(counter), false);
+      legacySeen.push(counter);
+      if (legacySeen.length > 256) legacySeen.shift();
+      accepted.push(counter);
+    }
+  }
+  assert.equal(new Set(accepted).size, 9);
+  for (let index = 0; index < accepted.length; index += 3) {
+    assert.equal(accepted[index + 1], accepted[index] + 1);
+    assert.equal(accepted[index + 2], accepted[index] + 2);
+  }
 });

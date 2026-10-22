@@ -165,6 +165,7 @@ export const ChatProvider = ({ children }) => {
       setActiveChatId,
       activeChat,
       sendMessage: actions.sendMessage,
+      sendStoryReply: actions.sendStoryReply,
       editMessage: actions.editMessage,
       forwardMessages: actions.forwardMessages,
       ...drafts,

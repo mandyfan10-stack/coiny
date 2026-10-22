@@ -45,6 +45,7 @@ export const CallProvider = ({ children }) => {
   const endCallLocallyRef = useRef(() => {});
   const peerSessionsRef = useRef(new Map());
   const mediaGenerationRef = useRef(0);
+  const videoRevisionRef = useRef(0);
   const [callQuality, setCallQuality] = useState({ peers: [] });
 
   const [localVideoStream, setLocalVideoStream] = useState(null);
@@ -78,6 +79,7 @@ export const CallProvider = ({ children }) => {
   /** Shared media/PC teardown used by hangup, reject, remote end, and effect cleanup (C4). */
   const teardownMedia = useCallback(() => {
     mediaGenerationRef.current += 1;
+    videoRevisionRef.current = 0;
     for (const session of peerSessionsRef.current.values()) session.dispose();
     peerSessionsRef.current.clear();
     voiceEnhancementRef.current.dispose(pcRef.current, pcsRef.current);
@@ -219,7 +221,7 @@ export const CallProvider = ({ children }) => {
   useCallTransport({
     status: callState.status, callId: callState.callId, userId: currentUser?.id,
     callChatRef, callStateRef, currentUserRef, encryptEvent, decryptEvent,
-    peerSessionsRef, pcRef, pcsRef, localStreamRef, localVideoStreamRef, screenStreamRef,
+    peerSessionsRef, pcRef, pcsRef, localStreamRef, localVideoStreamRef, screenStreamRef, videoRevisionRef,
     activeCallChannelRef, audioAnalyzersRef, endingSignalingRef,
     setCallState, setGroupCallParticipants, setRemoteVideoStream, setMediaError,
     setCallQuality, teardownMedia, endCallLocally
@@ -414,13 +416,14 @@ export const CallProvider = ({ children }) => {
     if (isGroup && activeCallChannelRef.current) {
       activeCallChannelRef.current.track({
         id: currentUser.id,
+        sessionId: callState.callId,
         name: currentUser.name || currentUser.username || 'Пользователь',
         avatar: currentUser.avatar || '🪙',
         avatarColor: currentUser.avatarColor || currentUser.avatar_color,
         muted: nextMuted
       }).catch(error => console.error('Failed to update group call presence:', error));
     }
-  }, [callState.chatId, callState.muted, chats, currentUser]);
+  }, [callState.chatId, callState.callId, callState.muted, chats, currentUser]);
 
   const toggleVoiceEnhancement = useCallback(async () => {
     if (callState.status !== 'connected' || !localStreamRef.current) return;
@@ -446,6 +449,7 @@ export const CallProvider = ({ children }) => {
     toggleCallScreenShare
   } = useCallMedia({
     mediaGenerationRef,
+    videoRevisionRef,
     callStateRef,
     callState,
     chats,

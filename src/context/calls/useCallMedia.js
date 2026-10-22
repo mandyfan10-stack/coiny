@@ -5,7 +5,8 @@ import { removeVideoSender, replaceOrAddVideoTrack, stopStreamTracks } from './m
 export function useCallMedia({
   callState, currentUser, chats, setLocalVideoStream, setIsScreenSharing,
   localVideoStreamRef, screenStreamRef, wasCameraActiveRef, pcRef, pcsRef,
-  activeCallChannelRef, setMediaError, renegotiateMedia, mediaGenerationRef, callStateRef
+  activeCallChannelRef, setMediaError, renegotiateMedia, mediaGenerationRef, callStateRef,
+  videoRevisionRef
 }) {
   const mounted = useRef(true);
   const operation = useRef(0);
@@ -40,6 +41,7 @@ export function useCallMedia({
     screen?.getTracks().forEach(track => { track.onended = null; });
     localVideoStreamRef.current = null;
     screenStreamRef.current = null;
+    if (videoRevisionRef) videoRevisionRef.current += 1;
     stopStreamTracks(video);
     if (screen !== video) stopStreamTracks(screen);
     setLocalVideoStream(null);
@@ -48,7 +50,8 @@ export function useCallMedia({
     if (activeCallChannelRef.current) {
       try {
         const channel = activeCallChannelRef.current;
-        const payload = { type: 'video-stopped', callId: token.callId, senderId: token.userId };
+        const payload = { type: 'video-stopped', callId: token.callId, sessionId: token.callId, senderId: token.userId,
+          ...(videoRevisionRef ? { videoRevision: videoRevisionRef.current } : {}) };
         const group = chats.find(chat => chat.id === callState.chatId)?.type === 'group';
         if (group) {
           for (const targetId of Object.keys(pcsRef.current)) {
@@ -99,6 +102,7 @@ export function useCallMedia({
     screenStreamRef.current?.getTracks().forEach(track => { track.onended = null; });
     localVideoStreamRef.current = stream;
     screenStreamRef.current = screen ? stream : null;
+    if (videoRevisionRef) videoRevisionRef.current += 1;
     setLocalVideoStream(stream);
     setIsScreenSharing(screen);
     if (previous !== stream) stopStreamTracks(previous);
