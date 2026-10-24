@@ -49,7 +49,34 @@ window.RTCPeerConnection = class extends RealPC {
     this.restarts = 0;
     this.fixtureErrors = [];
     this.fixtureCandidates = 0;
+    this.fixtureAudioOutputs = new Map();
+    // Group participants share this test document, unlike separate app windows.
+    // Keep each real receiver rendering independently of another provider's
+    // document-wide playback cleanup. These sinks do not generate audio:
+    // the RTP/energy assertions still require the remote sender's live track.
+    this.addEventListener('track', ({ track }) => {
+      if (!group || track.kind !== 'audio' || this.fixtureAudioOutputs.has(track)) return;
+      const output = document.createElement('audio');
+      output.autoplay = true;
+      output.hidden = true;
+      output.srcObject = new MediaStream([track]);
+      document.body.appendChild(output);
+      const release = () => {
+        output.srcObject = null;
+        output.remove();
+        this.fixtureAudioOutputs.delete(track);
+      };
+      this.fixtureAudioOutputs.set(track, { output, release });
+      track.addEventListener('ended', release, { once: true });
+      output.play().catch(error => {
+        this.fixtureErrors.push({ method: 'fixtureAudioPlayback', name: error.name });
+      });
+    });
     control.pcs.push(this);
+  }
+  close() {
+    for (const { release } of this.fixtureAudioOutputs.values()) release();
+    return super.close();
   }
   setConfiguration(configuration) { return super.setConfiguration({ ...configuration, iceServers: [] }); }
   async createOffer(options) {
@@ -279,6 +306,10 @@ control.snapshot = async () => ({
   })),
   captures: control.captures.map(capture => capture.stream.getTracks().map(track => track.readyState)),
   audioContexts: control.captures.filter(capture => capture.context).map(capture => capture.context.state),
+  audioOutputs: control.pcs.map(pc => [...pc.fixtureAudioOutputs.values()].map(({ output }) => ({
+    attached: output.isConnected, paused: output.paused,
+    tracks: output.srcObject?.getAudioTracks().map(track => track.readyState) || []
+  }))),
   captureAttempts: control.captureAttempts,
   capabilities: control.capabilities,
   ui: Object.fromEntries(Object.entries(control.apis).map(([id, api]) => [id, { status: api.callState.status, transport: api.callState.webrtcState, mediaError: api.mediaError, voiceEnabled: api.voiceEnhancementEnabled, participants: api.groupCallParticipants.map(member => ({ id: member.id, camera: Boolean(member.cameraStream), video: Boolean(member.videoStream) })) }]))
