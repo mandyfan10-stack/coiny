@@ -234,3 +234,70 @@ test('forwarding fits the visual viewport above a mobile keyboard', async ({ pag
  await dialog.getByRole('textbox', { name: 'Комментарий к пересылке' }).fill('Комментарий с клавиатурой');
  await expect(dialog.getByRole('button', { name: 'Отправить', exact: true })).toBeInViewport();
 });
+
+test('selection replaces the header, keeps controls separate and lets message taps toggle without opening media', async ({ page }) => {
+ for (const width of [320, 390, 768, 1024, 1920]) {
+  await page.setViewportSize({ width: await page.evaluate(() => navigator.maxTouchPoints > 0) ? 390 : 1024, height: 600 });
+  await open(page);
+  const header = await page.locator('.chat-header').boundingBox();
+  await action(page, 'one', 'Выбрать');
+  await page.setViewportSize({ width, height:600 });
+  const toolbar = page.getByRole('toolbar', { name: 'Выбранные сообщения' });
+  await expect(toolbar).toBeVisible();
+  await expect(page.locator('.chat-header')).toHaveCount(1);
+  expect((await toolbar.boundingBox()).height).toBe(header.height);
+  await expect(page.locator('.message-hover-actions-fixed')).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: 'Действия с сообщением' })).toHaveCount(0);
+  for (const id of ['one', 'two', 'three']) {
+   const row = page.locator(`[data-message-id="${id}"]`);
+   const target = await row.locator('.message-select-target').boundingBox();
+   const bubble = await row.locator('.message-bubble').boundingBox();
+   expect(target.x + target.width).toBeLessThanOrEqual(bubble.x);
+   expect(bubble.x + bubble.width).toBeLessThanOrEqual(width + 1);
+   expect(await row.locator('input').evaluate(el => getComputedStyle(el).borderRadius)).toBe('50%');
+  }
+  await page.locator('[data-message-id="two"] .message-bubble').click();
+  await expect(toolbar).toContainText('Выбрано: 2');
+  await page.locator('[data-message-id="two"] .message-bubble').click();
+  await expect(toolbar).toContainText('Выбрано: 1');
+  await toolbar.getByRole('button', { name: 'Отменить выбор' }).press('Escape');
+  await expect(toolbar).toHaveCount(0);
+  await expect(input(page)).toBeFocused();
+ }
+});
+
+test('selected image fits beside the round marker on low screens and clicking it does not open the viewer', async ({ page }, testInfo) => {
+ await open(page);
+ await page.evaluate(() => {
+  const chats = window.__messageOperations.chats;
+  chats[0].messages = [{ id:'photo', senderId:'peer', text:'', media:'/code_story.png', timestamp:'2026-10-18T10:03:00Z' }];
+  localStorage.setItem('operations-messages', JSON.stringify(chats));
+ });
+ for (const width of [320, 390, 768, 1024, 1920]) {
+  await page.setViewportSize({ width: await page.evaluate(() => navigator.maxTouchPoints > 0) ? 390 : 1024, height:360 });
+  await page.reload();
+  const row=page.locator('[data-message-id="photo"]');
+  await expect(row.locator('img').last()).toBeVisible();
+  // Enter via the same production control as a user, including the touch sheet.
+  if (await page.evaluate(() => matchMedia('(min-width:769px) and (hover:hover) and (pointer:fine)').matches)) {
+   await row.locator('.message-bubble').hover();
+   await page.locator('[data-message-actions-for="photo"]').getByRole('button',{name:'Выбрать',exact:true}).click();
+  } else {
+   await row.locator('.message-bubble').dispatchEvent('contextmenu');
+   await page.getByRole('menuitem',{name:'Выбрать',exact:true}).click();
+  }
+  await page.setViewportSize({width,height:360});
+  const toolbar=page.getByRole('toolbar',{name:'Выбранные сообщения'});
+  await expect(toolbar).toContainText('Выбрано: 1');
+  const marker=await row.locator('.message-select-target').boundingBox();
+  const bubble=await row.locator('.message-bubble').boundingBox();
+  expect(marker.x+marker.width).toBeLessThanOrEqual(bubble.x);
+  expect(bubble.x+bubble.width).toBeLessThanOrEqual(width+1);
+  expect(bubble.y).toBeGreaterThanOrEqual((await toolbar.boundingBox()).y+(await toolbar.boundingBox()).height);
+  if (width===390 || width===1024) await page.screenshot({path:testInfo.outputPath(`selection-image-${width}.png`)});
+  await row.locator('img').last().click();
+  await expect(toolbar).toContainText('Выбрано: 0');
+  await expect(toolbar.getByRole('button',{name:'Переслать'})).toBeDisabled();
+  await expect(page.getByRole('dialog',{name:'Просмотр изображения'})).toHaveCount(0);
+ }
+});

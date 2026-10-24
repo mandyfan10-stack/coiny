@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
+import { initializePasswordRecovery, getPasswordRecoverySnapshot } from './utils/passwordRecovery.js';
+import { createBrowserAuthStorage } from './utils/authStorage.js';
 
 // Supabase is opt-in. Without both values the app deliberately runs in the
 // local mock mode described in README instead of silently connecting to a
@@ -79,13 +81,35 @@ function requestAuthLock(name, acquireTimeout, execute) {
   });
 }
 
+export const authStorage = createBrowserAuthStorage(supabaseProjectUrl);
+// Recovery is a temporary session even when a previous login was remembered.
+if (getPasswordRecoverySnapshot().status !== 'idle') {
+  // Opening an invalid link must not move/remove an existing remembered login.
+  authStorage.setRememberMe(false, { savePreference: false, migrateSession: false });
+}
+
 export const supabase = isSupabaseConfigured
   ? createClient(supabaseProjectUrl, supabasePublishableKey, {
       auth: {
         persistSession: true,
+        storage: authStorage.storage,
         autoRefreshToken: true,
         detectSessionInUrl: false,
         lock: requestAuthLock
       }
     })
   : null;
+
+if (supabase) {
+  const onAuthStateChange = supabase.auth.onAuthStateChange.bind(supabase.auth);
+  // Auth-js broadcasts events across tabs without copying the receiving tab's
+  // session storage. Only apply events belonging to this tab's actual session.
+  supabase.auth.onAuthStateChange = callback => onAuthStateChange((event, session) => {
+    if (authStorage.acceptsSession(session)) return callback(event, session);
+  });
+}
+
+// Explicit recovery handling keeps ordinary URL fragments from establishing sessions.
+void initializePasswordRecovery(supabase?.auth, () => createClient(supabaseProjectUrl, supabasePublishableKey, {
+  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'coiny-password-update' },
+}).auth);

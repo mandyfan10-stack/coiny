@@ -17,7 +17,8 @@ test('auth state callbacks do not await Supabase profile calls directly', () => 
   assert.match(authContext, /AUTH_BOOTSTRAP_TIMEOUT_MS/);
   assert.match(authContext, /AUTH_PROFILE_TIMEOUT_MS/);
   assert.match(authContext, /setTimeout\(async \(\) =>/);
-  assert.match(authContext, /signOut\(\{ scope: 'local' \}\)/);
+  assert.match(authContext, /retryAuthProfile/);
+  assert.match(authContext, /setAuthError/);
   const listenerStart = authContext.indexOf('onAuthStateChange');
   assert.ok(listenerStart > 0);
   assert.doesNotMatch(authContext.slice(listenerStart, listenerStart + 280), /getSession/);

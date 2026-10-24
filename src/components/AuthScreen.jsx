@@ -3,7 +3,7 @@ import IconButton from './ui/IconButton';
 import './AuthScreen.css';
 import React, { useState, useMemo, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { isSupabaseConfigured } from '../supabaseClient';
+import { isSupabaseConfigured, authStorage } from '../supabaseClient';
 import { getPendingInvite } from '../utils/inviteLink';
 import coinyLogo from '../assets/logo.png';
 import {
@@ -29,7 +29,7 @@ export default function AuthScreen() {
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
+  const [rememberMe, setRememberMe] = useState(() => authStorage.getRememberMe());
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
   const [capsLockActive, setCapsLockActive] = useState(false);
@@ -145,7 +145,7 @@ export default function AuthScreen() {
     setLoading(true);
     setErrorMsg('');
     try {
-      const { error } = await signInWithIdentifier('alex_dev', '123456');
+      const { error } = await signInWithIdentifier('alex_dev', '123456', { rememberMe });
       if (error) setErrorMsg(error.message);
     } catch (err) {
       console.error(err);
@@ -197,7 +197,7 @@ export default function AuthScreen() {
     setLoading(true);
     try {
       if (isLogin) {
-        const { error } = await signInWithIdentifier(identifier.toLowerCase(), password);
+        const { error } = await signInWithIdentifier(identifier.toLowerCase(), password, { rememberMe });
         if (error) {
           setErrorMsg(error.message || 'Ошибка при входе. Проверьте логин и пароль.');
         }
@@ -205,7 +205,8 @@ export default function AuthScreen() {
         const { error } = await signUpWithUsername(
           username.trim().toLowerCase(),
           password,
-          displayName.trim() || username.trim()
+          displayName.trim() || username.trim(),
+          { rememberMe }
         );
         if (error) {
           setErrorMsg(error.message || 'Ошибка при регистрации. Возможно, имя пользователя уже занято.');

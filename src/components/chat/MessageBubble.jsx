@@ -11,7 +11,8 @@ import {
   Mic,
   Pencil,
   Forward,
-  CheckSquare
+  CheckSquare,
+  Check
 } from 'lucide-react';
 import { normalizeReaction } from '../../utils/reactionUtils';
 import { SingleCheck, DoubleCheck, PendingClock } from './messageStatusIcons';
@@ -155,7 +156,7 @@ export default function MessageBubble({
   const [hoverActionsStyle, setHoverActionsStyle] = useState(null);
   const [canHover, setCanHover] = useState(() => window.matchMedia('(min-width: 769px) and (hover: hover) and (pointer: fine)').matches);
   const [drawerStyle, setDrawerStyle] = useState(null);
-  const isReactionOpen = showMsgActionsId === msg.id;
+  const isReactionOpen = !selectionMode && showMsgActionsId === msg.id;
 
   // useMessageTouch provides isInteractiveTarget filtering voice-play-btn, audio-progress-container, failed-message-menu, reaction-badge and swipe-to-reply
   const touchHandlers = useMessageTouch({
@@ -170,7 +171,7 @@ export default function MessageBubble({
   });
 
   const bubbleRef = useRef(null);
-  const showHoverActions = canHover && (showMsgActionsId ? isReactionOpen : hoveredMessageId === msg.id);
+  const showHoverActions = !selectionMode && canHover && (showMsgActionsId ? isReactionOpen : hoveredMessageId === msg.id);
 
   const revealHoverActions = useCallback(() => {
     clearTimeout(hoverLeaveTimerRef.current);
@@ -253,11 +254,11 @@ export default function MessageBubble({
     };
   }, [showHoverActions, repositionHoverActions]);
 
-  const handleBubblePointerDown = touchHandlers.handleBubblePointerDown;
-  const handleBubblePointerMove = touchHandlers.handleBubblePointerMove;
-  const handleBubblePointerUp = touchHandlers.handleBubblePointerUp;
+  const handleBubblePointerDown = selectionMode ? undefined : touchHandlers.handleBubblePointerDown;
+  const handleBubblePointerMove = selectionMode ? undefined : touchHandlers.handleBubblePointerMove;
+  const handleBubblePointerUp = selectionMode ? undefined : touchHandlers.handleBubblePointerUp;
   const clearLongPress = touchHandlers.clearLongPress;
-  const handleContextMenu = touchHandlers.onContextMenu;
+  const handleContextMenu = selectionMode ? event => event.preventDefault() : touchHandlers.onContextMenu;
   const swipeOffset = touchHandlers.swipeOffset;
   const isSwiping = touchHandlers.isSwiping;
 
@@ -370,7 +371,13 @@ export default function MessageBubble({
   return (
     <div
       key={msg.id}
-      className={`message-row ${isMe ? 'row-me' : 'row-other'} ${isFirstInGroup ? 'group-first' : ''} ${isLastInGroup ? 'group-last' : ''} ${selected ? 'message-selected' : ''}`}
+      className={`message-row ${isMe ? 'row-me' : 'row-other'} ${isFirstInGroup ? 'group-first' : ''} ${isLastInGroup ? 'group-last' : ''} ${selected ? 'message-selected' : ''} ${selectionMode ? 'message-selecting' : ''}`}
+      onClickCapture={selectionMode ? event => {
+        if (event.target.closest('.message-select-target')) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (forwardable) onSelect?.(msg);
+      } : undefined}
       data-message-id={msg.id}
       data-message-timestamp={msg.timestamp == null ? undefined : new Date(msg.timestamp).getTime()}
       data-message-sender-id={msg.senderId}
@@ -380,7 +387,10 @@ export default function MessageBubble({
         }
       }}
     >
-      {selectionMode && <input type="checkbox" className="message-select-control" aria-label="Выбрать сообщение" checked={selected} disabled={!forwardable} onChange={() => onSelect?.(msg)}/>}
+      {selectionMode && <label className="message-select-target">
+        <input type="checkbox" className="message-select-control" aria-label="Выбрать сообщение" checked={selected} disabled={!forwardable} onChange={() => onSelect?.(msg)}/>
+        <Check className="message-select-check" size={16} strokeWidth={3} aria-hidden="true"/>
+      </label>}
       {/* Group Avatar for incoming messages */}
       {isGroupOther && (
         <div className="message-avatar-col">

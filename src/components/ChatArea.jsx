@@ -3,7 +3,7 @@ import { useChat } from '../context/ChatContext';
 import './ChatArea.css';
 import coinyLogo from '../assets/logo.png';
 import { supabase, isSupabaseConfigured } from '../supabaseClient';
-import { ArrowDown, WifiOff } from 'lucide-react';
+import { ArrowDown, WifiOff, X, Forward } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useE2EE } from '../context/E2EEContext';
 import {
@@ -155,6 +155,8 @@ export default function ChatArea() {
   const [operationError, setOperationError] = useState('');
   const [sending, setSending] = useState(false);
   const [selection, setSelection] = useState(null);
+  const selectionCancelRef = useRef(null);
+  const isSelecting = selection !== null;
   const [forwarding, setForwarding] = useState(null);
   const closeForwarding = useCallback(() => { setForwarding(null); setSelection(null); requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true })); }, []);
   const draftOwner = `${currentUser?.id}:${activeChat?.id}`;
@@ -248,6 +250,25 @@ export default function ChatArea() {
 
   const emojis = ['😀', '😂', '😍', '👍', '🔥', '🎉', '👏', '❤️', '🤔', '👀', '✨', '🚀', '💯', '😎'];
   const [hoveredMessageId, setHoveredMessageId] = useState(null);
+  useEffect(() => {
+    if (!isSelecting) return;
+    setShowMsgActionsId(null);
+    setHoveredMessageId(null);
+    setRetryMenuMsgId(null);
+    selectionCancelRef.current?.focus({ preventScroll: true });
+  }, [isSelecting]);
+  useEffect(() => {
+    if (!isSelecting || forwarding) return;
+    const cancel = event => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      setSelection(null);
+      textareaRef.current?.focus({ preventScroll: true });
+    };
+    document.addEventListener('keydown', cancel, true);
+    return () => document.removeEventListener('keydown', cancel, true);
+  }, [isSelecting, forwarding]);
   useEffect(() => {
     setHoveredMessageId(null);
     setShowMsgActionsId(null);
@@ -1724,7 +1745,13 @@ function formatDateDivider(timestamp) {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      <ChatHeader
+      {selection !== null ? (
+        <div className="message-selection-bar chat-header" role="toolbar" aria-label="Выбранные сообщения">
+          <button ref={selectionCancelRef} type="button" aria-label="Отменить выбор" onClick={() => { setSelection(null); textareaRef.current?.focus({ preventScroll: true }); }}><X size={22}/></button>
+          <span className="message-selection-count" role="status" aria-live="polite">Выбрано: {selection.size}</span>
+          <button className="message-selection-forward" aria-label="Переслать" type="button" disabled={!selection.size} onClick={() => setForwarding(activeChat.messages.filter(message => selection.has(message.id)))}><Forward size={22}/><span>Переслать</span></button>
+        </div>
+      ) : <ChatHeader
         activeChat={activeChat}
         renderAvatar={renderAvatar}
         getChatStatus={getChatStatus}
@@ -1735,7 +1762,7 @@ function formatDateDivider(timestamp) {
         setActiveChatId={setActiveChatId}
         isSearchOpen={isSearchOpen}
         onToggleSearch={handleToggleSearch}
-      />
+      />}
       {isSearchOpen && (
         <ChatSearchBar
           searchQuery={searchQuery}
@@ -1754,11 +1781,6 @@ function formatDateDivider(timestamp) {
         </div>
       )}
 
-      {selection !== null && <div className="message-selection-bar" role="toolbar" aria-label="Выбранные сообщения">
-        <button type="button" aria-label="Отменить выбор" onClick={() => setSelection(null)}>✕</button>
-        <span>Выбрано: {selection.size}</span>
-        <button type="button" disabled={!selection.size} onClick={() => setForwarding(activeChat.messages.filter(message => selection.has(message.id)))}>Переслать</button>
-      </div>}
       {forwarding && <ForwardMessageDialog sourceChat={activeChat} messages={forwarding} currentUser={currentUser} onClose={closeForwarding}/>}
       {/* Messages Window */}
       <div

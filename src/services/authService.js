@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured, isMockMode } from '../supabaseClient';
+import { getPasswordRecoveryRedirectUrl } from '../utils/passwordRecovery';
 import {
   validateAuthUsername,
   validateAuthEmail,
@@ -104,12 +105,35 @@ export const authService = {
         }
       }
 
-      return {
-        error: mapSupabaseAuthError(
-          lastError || new Error('Ошибка при входе. Проверьте логин и пароль.'),
-          'signin'
-        )
-      };
+      // Accounts with a linked real email no longer have a synthetic Auth
+      // address. Resolve it only inside the server, then verify the password
+      // there. Never restore the public email-disclosing legacy resolver.
+      try {
+        const { data, error } = await supabase.functions.invoke('username-login', {
+          body: { username: cleanUsername, password },
+          timeout: 12_000
+        });
+        if (error || data?.error) {
+          let failure = data?.error;
+          if (!failure && error?.context?.json) {
+            try { failure = (await error.context.json())?.error; } catch { /* Generic availability error below. */ }
+          }
+          const status = error?.context?.status;
+          if (status === 401 || failure?.code === 'invalid_credentials') return { error: mapSupabaseAuthError(lastError, 'signin') };
+          if (status === 429 || failure?.code === 'over_request_rate_limit') {
+            return { error: mapSupabaseAuthError({ code: 'over_request_rate_limit' }, 'signin') };
+          }
+          return { error: new Error('Сервис входа временно недоступен. Попробуйте позже.') };
+        }
+        if (!data?.session?.access_token || !data?.session?.refresh_token) {
+          return { error: new Error('Сервис входа временно недоступен. Попробуйте позже.') };
+        }
+        const result = await supabase.auth.setSession(data.session);
+        if (result.error) return { error: mapSupabaseAuthError(result.error, 'signin') };
+        return { data: { id: result.data.user.id } };
+      } catch {
+        return { error: new Error('Сервис входа временно недоступен. Попробуйте позже.') };
+      }
     }
 
     if (isEmailIdentifier) {
@@ -181,7 +205,7 @@ export const authService = {
 
       if (isSupabaseConfigured) {
         const { data, error } = await supabase.auth.resetPasswordForEmail(validated.email, {
-          redirectTo: typeof window !== 'undefined' ? `${window.location.origin}/#reset-password` : undefined
+          redirectTo: getPasswordRecoveryRedirectUrl()
         });
         if (error) return { error: mapSupabaseAuthError(error, 'reset') };
         return { data: data || { ok: true, email: validated.email } };

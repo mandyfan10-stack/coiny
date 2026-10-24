@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
+import React, { createContext, useContext, useState, useEffect, useRef, useSyncExternalStore } from 'react';
+import { supabase, authStorage } from '../supabaseClient';
 import { dataService } from '../services/dataLayer';
+import { getPasswordRecoverySnapshot, subscribePasswordRecovery } from '../utils/passwordRecovery.js';
 import { clearLocalAppData } from '../utils/localDataCleanup.js';
 
 export const AuthContext = createContext();
@@ -27,45 +28,62 @@ function withTimeout(promise, ms, label) {
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [authError, setAuthError] = useState(null);
+  const currentUserRef = useRef(currentUser);
+  currentUserRef.current = currentUser;
+  const retryProfileRef = useRef(() => {});
+  const authGenerationRef = useRef(0);
+  const accountActivityRef = useRef(0);
+  const passwordRecovery = useSyncExternalStore(subscribePasswordRecovery, getPasswordRecoverySnapshot);
+  const retryAuthProfile = () => retryProfileRef.current();
 
   // Listen to auth changes (Supabase vs Mock)
   useEffect(() => {
     if (dataService.isLive()) {
       let cancelled = false;
       let authRequestId = 0;
-
+      let authEventVersion = 0;
+      let receivedLiveEvent = false;
+      let latestSession = null;
+      let pendingCleanup = Promise.resolve();
+      const clearPreviousAccount = () => {
+        pendingCleanup = pendingCleanup.then(() => clearLocalAppData()).catch((error) => {
+          console.warn('Failed to clear local application data after session loss:', error);
+        });
+      };
       const applySession = (session) => {
         const requestId = ++authRequestId;
-
-        if (!session) {
-          setCurrentUser(previousUser => {
-            if (previousUser?.id) {
-              void clearLocalAppData().catch((error) => {
-                console.warn('Failed to clear local application data after session loss:', error);
-              });
-            }
-            return null;
-          });
+        if (session) accountActivityRef.current += 1;
+        if (latestSession?.user.id !== session?.user.id) authGenerationRef.current += 1;
+        latestSession = session;
+        const previousUser = currentUserRef.current;
+        const recoveryActive = getPasswordRecoverySnapshot().status !== 'idle';
+        if (!session || recoveryActive || previousUser?.id !== session.user.id) {
+          currentUserRef.current = null;
+          setCurrentUser(null);
+          if (previousUser?.id) clearPreviousAccount();
+        }
+        setAuthError(null);
+        if (!session || recoveryActive) {
           setAuthLoading(false);
           return;
         }
+        if (!currentUserRef.current) setAuthLoading(true);
 
-        // Supabase warns against awaiting other client calls directly inside
-        // onAuthStateChange because it can deadlock the auth client.
+        // Keep client calls outside the synchronous Supabase auth callback.
         setTimeout(async () => {
           try {
+            await pendingCleanup;
+            if (cancelled || requestId !== authRequestId) return;
             const profile = await withTimeout(
               dataService.fetchProfile(session.user.id),
               AUTH_PROFILE_TIMEOUT_MS,
               'fetchProfile'
             );
             if (cancelled || requestId !== authRequestId) return;
-            if (!profile) {
-              await supabase.auth.signOut({ scope: 'local' });
-              return;
-            }
+            if (!profile) throw new Error('Профиль аккаунта не найден.');
 
-            setCurrentUser({
+            const user = {
               id: profile.id,
               email: session.user.email || '',
               name: profile.display_name,
@@ -79,48 +97,52 @@ export const AuthProvider = ({ children }) => {
               has_e2ee: profile.has_e2ee,
               public_key: profile.public_key,
               notificationsEnabled: localStorage.getItem(`coingram-notifications-${profile.id}`) !== 'false'
-            });
+            };
+            currentUserRef.current = user;
+            setCurrentUser(user);
           } catch (error) {
             if (!cancelled && requestId === authRequestId) {
-              const errorCode = error?.code ? ` [${error.code}]` : '';
-              console.error(`Failed to load authenticated profile${errorCode}: ${error?.message || String(error)}`);
+              console.error('Failed to load authenticated profile:', error?.message || String(error));
+              // A refresh failure must not remove an already loaded account.
+              if (!currentUserRef.current) {
+                setAuthError('Не удалось загрузить профиль. Проверьте соединение и попробуйте ещё раз.');
+              }
             }
           } finally {
-            if (!cancelled && requestId === authRequestId) {
-              setAuthLoading(false);
-            }
+            if (!cancelled && requestId === authRequestId) setAuthLoading(false);
           }
         }, 0);
       };
-
-      // Recover the persisted session immediately. INITIAL_SESSION from the
-      // listener can stall behind navigator.locks / token refresh.
-      supabase.auth.getSession()
-        .then(({ data }) => {
-          if (!cancelled) applySession(data?.session ?? null);
-        })
-        .catch((error) => {
-          console.warn('Auth session bootstrap failed:', error);
-        });
-
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const recoverSession = () => {
+        const bootstrapVersion = authEventVersion;
+        setAuthError(null);
+        setAuthLoading(true);
+        return withTimeout(supabase.auth.getSession(), AUTH_BOOTSTRAP_TIMEOUT_MS, 'getSession')
+          .then(({ data, error }) => {
+            if (cancelled || bootstrapVersion !== authEventVersion) return;
+            if (error) throw error;
+            applySession(data?.session ?? null);
+          })
+          .catch((error) => {
+            if (cancelled || bootstrapVersion !== authEventVersion) return;
+            console.warn('Auth session bootstrap failed:', error);
+            setAuthError('Не удалось восстановить вход. Проверьте соединение и попробуйте ещё раз.');
+            setAuthLoading(false);
+          });
+      };
+      retryProfileRef.current = () => latestSession ? applySession(latestSession) : recoverSession();
+      // A bootstrap snapshot is only valid until the first newer auth event.
+      void recoverSession();
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'INITIAL_SESSION' && receivedLiveEvent) return;
+        if (event !== 'INITIAL_SESSION') receivedLiveEvent = true;
+        authEventVersion += 1;
         applySession(session);
       });
-
-      const bootstrapTimer = setTimeout(() => {
-        if (cancelled) return;
-        setAuthLoading((stillLoading) => {
-          if (stillLoading) {
-            console.warn('Auth bootstrap timed out; showing the login screen.');
-          }
-          return false;
-        });
-      }, AUTH_BOOTSTRAP_TIMEOUT_MS);
-
       return () => {
         cancelled = true;
         authRequestId += 1;
-        clearTimeout(bootstrapTimer);
+        retryProfileRef.current = () => {};
         subscription?.unsubscribe();
       };
     } else {
@@ -138,11 +160,13 @@ export const AuthProvider = ({ children }) => {
       setAuthLoading(false);
     }
   }, []);
-  const signUpWithUsername = async (username, password, displayName) => {
+  const signUpWithUsername = async (username, password, displayName, options = {}) => {
+    if (typeof options.rememberMe === 'boolean') authStorage.setRememberMe(options.rememberMe);
     return await dataService.signUp(username, password, displayName);
   };
 
-  const signInWithIdentifier = async (identifier, password) => {
+  const signInWithIdentifier = async (identifier, password, options = {}) => {
+    if (typeof options.rememberMe === 'boolean') authStorage.setRememberMe(options.rememberMe);
     const result = await dataService.signIn(identifier, password);
     if (result.data && !dataService.isLive()) {
       setCurrentUser(result.data);
@@ -161,10 +185,14 @@ export const AuthProvider = ({ children }) => {
       return { error: new Error('Изменение email доступно только в live-режиме Supabase.') };
     }
 
+    const ownerId = currentUser?.id;
+    const generation = authGenerationRef.current;
+    if (!ownerId) return { cancelled: true };
     const { data, error } = await supabase.auth.updateUser({ email: normalizedEmail });
+    if (generation !== authGenerationRef.current || currentUserRef.current?.id !== ownerId) return { cancelled: true };
     if (error) return { error };
 
-    setCurrentUser(previous => previous ? {
+    setCurrentUser(previous => generation === authGenerationRef.current && previous?.id === ownerId ? {
       ...previous,
       email: data.user?.email || normalizedEmail
     } : previous);
@@ -176,11 +204,18 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logOut = async () => {
+    const activity = accountActivityRef.current;
+    authGenerationRef.current += 1;
     await dataService.signOut();
+    if (activity !== accountActivityRef.current) return { cancelled: true };
     try {
       await clearLocalAppData();
     } finally {
-      setCurrentUser(null);
+      if (activity === accountActivityRef.current) {
+        currentUserRef.current = null;
+        setCurrentUser(previous => activity === accountActivityRef.current ? null : previous);
+        setAuthError(null);
+      }
     }
   };
 
@@ -207,6 +242,9 @@ export const AuthProvider = ({ children }) => {
       currentUser,
       setCurrentUser,
       authLoading,
+      authError,
+      retryAuthProfile,
+      passwordRecovery,
       signUpWithUsername,
       signInWithIdentifier,
       signInWithUsername,

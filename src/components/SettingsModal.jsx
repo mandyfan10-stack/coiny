@@ -277,6 +277,7 @@ export default function SettingsModal() {
     setEmailStatus(emptyStatus);
     try {
       const result = await updateEmail(nextEmail);
+      if (result?.cancelled) return;
       if (result?.error) throw result.error;
       setBaseline(previous => ({ ...previous, email: nextEmail }));
       setEmailStatus({ text: 'Письмо для подтверждения нового email отправлено.', type: 'success' });

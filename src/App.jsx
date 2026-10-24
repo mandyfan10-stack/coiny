@@ -9,6 +9,8 @@ import ChatArea from './components/ChatArea';
 import ChatInfo from './components/ChatInfo';
 import StoryViewer from './components/StoryViewer';
 import AuthScreen from './components/AuthScreen';
+import AuthSessionStatus from './components/AuthSessionStatus';
+import PasswordRecoveryScreen from './components/PasswordRecoveryScreen';
 import NewChatModal from './components/NewChatModal';
 import CreateStoryModal from './components/CreateStoryModal';
 import MainMenuDrawer from './components/MainMenuDrawer';
@@ -104,7 +106,7 @@ const isNewerVersion = (latest, current) => {
 };
 
 function MainLayout() {
-  const { currentUser, authLoading } = useAuth();
+  const { currentUser, authLoading, authError, passwordRecovery } = useAuth();
   const {
     activeChatId,
     setActiveChatId,
@@ -215,6 +217,8 @@ function MainLayout() {
     initNotificationService();
   }, []);
 
+  if (passwordRecovery?.status && passwordRecovery.status !== 'idle') return <PasswordRecoveryScreen />;
+
   if (authLoading) {
     return (
       <div className="auth-loading-screen">
@@ -223,6 +227,8 @@ function MainLayout() {
       </div>
     );
   }
+
+  if (authError && !currentUser) return <AuthSessionStatus />;
 
   if (!currentUser) {
     return <AuthScreen />;
