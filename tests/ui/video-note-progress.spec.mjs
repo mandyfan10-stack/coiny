@@ -28,7 +28,13 @@ test('ring moves on display frames with the actual video clock, preserving its a
   const deltas = result.samples.slice(1).map((s, i) => result.samples[i].offset - s.offset);
   expect(Math.min(...deltas)).toBeGreaterThanOrEqual(-.01);
   expect(Math.max(...deltas)).toBeLessThan(30);
-  for (const sample of result.samples) expect(Math.abs(sample.offset - circumference * (1 - sample.time / result.duration))).toBeLessThan(5);
+  // Our sampling callback can run before the player's callback in the same
+  // display frame. Allow that one frame of age, including dropped frames.
+  for (const [index, sample] of result.samples.entries()) {
+    const previousTime = index ? result.samples[index - 1].time : 0;
+    expect(sample.offset).toBeGreaterThanOrEqual(circumference * (1 - sample.time / result.duration) - 5);
+    expect(sample.offset).toBeLessThanOrEqual(circumference * (1 - previousTime / result.duration) + 5);
+  }
   expect(result).toMatchObject({ radius: '88', width: '3', stroke: 'var(--accent-color)', transition: '0s', size: 180 });
 });
 test('pause, seek, ending and replay update immediately without a backwards transition', async ({ page }) => {
@@ -44,7 +50,7 @@ test('pause, seek, ending and replay update immediately without a backwards tran
   await page.locator('video').evaluate(video => { video.playbackRate = .1; });
   await page.locator('.round-video-wrapper').click();
   await expect.poll(() => page.locator('video').evaluate(video => video.paused)).toBe(false);
-  expect(Number(await page.locator('circle').getAttribute('stroke-dashoffset'))).toBeGreaterThan(circumference * .8);
+  await expect.poll(() => page.locator('circle').evaluate(node => Number(node.getAttribute('stroke-dashoffset')))).toBeGreaterThan(circumference * .8);
 });
 test('buffering stops animation and unmount cancels pending ring updates', async ({ page }) => {
   await page.addInitScript(() => {

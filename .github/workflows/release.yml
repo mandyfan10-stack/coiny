@@ -15,6 +15,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  VITE_TENOR_API_KEY: ${{ secrets.VITE_TENOR_API_KEY }}
   NODE_VERSION: '24'
   VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
   VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
@@ -54,6 +55,7 @@ jobs:
 
       - name: Require live QA secrets
         run: |
+          test -n "$VITE_TENOR_API_KEY"
           test -n "$VITE_SUPABASE_URL"
           test -n "$VITE_SUPABASE_PUBLISHABLE_KEY"
           test -n "$E2E_USER_A"

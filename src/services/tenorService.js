@@ -107,7 +107,7 @@ export async function fetchTrendingTenorGifs(pos = null, limit = 20) {
   if (TENOR_API_KEY) {
     try {
       const data = await fetchTenor('featured', { limit, pos });
-      if (data && data.results && data.results.length > 0) {
+      if (data && Array.isArray(data.results)) {
         return {
           results: data.results.map(normalizeTenorItem),
           nextPos: data.next || null
@@ -133,7 +133,7 @@ export async function searchTenorGifs(query, pos = null, limit = 20, category = 
     try {
       const searchTarget = cleanQuery || category || '';
       const data = await fetchTenor('search', { q: searchTarget, limit, pos });
-      if (data && data.results && data.results.length > 0) {
+      if (data && Array.isArray(data.results)) {
         return {
           results: (data.results || []).map(normalizeTenorItem),
           nextPos: data.next || null

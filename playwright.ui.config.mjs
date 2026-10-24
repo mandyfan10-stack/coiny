@@ -8,13 +8,13 @@ export default defineConfig({
   projects: [
     { name: 'desktop', use: { viewport: { width: 1440, height: 900 } } },
     { name: 'mobile', use: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } },
-    { name: 'webkit-desktop', testMatch: /(reaction-hover|bubble-webkit|interface-redesign|secondary-interface|interface-navigation|settings-focus|call-signaling|call-transport|call-signal-session|call-media-order|call-group-lifetime|message-operations|account-isolation|story-replies|auth-login|auth-session|password-recovery|saved-messages|video-note-progress)\.spec\.mjs/, use: { browserName: 'webkit', viewport: { width: 1440, height: 900 } } },
-    { name: 'webkit', testMatch: /(bubble-webkit|interface-redesign|secondary-interface|interface-navigation|settings-focus|call-signaling|call-transport|call-signal-session|call-media-order|call-group-lifetime|message-operations|account-isolation|story-replies|auth-login|auth-session|password-recovery|saved-messages|video-note-progress)\.spec\.mjs/, use: { browserName: 'webkit', viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } }
+    { name: 'webkit-desktop', testMatch: /(reaction-hover|bubble-webkit|interface-redesign|secondary-interface|interface-navigation|settings-focus|call-signaling|call-transport|call-signal-session|call-media-order|call-group-lifetime|message-operations|account-isolation|story-replies|auth-login|auth-session|password-recovery|saved-messages|video-note-progress|gif-search)\.spec\.mjs/, use: { browserName: 'webkit', viewport: { width: 1440, height: 900 } } },
+    { name: 'webkit', testMatch: /(bubble-webkit|interface-redesign|secondary-interface|interface-navigation|settings-focus|call-signaling|call-transport|call-signal-session|call-media-order|call-group-lifetime|message-operations|account-isolation|story-replies|auth-login|auth-session|password-recovery|saved-messages|video-note-progress|gif-search)\.spec\.mjs/, use: { browserName: 'webkit', viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } }
   ],
   webServer: {
     command: 'npm run dev -- --mode ui-test --host 127.0.0.1 --port 5194 --strictPort',
     url: 'http://127.0.0.1:5194', reuseExistingServer: false, timeout: 60_000,
     // Deliberately synthetic public configuration; fixture providers never access an account.
-    env: { VITE_MOCK: 'false', VITE_SUPABASE_URL: 'https://audit.supabase.co', VITE_SUPABASE_PUBLISHABLE_KEY: 'fixture-public-key' }
+    env: { VITE_TENOR_API_KEY: 'fixture-tenor-key', VITE_MOCK: 'false', VITE_SUPABASE_URL: 'https://audit.supabase.co', VITE_SUPABASE_PUBLISHABLE_KEY: 'fixture-public-key' }
   }
 });

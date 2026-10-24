@@ -84,6 +84,14 @@ test('Tenor GIF service does not hardcode Google API keys', () => {
   assert.match(tenorServiceCode, /VITE_TENOR_API_KEY/);
 });
 
+test('all release builds receive the configured Tenor key', async () => {
+  const workflow = await readFile(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8');
+  const example = await readFile(new URL('../.env.example', import.meta.url), 'utf8');
+  assert.match(workflow, /env:[\s\S]*?VITE_TENOR_API_KEY: \$\{\{ secrets\.VITE_TENOR_API_KEY \}\}[\s\S]*?jobs:/);
+  assert.match(example, /^VITE_TENOR_API_KEY=/m);
+  assert.match(workflow, /test -n "\$VITE_TENOR_API_KEY"/);
+});
+
 test('Tenor categories contain 8 valid category definitions', () => {
   assert.equal(TENOR_CATEGORIES.length, 8);
   const ids = TENOR_CATEGORIES.map((c) => c.id);
