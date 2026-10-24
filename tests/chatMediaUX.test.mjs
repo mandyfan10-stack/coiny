@@ -22,9 +22,9 @@ test('chat images open in an in-app viewer', () => {
 
 test('round video messages stop when playback reaches the end', () => {
   const playerStart = mediaPlayers.indexOf('function VideoMessagePlayer');
-  const playerEnd = mediaPlayers.indexOf('export {', playerStart);
+  const playerEnd = mediaPlayers.indexOf('function RegularVideoPlayer', playerStart);
   const player = mediaPlayers.slice(playerStart, playerEnd === -1 ? undefined : playerEnd);
   assert.doesNotMatch(player, /\sloop(?:\s|=)/);
-  assert.match(player, /setProgress\(100\)/);
+  // Ring completion and replay are checked with actual playback in video-note-progress.spec.mjs.
   assert.match(player, /setHasEnded\(true\)/);
 });

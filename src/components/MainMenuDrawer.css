@@ -21,3 +21,6 @@
 .drawer-container button:focus-visible { outline: 2px solid var(--accent-color); outline-offset: -2px; }
 @media (max-height: 420px) { .drawer-header { padding-top: 8px; }.drawer-header-top { margin-bottom: 6px; }.drawer-user-avatar { width: 44px; height: 44px; font-size: 20px; }.drawer-footer { padding-block: 8px; } }
 @media (prefers-reduced-motion: reduce) { .drawer-overlay, .drawer-container { transition: none; } }
+
+.drawer-menu-item:disabled { cursor: wait; opacity: .6; }
+.drawer-saved-error { margin: 0; padding: 0 20px 12px; color: var(--danger-color, #d9534f); font-size: 13px; }

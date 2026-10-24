@@ -267,7 +267,9 @@ function VoiceMessagePlayer({ audioUrl, duration = 0 }) {
 function VideoMessagePlayer({ videoUrl }) {
   const videoRef = useRef(null);
   const [isMuted, setIsMuted] = useState(true);
-  const [progress, setProgress] = useState(0);
+  const progressRingRef = useRef(null);
+  const r = 88;
+  const circ = 2 * Math.PI * r;
   const [isPlaying, setIsPlaying] = useState(true);
   const [hasEnded, setHasEnded] = useState(false);
   const isCalculatingRef = useRef(false);
@@ -276,40 +278,95 @@ function VideoMessagePlayer({ videoUrl }) {
     const video = videoRef.current;
     if (!video) return;
 
-    const handleTimeUpdate = () => {
-      if (!isCalculatingRef.current && video.duration && video.duration !== Infinity) {
-        setProgress((video.currentTime / video.duration) * 100);
+    let frame = null;
+    let durationTimer = null;
+    let durationSeeked = null;
+    isCalculatingRef.current = false;
+
+    // Use the media clock on display frames instead of sparse timeupdate
+    // events. Update only the ring, without rerendering the message.
+    const drawProgress = () => {
+      if (isCalculatingRef.current) return;
+      const fraction = Number.isFinite(video.duration) && video.duration > 0
+        ? Math.min(1, Math.max(0, video.currentTime / video.duration)) : 0;
+      const offset = String(circ * (1 - fraction));
+      const ring = progressRingRef.current;
+      if (ring && ring.getAttribute('stroke-dashoffset') !== offset) {
+        ring.setAttribute('stroke-dashoffset', offset);
       }
     };
-
+    const stopFrames = () => {
+      if (frame !== null) cancelAnimationFrame(frame);
+      frame = null;
+    };
+    const tick = () => {
+      frame = null;
+      drawProgress();
+      if (!video.paused && !video.ended && !video.seeking && !document.hidden) {
+        frame = requestAnimationFrame(tick);
+      }
+    };
+    const startFrames = () => {
+      drawProgress();
+      if (frame === null && !video.paused && !video.ended && !video.seeking && !document.hidden) {
+        frame = requestAnimationFrame(tick);
+      }
+    };
+    const handleTimeUpdate = () => {
+      if (frame === null) drawProgress();
+    };
     const handleEnded = () => {
-      setProgress(100);
+      stopFrames();
+      drawProgress();
       setIsPlaying(false);
       setHasEnded(true);
     };
-
     const handlePlay = () => {
       setIsPlaying(true);
       setHasEnded(false);
+      drawProgress();
     };
-    const handlePause = () => setIsPlaying(false);
+    const handlePause = () => {
+      stopFrames();
+      drawProgress();
+      setIsPlaying(false);
+    };
+    const handleWaiting = () => {
+      stopFrames();
+      drawProgress();
+    };
+    const handleSeeked = () => startFrames();
+    const handleVisibility = () => {
+      if (document.hidden) stopFrames();
+      else startFrames();
+    };
 
     const handleDurationCompute = () => {
-      if (video.duration === Infinity) {
+      if (video.duration === Infinity && !isCalculatingRef.current) {
         isCalculatingRef.current = true;
         video.currentTime = 1e101;
         
-        const onSeeked = () => {
-          video.removeEventListener('seeked', onSeeked);
+        durationSeeked = () => {
+          video.removeEventListener('seeked', durationSeeked);
+          durationSeeked = null;
           video.currentTime = 0;
-          setTimeout(() => {
+          durationTimer = setTimeout(() => {
             isCalculatingRef.current = false;
+            startFrames();
           }, 150);
         };
-        video.addEventListener('seeked', onSeeked);
+        video.addEventListener('seeked', durationSeeked);
       }
     };
 
+    drawProgress();
+    const handleRateChange = () => drawProgress();
+    video.addEventListener('ratechange', handleRateChange);
+    video.addEventListener('playing', startFrames);
+    video.addEventListener('waiting', handleWaiting);
+    video.addEventListener('seeking', handleWaiting);
+    video.addEventListener('seeked', handleSeeked);
+    document.addEventListener('visibilitychange', handleVisibility);
     video.addEventListener('timeupdate', handleTimeUpdate);
     video.addEventListener('ended', handleEnded);
     video.addEventListener('play', handlePlay);
@@ -322,6 +379,15 @@ function VideoMessagePlayer({ videoUrl }) {
     });
 
     return () => {
+      stopFrames();
+      clearTimeout(durationTimer);
+      if (durationSeeked) video.removeEventListener('seeked', durationSeeked);
+      video.removeEventListener('ratechange', handleRateChange);
+      video.removeEventListener('playing', startFrames);
+      video.removeEventListener('waiting', handleWaiting);
+      video.removeEventListener('seeking', handleWaiting);
+      video.removeEventListener('seeked', handleSeeked);
+      document.removeEventListener('visibilitychange', handleVisibility);
       video.removeEventListener('timeupdate', handleTimeUpdate);
       video.removeEventListener('ended', handleEnded);
       video.removeEventListener('play', handlePlay);
@@ -329,7 +395,7 @@ function VideoMessagePlayer({ videoUrl }) {
       video.removeEventListener('loadedmetadata', handleDurationCompute);
       video.removeEventListener('durationchange', handleDurationCompute);
     };
-  }, [videoUrl]);
+  }, [videoUrl, circ]);
 
   const togglePlaybackAndMute = (e) => {
     e.stopPropagation();
@@ -359,9 +425,6 @@ function VideoMessagePlayer({ videoUrl }) {
     setIsMuted(video.muted);
   };
 
-  const r = 88;
-  const circ = 2 * Math.PI * r;
-  const strokeDashoffset = circ - (progress / 100) * circ;
 
   return (
     <div className="round-video-wrapper" onClick={togglePlaybackAndMute}>
@@ -376,6 +439,7 @@ function VideoMessagePlayer({ videoUrl }) {
       
       <svg className="video-progress-ring" viewBox="0 0 184 184">
         <circle
+          ref={progressRingRef}
           className="video-progress-ring-circle"
           cx="92"
           cy="92"
@@ -384,7 +448,7 @@ function VideoMessagePlayer({ videoUrl }) {
           strokeWidth="3"
           fill="transparent"
           strokeDasharray={circ}
-          strokeDashoffset={strokeDashoffset}
+          strokeDashoffset={circ}
           transform="rotate(-90 92 92)"
         />
       </svg>

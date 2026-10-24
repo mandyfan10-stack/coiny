@@ -1616,7 +1616,7 @@ html.theme-light .voice-seek-bar::-moz-range-track {
 }
 
 .video-progress-ring-circle {
-  transition: stroke-dashoffset 0.1s linear;
+  transition: none;
 }
 
 .video-mute-icon-overlay {

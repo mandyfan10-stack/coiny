@@ -272,6 +272,7 @@ export function useChatLoader({
       // Smart Pre-warming: quietly cache top chats in idle moments
       prewarmTopChats(updatedChats);
       saveCachedChatList(updatedChats, currentUserId);
+      return updatedChats;
     } catch (e) {
       if (isCurrentSession()) console.error('Failed to load chats', e);
     }

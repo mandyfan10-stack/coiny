@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { useChat } from '../context/ChatContext';
 import { useAuth } from '../context/AuthContext';
-import { isSupabaseConfigured, supabase } from '../supabaseClient';
+import { isSupabaseConfigured } from '../supabaseClient';
 import {
   UserCircle,
   Users,
@@ -87,6 +87,10 @@ export default function MainMenuDrawer() {
 
   const [isUploading, setIsUploading] = useState(false);
   const [isOpeningSaved, setIsOpeningSaved] = useState(false);
+  const [savedError, setSavedError] = useState('');
+  const savedSessionRef = useRef({ userId: currentUser?.id });
+  if (savedSessionRef.current.userId !== currentUser?.id) savedSessionRef.current = { userId: currentUser?.id };
+  useEffect(() => { setIsOpeningSaved(false); setSavedError(''); }, [currentUser?.id]);
   const avatarInputRef = useRef(null);
 
   const handleAvatarUpload = async (e) => {
@@ -117,22 +121,20 @@ export default function MainMenuDrawer() {
 
   const handleOpenSavedMessages = async () => {
     if (isOpeningSaved) return;
+    const session = savedSessionRef.current;
     setIsOpeningSaved(true);
-
+    setSavedError('');
     try {
-      if (openSavedMessages) {
-        await openSavedMessages();
-      } else if (isSupabaseConfigured) {
-        const { error: savedErr } = await supabase
-          .rpc('ensure_saved_messages_chat');
-        if (savedErr) throw savedErr;
-      }
+      const saved = await openSavedMessages?.();
+      if (savedSessionRef.current !== session) return;
+      if (!saved?.id) throw new Error('Saved messages unavailable');
       setIsDrawerOpen(false);
     } catch (e) {
+      if (savedSessionRef.current !== session) return;
       console.error("Failed to open/create Saved Messages chat", e);
-      alert("Не удалось открыть Избранное");
+      setSavedError('Не удалось открыть Избранное. Попробуйте ещё раз.');
     } finally {
-      setIsOpeningSaved(false);
+      if (savedSessionRef.current === session) setIsOpeningSaved(false);
     }
   };
 
@@ -232,10 +234,15 @@ export default function MainMenuDrawer() {
           <button
             className="drawer-menu-item"
             onClick={handleOpenSavedMessages}
+            disabled={isOpeningSaved}
+            aria-busy={isOpeningSaved}
+            aria-describedby={savedError ? "saved-messages-error" : undefined}
           >
             <Bookmark size={20} className="drawer-item-icon" />
-            <span className="drawer-item-text">Избранное</span>
+            <span className="drawer-item-text">{isOpeningSaved ? 'Открытие…' : 'Избранное'}</span>
           </button>
+
+          {savedError && <p id="saved-messages-error" className="drawer-saved-error" role="alert">{savedError}</p>}
 
           {/* Settings */}
           <button

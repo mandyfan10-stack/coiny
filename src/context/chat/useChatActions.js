@@ -655,7 +655,7 @@ export function useChatActions({
   }, [currentUser, setChats]);
 
   const openSavedMessages = useCallback(async (options = {}) => {
-    if (!currentUser) return null;
+    if (!currentUser || !isCurrentSession()) return null;
     const existing = chats.find((c) => isSavedMessagesChat(c, currentUser.id));
     if (existing) {
       if (options.activate !== false) setActiveChatId(existing.id);
@@ -665,16 +665,20 @@ export function useChatActions({
     if (dataService.isLive()) {
       try {
         const { supabase } = await import('../../supabaseClient');
+        if (!isCurrentSession()) return null;
         const { data: savedChatId, error: savedErr } = await supabase
           .rpc('ensure_saved_messages_chat');
+        if (!isCurrentSession()) return null;
         if (savedErr) throw savedErr;
-        if (fetchChats) await fetchChats();
-        if (savedChatId && options.activate !== false) {
-          setActiveChatId(savedChatId);
-        }
-        return savedChatId ? { id: savedChatId, name: 'Избранное' } : null;
+        if (!savedChatId) throw new Error('Saved messages ID is missing');
+        const refreshed = await fetchChats?.();
+        if (!isCurrentSession()) return null;
+        const saved = refreshed?.find((chat) => chat.id === savedChatId && isSavedMessagesChat(chat, currentUser.id));
+        if (!saved) throw new Error('Saved messages could not be loaded');
+        if (options.activate !== false) setActiveChatId(saved.id);
+        return saved;
       } catch (err) {
-        console.error('Failed to open saved messages:', err);
+        if (isCurrentSession()) console.error('Failed to open saved messages:', err);
         return null;
       }
     } else {
@@ -693,7 +697,7 @@ export function useChatActions({
       if (options.activate !== false) setActiveChatId(savedMock.id);
       return savedMock;
     }
-  }, [currentUser, chats, fetchChats, setActiveChatId, setChats]);
+  }, [currentUser, chats, fetchChats, setActiveChatId, setChats, isCurrentSession]);
 
   const joinChatByInvite = useCallback(async (invite) => {
     if (!currentUser) return null;
