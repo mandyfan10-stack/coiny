@@ -19,6 +19,7 @@ import { isMisconfigured } from './supabaseClient';
 import { initNotificationService } from './services/notificationService';
 import { parseInviteParam, savePendingInvite, clearInviteParamFromUrl } from './utils/inviteLink';
 import { useInviteHandler } from './hooks/useInviteHandler';
+import InviteLinkStatus from './components/InviteLinkStatus';
 import AppUpdateModal from './components/AppUpdateModal';
 // Shared by SettingsModal, NewChatModal, CreateStoryModal — must load with shell
 // so closed overlays never participate in app flex layout.
@@ -120,7 +121,7 @@ function MainLayout() {
   const [showUpdate, setShowUpdate] = useState(false);
   const [releaseInfo, setReleaseInfo] = useState(null);
 
-  useInviteHandler({
+  const inviteState = useInviteHandler({
     currentUser,
     chats,
     createChat,
@@ -242,6 +243,7 @@ function MainLayout() {
       onTouchEnd={handleGlobalTouchEnd}
     >
       <h1 className="sr-only" style={{ display: 'none' }}>Coiny</h1>
+      <InviteLinkStatus {...inviteState} />
       <Sidebar />
       <ChatArea />
       <ChatInfo />

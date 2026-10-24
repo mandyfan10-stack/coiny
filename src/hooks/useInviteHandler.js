@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import {
   parseInviteParam,
   clearInviteParamFromUrl,
@@ -8,11 +8,6 @@ import {
   cleanInviteIdentifier
 } from '../utils/inviteLink';
 
-/**
- * Handles incoming invite links when user is authenticated.
- * Resolves self-invites to Saved Messages, navigates to existing chats,
- * or creates a personal chat for a newly invited user.
- */
 export function useInviteHandler({
   currentUser,
   chats = [],
@@ -21,91 +16,95 @@ export function useInviteHandler({
   setActiveChatId,
   openSavedMessages
 }) {
-  const handledRef = useRef(null);
-  const isResolvingRef = useRef(false);
+  const requestRef = useRef(null);
+  const mountedRef = useRef(true);
+  const sessionRef = useRef({ userId: currentUser?.id });
+  if (sessionRef.current.userId !== currentUser?.id) {
+    sessionRef.current = { userId: currentUser?.id };
+    requestRef.current = null;
+  }
+  const session = sessionRef.current;
+  const [view, setView] = useState({ status: 'idle' });
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
-  const resolveTarget = useCallback(async (targetRaw) => {
-    if (!currentUser) return;
+  const resolveTarget = useCallback(async (targetRaw, retry = false) => {
+    if (!mountedRef.current || sessionRef.current !== session) return;
     const target = cleanInviteIdentifier(targetRaw);
     if (!target) return;
+    savePendingInvite(target);
+    if (!currentUser) return;
+    const previous = requestRef.current;
+    if (previous?.session === session && previous.target === target
+      && (previous.status === 'loading' || !retry)) return;
 
-    if (handledRef.current === target || isResolvingRef.current) return;
-
-    const cleanTarget = target.toLowerCase();
-    const currentUsername = (currentUser.username || '').toLowerCase();
-    const isSelf = cleanTarget === currentUsername || target === currentUser.id;
-
-    if (isSelf) {
-      handledRef.current = target;
-      clearPendingInvite();
-      if (openSavedMessages) {
-        await openSavedMessages();
-      }
-      return;
-    }
-
-    // Check if chat already exists in local list
-    const existing = chats.find((c) => {
-      if (c.username && c.username.toLowerCase() === cleanTarget) return true;
-      if (c.id === target) return true;
-      if (c.members && c.members.some((m) => (m.username && m.username.toLowerCase() === cleanTarget) || m.id === target)) {
-        return true;
-      }
-      return false;
-    });
-
-    if (existing) {
-      handledRef.current = target;
-      clearPendingInvite();
-      setActiveChatId(existing.id);
-      return;
-    }
-
-    // If chat does not exist, resolve and join via invite (group, channel, or personal)
-    isResolvingRef.current = true;
+    const request = { target, session, status: 'loading' };
+    requestRef.current = request;
+    const isCurrent = () => mountedRef.current && sessionRef.current === session && requestRef.current === request;
+    setView({ ...request, error: '' });
     try {
-      let resolvedChat = null;
-      if (joinChatByInvite) {
+      const cleanTarget = target.toLowerCase();
+      const isSelf = cleanTarget === (currentUser.username || '').toLowerCase() || target === currentUser.id;
+      const existing = !isSelf && chats.find((chat) => {
+        if (chat.id === target || chat.username?.toLowerCase() === cleanTarget) return true;
+        // A group containing this person is not their personal conversation.
+        return chat.type === 'personal' && chat.members?.some((member) =>
+          member.id !== currentUser.id && (member.id === target || member.username?.toLowerCase() === cleanTarget));
+      });
+      let resolvedChat;
+      if (isSelf) {
+        resolvedChat = await openSavedMessages?.({ activate: false });
+      } else if (existing) {
+        resolvedChat = existing;
+      } else if (joinChatByInvite) {
         resolvedChat = await joinChatByInvite(target);
-      } else if (createChat) {
-        resolvedChat = await createChat(target, 'personal');
+      } else {
+        resolvedChat = await createChat?.(target, 'personal', [], { activate: false, throwOnError: true });
       }
-
-      if (resolvedChat && resolvedChat.id) {
-        setActiveChatId(resolvedChat.id);
-      }
-    } catch (err) {
-      console.warn('Could not resolve invite link for target:', target, err);
-    } finally {
-      handledRef.current = target;
-      clearPendingInvite();
-      isResolvingRef.current = false;
+      if (!isCurrent()) return;
+      if (!resolvedChat?.id) throw new Error('Чат по ссылке не был открыт.');
+      setActiveChatId(resolvedChat.id);
+      request.status = 'success';
+      if (getPendingInvite() === target) clearPendingInvite();
+      setView({ status: 'idle' });
+    } catch (error) {
+      if (!isCurrent()) return;
+      request.status = 'error';
+      const message = error?.code === 'P0002'
+        ? 'Пользователь или чат по этой ссылке не найден.'
+        : error?.code === '42501'
+          ? 'Ссылка недействительна или доступ к чату закрыт.'
+          : 'Не удалось открыть чат по ссылке. Проверьте соединение и попробуйте ещё раз.';
+      setView({ ...request, error: message });
     }
-  }, [currentUser, chats, createChat, joinChatByInvite, setActiveChatId, openSavedMessages]);
+  }, [currentUser, session, chats, createChat, joinChatByInvite, setActiveChatId, openSavedMessages]);
 
   useEffect(() => {
-    // 1. If invite param is present in URL, extract and persist to sessionStorage, then clean URL.
     const urlInvite = parseInviteParam();
     if (urlInvite) {
       savePendingInvite(urlInvite);
       clearInviteParamFromUrl();
     }
-
-    const targetRaw = getPendingInvite() || urlInvite;
-    if (targetRaw) {
-      resolveTarget(targetRaw);
-    }
+    const pending = getPendingInvite() || urlInvite;
+    if (pending) void resolveTarget(pending);
   }, [resolveTarget]);
 
   useEffect(() => {
-    const handleCustomInvite = (e) => {
-      const invite = e.detail?.invite;
-      if (invite) {
-        handledRef.current = null;
-        resolveTarget(invite);
-      }
+    const handleCustomInvite = (event) => {
+      if (event.detail?.invite) void resolveTarget(event.detail.invite, true);
     };
     window.addEventListener('coiny:open-invite', handleCustomInvite);
     return () => window.removeEventListener('coiny:open-invite', handleCustomInvite);
   }, [resolveTarget]);
+
+  const dismiss = useCallback(() => {
+    const request = requestRef.current;
+    requestRef.current = null;
+    if (getPendingInvite() === request?.target) clearPendingInvite();
+    setView({ status: 'idle' });
+  }, []);
+  const state = view.session === session ? view : { status: 'idle' };
+  return { ...state, retry: () => resolveTarget(state.target, true), dismiss };
 }

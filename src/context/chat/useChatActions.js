@@ -700,21 +700,22 @@ export function useChatActions({
   }, [currentUser, chats, fetchChats, setActiveChatId, setChats, isCurrentSession]);
 
   const joinChatByInvite = useCallback(async (invite) => {
-    if (!currentUser) return null;
+    if (!currentUser || !isCurrentSession()) return null;
     try {
       const res = await dataService.joinChatByInvite(currentUser.id, invite);
-      if (res && res.id) {
-        if (fetchChats) {
-          await fetchChats();
-        }
-        return res;
-      }
-      return null;
+      if (!isCurrentSession()) return null;
+      if (!res?.id) throw new Error('Invite did not return a chat');
+      const refreshed = await fetchChats?.();
+      if (!isCurrentSession()) return null;
+      const chat = refreshed?.find((item) => item.id === res.id);
+      if (!chat) throw new Error('Не удалось загрузить чат по ссылке.');
+      return chat;
     } catch (err) {
+      if (!isCurrentSession()) return null;
       console.error('Failed to join chat by invite:', err);
       throw err;
     }
-  }, [currentUser, fetchChats]);
+  }, [currentUser, fetchChats, isCurrentSession]);
 
   return {
     markMessagesAsRead,

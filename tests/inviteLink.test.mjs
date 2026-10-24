@@ -178,9 +178,9 @@ test('useChatActions populates targetProfile fallback and exports openSavedMessa
 
 test('useInviteHandler resolves self-invite, existing chat, and new chat creation', () => {
   assert.match(useInviteHandlerSource, /openSavedMessages/);
-  assert.match(useInviteHandlerSource, /setActiveChatId\(existing\.id\)/);
+  assert.match(useInviteHandlerSource, /setActiveChatId\(resolvedChat\.id\)/);
   assert.match(useInviteHandlerSource, /joinChatByInvite\(target\)/);
-  assert.match(useInviteHandlerSource, /createChat\(target,\s*'personal'\)/);
+  assert.match(useInviteHandlerSource, /createChat\?\.\(target,\s*'personal',/);
   assert.match(useInviteHandlerSource, /window\.addEventListener\('coiny:open-invite'/);
 });
 
@@ -224,3 +224,27 @@ test('chatService implements joinChatByInvite with live RPC and mock fallback br
   assert.match(chatServiceSource, /createChat\(userId,\s*cleanInvite,\s*'personal'\)/);
 });
 
+
+
+test('native profile links use the published Coiny URL and web links keep their deployment path', () => {
+  const original = globalThis.window;
+  try {
+    for (const href of ['app://coiny/index.html', 'file:///app/index.html', 'https://localhost/']) {
+      globalThis.window = { location: new URL(href) };
+      assert.equal(buildInviteLink('pasha_gug'), 'https://mandyfan10-stack.github.io/coiny/?invite=pasha_gug');
+    }
+    globalThis.window = { location: new URL('https://example.org/coiny/index.html') };
+    assert.equal(buildInviteLink('pasha_gug'), 'https://example.org/coiny/?invite=pasha_gug');
+  } finally {
+    if (original === undefined) delete globalThis.window;
+    else globalThis.window = original;
+  }
+});
+
+
+test('restoring the hosted invite API preserves the hardened membership trigger', () => {
+  const restore = readFileSync(new URL('../supabase/migrations/20261024182230_restore_hosted_invite_api.sql', import.meta.url), 'utf8');
+  assert.match(restore, /create or replace function public\.join_chat_by_invite/);
+  assert.match(restore, /revoke all on public\.chat_invites from anon, authenticated/);
+  assert.doesNotMatch(restore, /create or replace function public\.normalize_chat_member_insert|drop trigger|drop table|truncate/i);
+});

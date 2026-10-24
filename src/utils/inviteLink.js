@@ -12,14 +12,15 @@ const PENDING_INVITE_STORAGE_KEY = 'coiny_pending_invite';
 export function getAppBaseUrl() {
   if (typeof window !== 'undefined' && window.location) {
     const protocol = window.location.protocol;
-    if (protocol === 'http:' || protocol === 'https:') {
+    const nativeLocalhost = protocol === 'https:' && window.location.hostname === 'localhost' && !window.location.port;
+    if ((protocol === 'http:' || protocol === 'https:') && !nativeLocalhost) {
       const pathname = window.location.pathname
         .replace(/\/index\.html$/i, '')
         .replace(/\/+$/, '');
       return `${window.location.origin}${pathname}`;
     }
   }
-  return 'https://mandyfan10-stack.github.io/coingram-chat';
+  return 'https://mandyfan10-stack.github.io/coiny';
 }
 
 /**

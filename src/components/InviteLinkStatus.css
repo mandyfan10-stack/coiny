@@ -1,0 +1,5 @@
+.invite-link-status { position: fixed; z-index: 950; inset-block-start: calc(12px + env(safe-area-inset-top, 0px)); inset-inline: 12px; margin-inline: auto; width: fit-content; max-width: min(480px, calc(100% - 24px)); padding: 12px 16px; box-sizing: border-box; border: 1px solid var(--border-color); border-radius: 12px; background: var(--bg-secondary); color: var(--text-primary); box-shadow: var(--shadow-md); font-size: 14px; overflow-wrap: anywhere; }
+.invite-link-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.invite-link-actions button { min-height: 44px; padding: 8px 12px; border: 0; border-radius: 8px; background: transparent; color: var(--accent-color); font: inherit; cursor: pointer; }
+.invite-link-actions button:hover { background: var(--bg-active); }
+.invite-link-actions button:focus-visible { outline: 2px solid var(--accent-color); outline-offset: -2px; }
