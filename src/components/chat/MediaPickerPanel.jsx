@@ -23,6 +23,7 @@ import {
 } from '../../services/tenorService';
 import { triggerHaptic } from '../../hooks/useMessageTouch';
 import './MediaPickerPanel.css';
+import GifPickerItem from './GifPickerItem';
 
 const RECENT_EMOJIS_KEY = 'coiny_recent_emojis';
 const DEFAULT_RECENTS = ['😀', '😂', '😍', '👍', '🔥', '🎉', '👏', '❤️', '🤔', '👀', '✨', '🚀', '💯', '😎'];
@@ -750,26 +751,14 @@ export default function MediaPickerPanel({
             ) : gifs.length > 0 ? (
               <>
                 {gifs.map((gif) => (
-                  <button
+                  <GifPickerItem
                     key={gif.id}
-                    type="button"
-                    className="gif-cell-btn"
-                    onClick={() => {
-                      triggerHaptic(12);
-                      if (onSelectGif) {
-                        onSelectGif(gif.url);
-                      }
+                    gif={gif}
+                    onSelect={(url) => {
+                      onSelectGif?.(url);
                       onClose();
                     }}
-                    title={gif.title}
-                  >
-                    <img
-                      src={gif.preview || gif.url}
-                      alt={gif.title}
-                      className="gif-preview-img"
-                      loading="lazy"
-                    />
-                  </button>
+                  />
                 ))}
 
                 {nextGifPos && (

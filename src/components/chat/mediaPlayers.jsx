@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Play, Pause, VolumeX, Volume2, Maximize2 } from 'lucide-react';
 import StickerMessage from '../StickerMessage';
 import useResolvedMedia from '../../hooks/useResolvedMedia';
+import useImageFallback from '../../hooks/useImageFallback';
+import { getGifImageSources } from '../../utils/gifImageSources';
 
 function AttachmentUnavailable({ compact = false }) {
   return (
@@ -13,6 +15,7 @@ function AttachmentUnavailable({ compact = false }) {
 
 function DecryptedImage({ mediaUrl, chatId, onOpen }) {
   const { url, loading, error } = useResolvedMedia(mediaUrl, chatId, 'image/png');
+  const image = useImageFallback(getGifImageSources(url));
   if (loading) {
     return (
       <div className="bubble-media-loading" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '150px', background: 'rgba(0,0,0,0.1)', borderRadius: '8px' }}>
@@ -21,9 +24,13 @@ function DecryptedImage({ mediaUrl, chatId, onOpen }) {
     );
   }
   if (error || !url) return <AttachmentUnavailable />;
+  if (image.failed) return <div className="bubble-media-error bubble-image-error" role="status">
+    <span>Не удалось загрузить изображение</span>
+    <button type="button" className="bubble-image-retry" onClick={(event) => { event.stopPropagation(); image.retry(); }}>Повторить</button>
+  </div>;
   return (
-    <button type="button" className="bubble-media-open" onClick={(event) => { event.stopPropagation(); onOpen?.(url); }} aria-label="Открыть изображение">
-      <img src={url} alt="Изображение" className="bubble-media" />
+    <button type="button" className="bubble-media-open" onClick={(event) => { event.stopPropagation(); if (image.loaded) onOpen?.(image.src); }} aria-label="Открыть изображение">
+      <img ref={image.ref} src={image.src} alt="Изображение" className="bubble-media" onLoad={image.onLoad} onError={image.onError} />
     </button>
   );
 }
