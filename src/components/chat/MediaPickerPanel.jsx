@@ -67,7 +67,7 @@ export default function MediaPickerPanel({
   const panelRef = useRef(null);
   const searchInputRef = useRef(null);
   const contentBodyRef = useRef(null);
-  const debounceTimerRef = useRef(null);
+  const gifRequestRef = useRef(null);
   const [viewportStyle, setViewportStyle] = useState({});
 
   useLayoutEffect(() => {
@@ -228,6 +228,9 @@ export default function MediaPickerPanel({
 
   // Load Tenor GIFs
   const loadGifs = useCallback(async (query, categoryQuery, append = false, currentPos = null) => {
+    if (append && gifRequestRef.current?.pending) return;
+    const request = { pending: true };
+    gifRequestRef.current = request;
     if (append) {
       setIsLoadingMoreGifs(true);
     } else {
@@ -240,33 +243,42 @@ export default function MediaPickerPanel({
         ? await searchTenorGifs(targetQuery, append ? currentPos : null, 20, categoryQuery)
         : await fetchTrendingTenorGifs(append ? currentPos : null, 20);
 
+      if (gifRequestRef.current !== request) return;
       if (append) {
-        setGifs((prev) => [...prev, ...(data.results || [])]);
+        setGifs((prev) => gifRequestRef.current === request ? [...prev, ...(data.results || [])] : prev);
       } else {
         setGifs(data.results || []);
       }
       setNextGifPos(data.nextPos || null);
     } catch (e) {
-      console.warn('Error loading GIFs:', e);
+      if (gifRequestRef.current === request) console.warn('Error loading GIFs:', e);
     } finally {
-      setIsLoadingGifs(false);
-      setIsLoadingMoreGifs(false);
+      if (gifRequestRef.current === request) {
+        request.pending = false;
+        setIsLoadingGifs(false);
+        setIsLoadingMoreGifs(false);
+      }
     }
   }, []);
 
   // Fetch GIFs on tab switch or query change
-  useEffect(() => {
-    if (!isOpen || activeTab !== 'gif') return;
+  useLayoutEffect(() => {
+    // Invalidate immediately, including the debounce interval and panel closure.
+    gifRequestRef.current = null;
+    setIsLoadingMoreGifs(false);
+    setIsLoadingGifs(isOpen && activeTab === 'gif');
+    if (!isOpen || activeTab !== 'gif') return undefined;
+    setGifs([]);
+    setNextGifPos(null);
 
-    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-
-    debounceTimerRef.current = setTimeout(() => {
+    const timer = setTimeout(() => {
       const cat = TENOR_CATEGORIES.find((c) => c.id === activeGifCategory);
       loadGifs(searchQuery, cat?.query, false);
     }, searchQuery ? 300 : 0);
 
     return () => {
-      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      clearTimeout(timer);
+      gifRequestRef.current = null;
     };
   }, [isOpen, activeTab, searchQuery, activeGifCategory, loadGifs]);
 

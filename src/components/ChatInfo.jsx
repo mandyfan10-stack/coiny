@@ -34,13 +34,14 @@ import ImageViewer from './chat/ImageViewer';
 import { DecryptedVoicePlayer } from './chat/mediaPlayers';
 import { buildInviteLink } from '../utils/inviteLink';
 import { copyTextToClipboard } from '../utils/mobileActionSheetUtils';
+import { getMediaKindFromUrl } from '../utils/mediaKindFromUrl';
 import { dataService } from '../services/dataLayer';
 
 import './ChatInfo.css';
 
 function MediaGridItem({ item, index, chatId, onOpenPreview }) {
   const sourceUrl = typeof item === 'object' && item?.url ? item.url : item;
-  const isVideo = typeof item === 'object' ? Boolean(item.isVideo) : /\.(mp4|webm|mov|ogv)/i.test(sourceUrl);
+  const isVideo = typeof item === 'object' ? Boolean(item.isVideo) : getMediaKindFromUrl(sourceUrl) === 'video';
   const fallbackMime = isVideo ? 'video/mp4' : 'image/png';
   const { url, loading, error } = useResolvedMedia(sourceUrl, chatId, fallbackMime);
 
@@ -272,10 +273,11 @@ export default function ChatInfo() {
     if (activeChat && activeChat.messages) {
       activeChat.messages.forEach((m) => {
         if (m.media) {
+          const mediaKind = getMediaKindFromUrl(m.media);
           const isVoice = Boolean(
             m.text?.startsWith('🎤') ||
             m.text?.includes('Голосовое сообщение') ||
-            (typeof m.media === 'string' && (m.media.includes('audio_') || m.media.startsWith('data:audio/')))
+            mediaKind === 'audio'
           );
           const isVideoNote = Boolean(
             m.text?.startsWith('🎬 Видеосообщение') ||
@@ -283,16 +285,13 @@ export default function ChatInfo() {
           );
           const isVideo =
             !isVoice &&
-            (/\.(mp4|mov|ogv|mkv)/i.test(m.media) ||
-              (m.media.includes('.webm') && !m.media.includes('audio_')) ||
-              m.media.startsWith('data:video') ||
+            (mediaKind === 'video' ||
               m.text?.startsWith('🎬') ||
               m.text?.includes('Видео'));
           const isImage =
             !isVoice &&
             !isVideo &&
-            (/\.(jpeg|jpg|gif|png|webp|svg)/i.test(m.media) ||
-              m.media.startsWith('data:image') ||
+            (mediaKind === 'image' ||
               m.text?.includes('Изображение'));
 
           if (isImage || isVideo || isVideoNote) {

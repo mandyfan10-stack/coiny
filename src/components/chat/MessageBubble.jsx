@@ -29,6 +29,7 @@ import {
 import MobileActionSheet from './MobileActionSheet';
 import useMessageTouch from '../../hooks/useMessageTouch';
 import { getMessageGrouping } from '../../utils/messageGrouping';
+import { getMediaKindFromUrl } from '../../utils/mediaKindFromUrl';
 import { getReplyType } from '../../utils/mobileActionSheetUtils';
 import './Message.css';
 import { canEditMessage } from '../../utils/messageContent.ts';
@@ -89,7 +90,8 @@ export default function MessageBubble({
   const { isFirstInGroup, isLastInGroup } = getMessageGrouping(msg, prevMsg, nextMsg);
   const showSenderName = isGroupOther && isFirstInGroup;
 
-  const isVoice = Boolean(msg.media && msg.text && (msg.text.startsWith('🎤 Голосовое сообщение') || msg.text.startsWith('Голосовое сообщение')));
+  const mediaKind = getMediaKindFromUrl(msg.media);
+  const isVoice = Boolean(msg.media && (mediaKind === 'audio' || msg.text?.startsWith('🎤 Голосовое сообщение') || msg.text?.startsWith('Голосовое сообщение')));
   const isVideoNote = Boolean(msg.media && msg.text && (msg.text.startsWith('🎬 Видеосообщение') || msg.text.startsWith('Видеосообщение')));
   const isSticker = Boolean(msg.media && msg.text && msg.text.startsWith('sticker:'));
 
@@ -98,7 +100,7 @@ export default function MessageBubble({
     !isVoice &&
     !isVideoNote &&
     !isSticker &&
-    (msg.text?.startsWith('🎬 [Видео]') || msg.text?.startsWith('[Видео]') || msg.text === 'Видео' || (typeof msg.media === 'string' && (msg.media.includes('.mp4') || msg.media.includes('.webm') || msg.media.includes('.mov') || msg.media.startsWith('data:video/'))))
+    (msg.text?.startsWith('🎬 [Видео]') || msg.text?.startsWith('[Видео]') || msg.text === 'Видео' || mediaKind === 'video')
   );
 
   const isPureVideo = Boolean(

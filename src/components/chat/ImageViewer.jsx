@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { VoiceMessagePlayer } from './mediaPlayers';
 import { prepareFiniteMediaDuration } from '../../utils/mediaDuration';
+import { getMediaKindFromUrl } from '../../utils/mediaKindFromUrl';
 import IconButton from '../ui/IconButton';
 import './ImageViewer.css';
 
@@ -12,34 +13,11 @@ function viewerControls(viewer) {
     .filter(element => element.getClientRects().length && getComputedStyle(element).visibility !== 'hidden');
 }
 
-function isAudioUrl(url) {
-  if (!url || typeof url !== 'string') return false;
-  const lower = url.toLowerCase();
-  return (
-    lower.startsWith('data:audio/') ||
-    lower.includes('audio_') ||
-    lower.includes('.ogg') ||
-    lower.includes('.mp3') ||
-    lower.includes('.wav') ||
-    lower.includes('.m4a') ||
-    lower.includes('.aac') ||
-    lower.includes('.opus')
-  );
-}
-
-function isVideoUrl(url) {
-  if (!url || typeof url !== 'string') return false;
-  if (isAudioUrl(url)) return false;
-  const lower = url.toLowerCase();
-  return (
-    lower.startsWith('data:video/') ||
-    lower.includes('.mp4') ||
-    (lower.includes('.webm') && !lower.includes('audio_')) ||
-    lower.includes('.mov') ||
-    lower.includes('.ogv') ||
-    lower.includes('.mkv') ||
-    lower.includes('video')
-  );
+function viewerKind(url, isVideo) {
+  const kind = getMediaKindFromUrl(url);
+  if (kind === 'audio') return 'audio';
+  if (typeof isVideo === 'boolean') return isVideo ? 'video' : 'image';
+  return kind || 'image';
 }
 
 export default function ImageViewer({ imageUrl, isVideo: isVideoProp, onClose }) {
@@ -49,20 +27,10 @@ export default function ImageViewer({ imageUrl, isVideo: isVideoProp, onClose })
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const [videoReady, setVideoReady] = useState(false);
-  const [renderType, setRenderType] = useState(() => {
-    if (isAudioUrl(imageUrl)) return 'audio';
-    if (typeof isVideoProp === 'boolean') return isVideoProp ? 'video' : 'image';
-    return isVideoUrl(imageUrl) ? 'video' : 'image';
-  });
+  const [renderType, setRenderType] = useState(() => viewerKind(imageUrl, isVideoProp));
 
   useEffect(() => {
-    if (isAudioUrl(imageUrl)) {
-      setRenderType('audio');
-    } else if (typeof isVideoProp === 'boolean') {
-      setRenderType(isVideoProp ? 'video' : 'image');
-    } else {
-      setRenderType(isVideoUrl(imageUrl) ? 'video' : 'image');
-    }
+    setRenderType(viewerKind(imageUrl, isVideoProp));
   }, [imageUrl, isVideoProp]);
 
   useEffect(() => {
