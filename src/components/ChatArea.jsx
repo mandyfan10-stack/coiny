@@ -27,6 +27,7 @@ import ForwardMessageDialog from './chat/ForwardMessageDialog';
 import { canEditMessage } from '../utils/messageContent.ts';
 import './chat/MessageOperations.css';
 import { createStorageReference } from '../utils/urlSecurity';
+import { isNetworkError } from '../services/offlineQueueCore';
 import useResolvedMedia from '../hooks/useResolvedMedia';
 import useEdgeSwipeBack from '../hooks/useSwipeGesture';
 import ChatSkeleton from './chat/ChatSkeleton';
@@ -319,8 +320,7 @@ export default function ChatArea() {
       setReplyingTo(null);
     } catch (err) {
       console.error('Upload error:', err);
-      const isNetworkError = !navigator.onLine || err.message?.includes('FetchError') || err.message?.includes('failed to fetch');
-      if (isNetworkError) {
+      if (isNetworkError(err)) {
         sendMessage(msgText, replyingTo?.id, null, file, mediaType, messageId);
         setReplyingTo(null);
       } else {
@@ -1224,8 +1224,7 @@ function formatDateDivider(timestamp) {
       setReplyingTo(null);
     } catch (err) {
       console.error("Upload recording error:", err);
-      const isNetworkError = !navigator.onLine || err.message?.includes('FetchError') || err.message?.includes('failed to fetch');
-      if (isNetworkError) {
+      if (isNetworkError(err)) {
         const isVoice = mode === 'voice';
         const mediaType = isVoice ? 'audio' : 'video';
         const msgText = isVoice ? 'Голосовое сообщение' : 'Видеосообщение';

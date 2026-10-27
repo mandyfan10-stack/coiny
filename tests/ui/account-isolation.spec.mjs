@@ -223,3 +223,50 @@ for (const destination of ['signed-out', 'new-owner', 'old-owner']) {
     });
   }
 }
+
+test('temporary network failure retries the queue even when the browser remains online', async ({ page }) => {
+  await login(page, 'owner');
+  await complete(page, 0, [chat('shared')]);
+  await expect.poll(() => state(page).then(value => value.chats.length)).toBe(1);
+  await page.evaluate(async () => {
+    window.__accountIsolation.chat.setActiveChatId('shared');
+    const { dataService } = await import('/src/services/dataLayer.js');
+    window.__sendAttempts = 0;
+    dataService.sendMessage = async (chatId, senderId, text, reply, media, id) => {
+      if (++window.__sendAttempts <= 2) throw new TypeError('Failed to fetch');
+      return { id, chat_id: chatId, sender_id: senderId, created_at: new Date().toISOString() };
+    };
+  });
+  await expect.poll(() => state(page).then(value => value.active)).toBe('shared');
+  await page.evaluate(() => window.__accountIsolation.chat.sendMessage('retry me'));
+  await expect.poll(() => page.evaluate(() => window.__sendAttempts)).toBe(2);
+  expect(await page.evaluate(() => navigator.onLine)).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__accountIsolation.chat.isOnline)).toBe(false);
+  await expect.poll(() => page.evaluate(() => window.__sendAttempts), { timeout: 12000 }).toBe(3);
+  await expect.poll(() => state(page).then(value => value.chats[0].messages[0]?.isPending)).toBe(false);
+  expect(await page.evaluate(() => window.__accountIsolation.chat.isOnline)).toBe(true);
+});
+
+test('offline attachment storage failure reports an error and never queues a caption alone', async ({ page }) => {
+  await login(page, 'owner');
+  await complete(page, 0, [chat('shared')]);
+  await expect.poll(() => state(page).then(value => value.chats.length)).toBe(1);
+  await page.evaluate(() => {
+    window.__accountIsolation.chat.setActiveChatId('shared');
+    Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false });
+    window.dispatchEvent(new Event('offline'));
+    const original = crypto.subtle.encrypt.bind(crypto.subtle);
+    crypto.subtle.encrypt = async (...args) => {
+      if (new TextDecoder().decode(args[0].additionalData).startsWith('attachment:')) throw new Error('storage failure');
+      return original(...args);
+    };
+    window.__alerts = [];
+    window.alert = message => window.__alerts.push(message);
+  });
+  await expect.poll(() => state(page).then(value => value.active)).toBe('shared');
+  const result = await page.evaluate(() => window.__accountIsolation.chat.sendMessage('Изображение', null, null, new Blob(['media'], { type: 'image/png' }), 'image'));
+  expect(result).toBe(false);
+  expect(await page.evaluate(() => window.__alerts)).toEqual([expect.stringContaining('Не удалось сохранить вложение')]);
+  expect((await state(page)).chats[0].messages).toEqual([]);
+  expect(await page.evaluate(async () => (await import('/src/utils/indexedDbHelper.js')).loadEncryptedOfflineQueue('owner'))).toEqual([]);
+});

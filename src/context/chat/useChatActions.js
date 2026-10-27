@@ -20,7 +20,7 @@ import {
   toggleUserReaction,
 } from '../../utils/reactionUtils';
 import { playSound } from '../../utils/sounds';
-import { createOfflineQueueItem } from '../../services/offlineQueueCore.js';
+import { createOfflineQueueItem, isNetworkError } from '../../services/offlineQueueCore.js';
 import { resolveSharedKey } from './decryptHelpers';
 import { canEditMessage, preferMessageBody } from '../../utils/messageContent.ts';
 import { prepareForwardMedia } from '../../services/forwardMedia';
@@ -265,6 +265,8 @@ export function useChatActions({
       } catch (e) {
         if (!isCurrentSession()) return false;
         console.error('Offline media cache failed:', e);
+        if (!options.requireConfirmation) alert('Не удалось сохранить вложение на устройстве. Попробуйте отправить его ещё раз.');
+        return false;
       }
     }
 
@@ -397,7 +399,7 @@ export function useChatActions({
       } catch (error) {
         if (!isCurrentSession()) return false;
         console.error('Send failed:', error);
-        const isNetwork = !navigator.onLine || error.message?.includes('FetchError') || error.message?.includes('failed to fetch');
+        const isNetwork = isNetworkError(error);
         if (isNetwork && !options.requireConfirmation) {
           updateCachedMessageFields(messageId, { isPending: true });
           setChats((prevChats) => prevChats.map((c) => {

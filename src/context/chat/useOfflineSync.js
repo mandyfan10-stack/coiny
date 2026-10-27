@@ -287,6 +287,17 @@ export function useOfflineSync({
     }
   }, [currentUser?.id, chats, isOnline, offlineQueue.length, queueLoaded, queueOwnerId, syncOfflineMessages]);
 
+  useEffect(() => {
+    if (isOnline || !navigator.onLine || !queueLoaded || queueOwnerId !== currentUser?.id
+      || !offlineQueue.some((item) => !item.isFailed)) return undefined;
+    // A request can fail while the browser remains online, in which case no
+    // future online event is guaranteed. Retry without spinning on failures.
+    const timer = setTimeout(() => {
+      if (navigator.onLine) setIsOnline(true);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [isOnline, queueLoaded, queueOwnerId, currentUser?.id, offlineQueue]);
+
   return {
     isOnline,
     setIsOnline,
