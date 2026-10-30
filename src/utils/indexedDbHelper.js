@@ -9,7 +9,7 @@ import { compareMessages } from './messageCursor.ts';
 import { retainCachedMessage } from './messageHistory.js';
 
 const DB_NAME = 'CoinyOfflineDB';
-const DB_VERSION = 9;
+const DB_VERSION = 10;
 const DRAFT_STORE_NAME = 'chat-drafts';
 const ATTACHMENT_STORE_NAME = 'offline-attachments';
 const E2EE_KEY_STORE_NAME = 'e2ee-keys';
@@ -80,7 +80,12 @@ function openDatabase(version) {
       ? indexedDB.open(DB_NAME, version)
       : indexedDB.open(DB_NAME);
 
-    request.onupgradeneeded = (event) => ensureStores(event.target.result);
+    request.onupgradeneeded = (event) => {
+      ensureStores(event.target.result);
+      // Old media entries have no account owner. Never migrate their plaintext
+      // into an authenticated account's cache.
+      if (event.oldVersion < 10) event.target.transaction.objectStore(MEDIA_CACHE_STORE_NAME).clear();
+    };
     request.onsuccess = (event) => {
       const db = event.target.result;
       try { assertDatabaseGeneration(generation); }
@@ -690,20 +695,39 @@ export async function getCachedChatList(userId) {
 const MAX_MEDIA_CACHE_BYTES = 150 * 1024 * 1024; // 150 MB
 const MAX_MEDIA_CACHE_COUNT = 500;
 
+/** Capture before any network/crypto work, not when its result is persisted. */
+export function createMediaCacheContext(userId) {
+  return Object.freeze({ userId: typeof userId === 'string' ? userId : '', generation: databaseGeneration });
+}
+
+export function isMediaCacheContextCurrent(context) {
+  return Boolean(context?.userId && !databaseCleanup && context.generation === databaseGeneration);
+}
+
+function ownedMediaCacheKey(key, context) {
+  return JSON.stringify([context.userId, String(key).trim()]);
+}
+
 /**
  * Save a media Blob (avatar, photo, voice) in media-cache with LRU eviction
  */
-export async function saveCachedMedia(key, blob, mimeType) {
-  if (!key || !(blob instanceof Blob) || typeof indexedDB === 'undefined') return;
-  const cleanKey = String(key).trim();
+export async function saveCachedMedia(key, blob, mimeType, context) {
+  if (!key || !(blob instanceof Blob) || typeof indexedDB === 'undefined' || !isMediaCacheContextCurrent(context)) return;
+  const cleanKey = ownedMediaCacheKey(key, context);
   try {
+    // IndexedDB Blob serialization is unavailable in some WebKit runtimes.
+    // Store portable bytes while keeping the account and lifecycle checks.
+    const bytes = await blob.arrayBuffer();
+    if (!isMediaCacheContextCurrent(context)) return;
     const db = await initOfflineDB();
+    if (!isMediaCacheContextCurrent(context)) return;
     const tx = db.transaction(MEDIA_CACHE_STORE_NAME, 'readwrite');
     const store = tx.objectStore(MEDIA_CACHE_STORE_NAME);
 
     const record = {
       key: cleanKey,
-      blob,
+      ownerId: context.userId,
+      bytes,
       mimeType: mimeType || blob.type || 'application/octet-stream',
       size: blob.size || 0,
       cachedAt: Date.now(),
@@ -713,7 +737,7 @@ export async function saveCachedMedia(key, blob, mimeType) {
     store.put(record);
     await transactionComplete(tx);
 
-    enforceMediaCacheLru().catch(() => {});
+    if (isMediaCacheContextCurrent(context)) enforceMediaCacheLru().catch(() => {});
   } catch (err) {
     console.warn('Failed to save cached media:', err);
   }
@@ -753,18 +777,20 @@ function queueTouchMediaAccess(key) {
 /**
  * Retrieve a cached media Blob by key with non-blocking readonly transaction
  */
-export async function getCachedMedia(key) {
-  if (!key || typeof indexedDB === 'undefined') return null;
-  const cleanKey = String(key).trim();
+export async function getCachedMedia(key, context) {
+  if (!key || typeof indexedDB === 'undefined' || !isMediaCacheContextCurrent(context)) return null;
+  const cleanKey = ownedMediaCacheKey(key, context);
   try {
     const db = await initOfflineDB();
+    if (!isMediaCacheContextCurrent(context)) return null;
     const tx = db.transaction(MEDIA_CACHE_STORE_NAME, 'readonly');
     const store = tx.objectStore(MEDIA_CACHE_STORE_NAME);
     const record = await requestResult(store.get(cleanKey));
 
-    if (record && record.blob instanceof Blob) {
+    if (isMediaCacheContextCurrent(context) && record?.ownerId === context.userId
+      && (record.bytes instanceof ArrayBuffer || record.blob instanceof Blob)) {
       queueTouchMediaAccess(cleanKey);
-      return record.blob;
+      return record.bytes instanceof ArrayBuffer ? new Blob([record.bytes], { type: record.mimeType }) : record.blob;
     }
     return null;
   } catch (err) {

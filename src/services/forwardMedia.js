@@ -1,5 +1,5 @@
 import { supabase } from '../supabaseClient';
-import { getCachedMedia } from '../utils/indexedDbHelper';
+import { createMediaCacheContext, getCachedMedia } from '../utils/indexedDbHelper';
 import { getPrivateMediaReference, getAttachmentMimeType } from '../utils/storageMedia';
 import { createStorageReference } from '../utils/urlSecurity';
 import { requiresPersonalE2EE } from '../utils/savedMessages';
@@ -9,6 +9,7 @@ import { extensionForMedia, validateChatMedia } from '../utils/mediaValidation';
 import { dataService } from './dataLayer';
 
 export async function prepareForwardMedia(message, source, target, userId, messageId, keys) {
+  const cacheContext = createMediaCacheContext(userId);
   if (!message.media) return null;
   const reference = getPrivateMediaReference(message.media);
   // Public sticker/GIF URLs have no source-chat permissions or encryption keys.
@@ -18,7 +19,8 @@ export async function prepareForwardMedia(message, source, target, userId, messa
     : /^(🎬|Видео)/.test(message.text || '') ? 'video/webm' : 'image/webp';
   let blob;
   if (reference) {
-    blob = await getCachedMedia(`media:${reference.bucket}:${reference.path}`);
+    blob = await getCachedMedia(`media:${reference.bucket}:${reference.path}`, cacheContext);
+    keys.guard();
     if (!blob) {
       const { data, error } = await supabase.storage.from(reference.bucket).download(reference.path);
       if (error) throw new Error('Не удалось загрузить исходное вложение.');

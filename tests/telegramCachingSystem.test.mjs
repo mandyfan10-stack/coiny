@@ -82,8 +82,8 @@ test('normalizeCachedMessage and denormalizeCachedMessage convert timestamps and
   assert.equal(roundtripped.timestamp.toISOString(), '2026-09-05T12:00:00.000Z');
 });
 
-test('indexedDbHelper defines schema version 9 and v2 cache stores with proper indexes', () => {
-  assert.match(indexedDbHelperCode, /const DB_VERSION\s*=\s*9/);
+test('indexedDbHelper defines schema version 10 and v2 cache stores with proper indexes', () => {
+  assert.match(indexedDbHelperCode, /const DB_VERSION\s*=\s*10/);
   assert.match(indexedDbHelperCode, /const MESSAGES_CACHE_V2_STORE_NAME\s*=\s*'messages-cache-v2'/);
   assert.match(indexedDbHelperCode, /const CHATS_CACHE_STORE_NAME\s*=\s*'chats-cache'/);
   assert.match(indexedDbHelperCode, /const MEDIA_CACHE_STORE_NAME\s*=\s*'media-cache'/);
@@ -131,7 +131,7 @@ test('useChatActions writes optimistic and confirmed messages to cache', () => {
 });
 
 test('PrivateStorageImage checks media-cache before hitting Supabase storage and caches result', () => {
-  assert.match(privateStorageImageCode, /getCachedMedia\(cacheKey\)/);
+  assert.match(privateStorageImageCode, /getCachedMedia\(cacheKey,\s*cacheContext\)/);
   assert.match(privateStorageImageCode, /saveCachedMedia\(cacheKey,\s*data/);
 });
 
@@ -148,7 +148,7 @@ test('StorageTab renders Storage and Data section with cache size and clear cach
 });
 
 test('useResolvedMedia integrates persistent IndexedDB media caching for instant offline playback', () => {
-  assert.match(useResolvedMediaCode, /getCachedMedia\(cacheKey\)/);
+  assert.match(useResolvedMediaCode, /getCachedMedia\(cacheKey,\s*cacheContext\)/);
   assert.match(useResolvedMediaCode, /saveCachedMedia\(cacheKey,\s*finalBlob/);
   assert.match(useResolvedMediaCode, /!navigator\.onLine/);
 });
