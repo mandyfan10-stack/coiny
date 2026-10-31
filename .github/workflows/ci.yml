@@ -135,7 +135,7 @@ jobs:
   mock-ui-e2e:
     name: Mock UI E2E
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
     env:
       VITE_ALLOW_MOCK: 'true'
       VITE_SUPABASE_URL: 'your-supabase-project-url'

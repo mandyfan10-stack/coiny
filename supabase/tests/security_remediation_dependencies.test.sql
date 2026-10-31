@@ -1,15 +1,14 @@
--- Reproduce a hosted upgrade missing September's bindings. All fixture rows
--- and DDL are rolled back; the real migration must restore enforcement.
+-- Test the installed bindings without depending on files outside the test
+-- directory mounted by Supabase's pg_prove container. Fixture rows roll back.
 begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 select no_plan();
 
-drop trigger if exists before_chat_creation_limit_hardening on public.chats;
-drop trigger if exists before_e2ee_handshake_validation on public.e2ee_handshake_events;
-drop trigger if exists before_e2ee_welcome_validation on public.e2ee_welcomes;
-drop function if exists public.validate_e2ee_v2_event();
-\ir ../migrations/20261031055057_restore_security_remediation_dependencies.sql
+select is((select count(*) from pg_trigger where not tgisinternal and tgenabled='O'
+ and ((tgrelid='public.chats'::regclass and tgname='before_chat_creation_limit_hardening' and tgfoid='public.enforce_chat_creation_limit()'::regprocedure)
+ or (tgrelid='public.e2ee_handshake_events'::regclass and tgname='before_e2ee_handshake_validation' and tgfoid='public.validate_e2ee_v2_event()'::regprocedure)
+ or (tgrelid='public.e2ee_welcomes'::regclass and tgname='before_e2ee_welcome_validation' and tgfoid='public.validate_e2ee_v2_event()'::regprocedure))),3::bigint,'all required enforcement bindings are installed and enabled');
 
 insert into public.profiles(id,username) values
  ('a9100000-0000-4000-8000-000000000001','dependency_owner'),
