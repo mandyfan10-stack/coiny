@@ -32,6 +32,16 @@ const MEDIA_TYPES = new Map<string, MediaTypeInfo>([
 
 export const CHAT_MEDIA_ACCEPT = [...MEDIA_TYPES.keys()].join(',');
 
+export function getAttachmentMimeType(mediaUrl?: string, fallbackMimeType?: string): string {
+  const extension = mediaUrl?.split(/[?#]/)[0].split('.').pop()?.toLowerCase();
+  if (extension === 'mp4') return fallbackMimeType?.startsWith('audio/') ? 'audio/mp4' : 'video/mp4';
+  if (extension === 'ogg') return fallbackMimeType?.startsWith('video/') ? 'video/ogg' : 'audio/ogg';
+  if (extension === 'webm') return fallbackMimeType || 'video/webm';
+  if (extension === 'jpeg') return 'image/jpeg';
+  for (const [mime, info] of MEDIA_TYPES) if (info.extension === extension) return mime;
+  return fallbackMimeType || 'application/octet-stream';
+}
+
 export function validateChatMedia(file: Pick<File, 'size' | 'type'> | null | undefined): ValidatedChatMedia {
   if (!file || file.size <= 0) throw new Error('Файл пуст.');
   if (file.size > MAX_CHAT_MEDIA_BYTES) throw new Error('Размер файла превышает лимит 15 МБ.');

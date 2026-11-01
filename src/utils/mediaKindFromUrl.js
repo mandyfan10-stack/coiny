@@ -1,5 +1,5 @@
 const IMAGE_EXTENSIONS = new Set(['gif', 'png', 'jpg', 'jpeg', 'webp', 'avif', 'svg', 'bmp', 'ico']);
-const AUDIO_EXTENSIONS = new Set(['ogg', 'mp3', 'wav', 'm4a', 'aac', 'opus']);
+const AUDIO_EXTENSIONS = new Set(['ogg', 'mp3', 'wav', 'm4a', 'aac', 'flac', 'opus']);
 const VIDEO_EXTENSIONS = new Set(['mp4', 'webm', 'mov', 'ogv', 'mkv']);
 
 // A display hint, not a URL validator. Blob content is inspected by the viewer.

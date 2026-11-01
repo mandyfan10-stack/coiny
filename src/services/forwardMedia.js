@@ -39,7 +39,7 @@ export async function prepareForwardMedia(message, source, target, userId, messa
   }
   keys.guard();
   const info = validateChatMedia(blob);
-  const path = `${target.id}/${userId}/forward_${messageId}.${extensionForMedia(info.mimeType, info.kind)}`;
+  const path = `${target.id}/${userId}/msg_${messageId}.${extensionForMedia(info.mimeType, info.kind)}`;
   let payload = blob;
   if (requiresPersonalE2EE(target, userId)) {
     const key = await resolveSharedKey({ ...keys, chatId: target.id, chat: target, currentUserId: userId });

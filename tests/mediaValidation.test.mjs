@@ -1,6 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CHAT_MEDIA_ACCEPT, MAX_CHAT_MEDIA_BYTES, extensionForMedia, validateChatMedia } from '../src/utils/mediaValidation.ts';
+import { CHAT_MEDIA_ACCEPT, MAX_CHAT_MEDIA_BYTES, extensionForMedia, validateChatMedia, getAttachmentMimeType } from '../src/utils/mediaValidation.ts';
+
+test('every accepted media MIME survives storage naming and decryption type restoration', () => {
+  for (const mime of CHAT_MEDIA_ACCEPT.split(',')) {
+    const info = validateChatMedia(fakeFile(mime));
+    const restored = getAttachmentMimeType(`storage://chat-attachments/chat/user/msg_id.${info.extension}?download=1#preview`, mime);
+    assert.equal(restored, mime === 'audio/x-m4a' ? 'audio/mp4' : mime);
+  }
+  for (const [ext, mime] of [['avif','image/avif'],['aac','audio/aac'],['flac','audio/flac'],['ogv','video/ogg']]) {
+    assert.equal(getAttachmentMimeType(`storage://chat-attachments/chat/user/msg_id.${ext}`, 'image/webp'), mime);
+  }
+});
 
 const fakeFile = (type, size = 128, name = 'file') => ({ type, size, name });
 

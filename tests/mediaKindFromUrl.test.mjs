@@ -17,7 +17,7 @@ test('actual audio and video extensions retain their display type, including leg
   for (const url of ['https://files.test/video.mp4?preview=cat.gif', '/clip.WEBM', '/clip.mov', '/clip.ogv', '/clip.mkv']) {
     assert.equal(getMediaKindFromUrl(url), 'video', url);
   }
-  for (const url of ['/voice.ogg', '/video.mp3', '/voice.wav', '/voice.m4a', '/voice.aac', '/voice.opus', '/audio_123.webm']) {
+  for (const url of ['/voice.ogg', '/video.mp3', '/voice.wav', '/voice.m4a', '/voice.aac', '/voice.flac', '/voice.opus', '/audio_123.webm']) {
     assert.equal(getMediaKindFromUrl(url), 'audio', url);
   }
 });

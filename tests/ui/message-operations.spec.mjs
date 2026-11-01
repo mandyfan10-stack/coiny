@@ -116,35 +116,43 @@ test('drafts stay encrypted and decrypt across simultaneous tabs', async ({ page
  await other.close();
 });
 
-test('private attachments are decrypted at source and encrypted anew for the recipient chat', async ({ page }) => {
+for (const mime of ['image/png', 'video/mp4', 'audio/ogg', 'image/avif', 'audio/aac', 'audio/flac', 'video/ogg']) {
+test(`forwarded ${mime} uses an allowed upload name and fresh recipient encryption`, async ({ page }) => {
  await open(page);
- const result=await page.evaluate(async()=>{
+ const result=await page.evaluate(async(mime)=>{
   const {supabase}=await import('/src/supabaseClient.js');
   const {dataService}=await import('/src/services/dataLayer.js');
   const {prepareForwardMedia}=await import('/src/services/forwardMedia.js');
+  const {getAttachmentMimeType}=await import('/src/utils/mediaValidation.ts');
   const {encryptFileForE2EE,decryptFile}=await import('/src/utils/e2eeHelper.js');
   const sourceKey=await crypto.subtle.generateKey({name:'AES-GCM',length:256},false,['encrypt','decrypt']);
   const targetKey=await crypto.subtle.generateKey({name:'AES-GCM',length:256},false,['encrypt','decrypt']);
-  const original=new Blob(['private image bytes'],{type:'image/png'});
+  const original=new Blob(['private attachment bytes'],{type:mime});
   const encrypted=await encryptFileForE2EE(original,sourceKey); let uploaded;
   const storage=supabase.storage;const savedFrom=storage.from;
   const live=dataService.isLive;dataService.isLive=()=>true;
-  storage.from=()=>({download:async()=>({data:encrypted,error:null}),upload:async(path,blob,options)=>{uploaded={path,blob,options};return{error:null};}});
+  storage.from=()=>({download:async()=>({data:encrypted,error:null}),upload:async(path,blob,options)=>{
+   // Match the server's filename gate: the former forward_ path must fail.
+   if (!/^(msg|record)_[0-9a-f-]{36}\.(jpg|jpeg|png|gif|webp|avif|mp4|webm|ogg|ogv|m4a|mp3|wav|aac|flac)$/i.test(path.split('/').pop())) return {error:new Error('Upload filename rejected')};
+   uploaded={path,blob,options};return{error:null};
+  }});
   const source={id:'source',type:'personal',members:[{id:'self'},{id:'peer'}]};
   const target={...source,id:'target'};
   try {
-   const url=await prepareForwardMedia({text:'Подпись',media:'storage://chat-attachments/source/self/photo.png'},source,target,'self','new-message',{
+   const extension=mime==='video/ogg'?'ogv':mime.split('/')[1];
+   const url=await prepareForwardMedia({text:'Подпись',media:`storage://chat-attachments/source/self/file.${extension}`},source,target,'self','ab400000-0000-4000-8000-000000000001',{
     e2eePrivateKey:null,sharedKeysCache:{source:sourceKey,target:targetKey},setSharedKeysCache:()=>{},guard:()=>{}
    });
-   const decoded=await decryptFile(uploaded.blob,targetKey,'image/png');
-   let sourceKeyRejected=false;try{await decryptFile(uploaded.blob,sourceKey,'image/png');}catch{sourceKeyRejected=true;}
-   return {url,path:uploaded.path,contentType:uploaded.options.contentType,text:await decoded.text(),sourceKeyRejected,different:await uploaded.blob.text()!==await encrypted.text()};
+   const decoded=await decryptFile(uploaded.blob,targetKey,getAttachmentMimeType(uploaded.path,'image/webp'));
+   let sourceKeyRejected=false;try{await decryptFile(uploaded.blob,sourceKey,mime);}catch{sourceKeyRejected=true;}
+   return {url,path:uploaded.path,contentType:uploaded.options.contentType,text:await decoded.text(),restoredMime:decoded.type,sourceKeyRejected,different:await uploaded.blob.text()!==await encrypted.text()};
   } finally { storage.from=savedFrom;dataService.isLive=live; }
- });
- expect(result.path).toBe('target/self/forward_new-message.png');
- expect(result.contentType).toBe('application/octet-stream');expect(result.text).toBe('private image bytes');
+ },mime);
+ expect(result.path).toBe(`target/self/msg_ab400000-0000-4000-8000-000000000001.${mime==='video/ogg'?'ogv':mime.split('/')[1]}`);
+ expect(result.restoredMime).toBe(mime);expect(result.contentType).toBe('application/octet-stream');expect(result.text).toBe('private attachment bytes');
  expect(result.sourceKeyRejected).toBe(true);expect(result.different).toBe(true);expect(result.url).not.toContain('source/self');
 });
+}
 
 test('forward dialog fits a narrow low viewport and traps keyboard focus', async ({ page }) => {
  await open(page);await action(page,'one','Переслать');
