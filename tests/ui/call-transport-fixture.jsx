@@ -11,10 +11,10 @@ import '../../src/components/call/CallOverlay.css';
 
 // Only signaling delivery and capture sources are synthetic. The provider,
 // negotiation controller, RTCPeerConnection, ICE and bidirectional RTP are real.
-const control = { pcs: [], channels: [], events: [], captures: [], apis: {}, updates: {}, chatUpdates: {}, drops: {}, delays: {}, captureAttempts: [] };
+const control = { pcs: [], channels: [], events: [], captures: [], apis: {}, updates: {}, chatUpdates: {}, drops: {}, delays: {}, captureAttempts: [], operations: [] };
 window.__callTransportTest = control;
 const nativeMediaDevices = navigator.mediaDevices;
-// Playwright WebKit supplies mock devices. Capturing one is also required by
+// Playwright WebKit supplies a mock microphone. Capturing it is required by
 // WebKit's host-candidate privacy policy; permission alone does not unblock ICE.
 const nativeMockCapture = window.__callTransportNativeMockCapture === true;
 control.capabilities = {
@@ -121,13 +121,23 @@ async function captureVideo(kind) {
   }
   let stream;
   try {
-    if (nativeMockCapture) stream = await nativeMediaDevices.getUserMedia({ video: true });
-    else {
-      const canvas = document.createElement('canvas');
-      canvas.width = 32; canvas.height = 32;
-      canvas.getContext('2d').fillRect(0, 0, 32, 32);
-      stream = canvas.captureStream(5);
-    }
+    // Video roles are synthetic in every engine. Native mock-camera track
+    // replacement can crash Linux WebKit inside GStreamer's gst_buffer_copy_into.
+    // WebKit still captures its native mock microphone below to unblock ICE.
+    const canvas = document.createElement('canvas');
+    canvas.width = 32; canvas.height = 32;
+    const context = canvas.getContext('2d');
+    context.fillRect(0, 0, 32, 32);
+    stream = canvas.captureStream(5);
+    const track = stream.getVideoTracks()[0];
+    let frame = 0;
+    const draw = () => {
+      if (track.readyState !== 'live') return;
+      context.fillStyle = `hsl(${frame++ * 31 % 360} 100% 50%)`;
+      context.fillRect(0, 0, 32, 32);
+      setTimeout(draw, 200);
+    };
+    draw();
   }
   catch (error) { attempt.stage = 'failed'; attempt.error = error.name; throw error; }
   attempt.stage = 'created';
@@ -198,7 +208,9 @@ supabase.channel = (topic, options = {}) => {
         const pc = control.pcs.find(candidate => candidate.localDescription?.sdp.includes(`a=ice-ufrag:${fragment}`));
         if (pc) pc.fixtureOwner = plain.senderId;
       }
-      control.events.push({ type, sender: plain?.senderId || plain?.callerId || null, ...(type === 'candidate' ? {
+      control.events.push({ type, sender: plain?.senderId || plain?.callerId || null,
+        videoKind: plain?.videoKind, videoRevision: plain?.videoRevision, negotiationId: plain?.negotiationId,
+        ...(type === 'candidate' ? {
         empty: !plain.candidate?.candidate,
         fragmentMatches: !plain.candidate?.usernameFragment || control.pcs.some(pc => pc.localDescription?.sdp.includes(`a=ice-ufrag:${plain.candidate.usernameFragment}`))
       } : {}) });
@@ -241,8 +253,8 @@ function Probe({ id }) {
     <button onClick={api.endCall}>End {id}</button>
     <button onClick={api.toggleCallMute}>Mute {id}</button>
     <button onClick={api.toggleVoiceEnhancement}>Voice {id}</button>
-    <button onClick={api.toggleCallVideo}>Camera {id}</button>
-    <button onClick={api.toggleCallScreenShare}>Screen {id}</button>
+    <button onClick={() => { control.operations.push({ side: id, kind: 'camera' }); return api.toggleCallVideo(); }}>Camera {id}</button>
+    <button onClick={() => { control.operations.push({ side: id, kind: 'screen' }); return api.toggleCallScreenShare(); }}>Screen {id}</button>
     <div data-testid={`quality-${id}`}><CallQuality peers={api.callQuality.peers}/></div>
     <button onClick={() => control.updates[id]()}>Profile {id}</button>
   </section>;
@@ -291,10 +303,17 @@ control.snapshot = async () => ({
     let incoming = 0;
     let outgoing = 0;
     let incomingEnergy = null;
+    let videoIncoming = 0;
+    let videoOutgoing = 0;
     if (pc.connectionState !== 'closed') {
       const stats = await pc.getStats().catch(() => null);
       stats?.forEach(stat => {
-        if ((stat.kind ?? stat.mediaType) !== 'audio') return;
+        const kind = stat.kind ?? stat.mediaType;
+        if (kind === 'video') {
+          if (stat.type === 'inbound-rtp') videoIncoming += stat.bytesReceived || 0;
+          if (stat.type === 'outbound-rtp') videoOutgoing += stat.bytesSent || 0;
+        }
+        if (kind !== 'audio') return;
         if (stat.type === 'inbound-rtp') {
           incoming += stat.packetsReceived || 0;
           if (typeof stat.totalAudioEnergy === 'number') incomingEnergy = (incomingEnergy || 0) + stat.totalAudioEnergy;
@@ -302,7 +321,7 @@ control.snapshot = async () => ({
         if (stat.type === 'outbound-rtp') outgoing += stat.packetsSent || 0;
       });
     }
-    return { connection: pc.connectionState, ice: pc.iceConnectionState, signaling: pc.signalingState, incoming, outgoing, incomingEnergy, offers: pc.offers, restarts: pc.restarts, appliedCandidates: pc.fixtureCandidates, errors: pc.fixtureErrors };
+    return { connection: pc.connectionState, ice: pc.iceConnectionState, signaling: pc.signalingState, incoming, outgoing, incomingEnergy, videoIncoming, videoOutgoing, offers: pc.offers, restarts: pc.restarts, appliedCandidates: pc.fixtureCandidates, errors: pc.fixtureErrors };
   })),
   captures: control.captures.map(capture => capture.stream.getTracks().map(track => track.readyState)),
   audioContexts: control.captures.filter(capture => capture.context).map(capture => capture.context.state),

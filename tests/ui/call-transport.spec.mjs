@@ -11,10 +11,20 @@ test.beforeEach(async ({ page, browserName }) => {
 
 test.afterEach(async ({ page }, testInfo) => {
   if (testInfo.status === testInfo.expectedStatus) return;
-  const diagnostics = await page.evaluate(async () => {
+  const diagnostics = await page.evaluate(() => {
     const control = window.__callTransportTest;
-    return control ? { snapshot: await control.snapshot(), events: control.events, remainingDrops: control.drops } : null;
-  }).catch(() => null);
+    return control ? {
+      events: control.events, remainingDrops: control.drops, operations: control.operations,
+      captures: control.captures.map(item => ({ kind: item.kind, tracks: item.stream.getTracks().map(track => ({ id: track.id, state: track.readyState })) })),
+      attempts: control.captureAttempts,
+      peers: control.pcs.map(pc => ({ state: pc.signalingState, errors: pc.fixtureErrors })),
+      sides: Object.fromEntries(Object.entries(control.apis).map(([id, api]) => [id, {
+        status: api.callState.status, remoteScreen: api.callState.isRemoteScreenSharing, screen: api.isScreenSharing, error: api.mediaError,
+        localTracks: api.localVideoStream?.getTracks().map(track => ({ id: track.id, state: track.readyState })),
+        remoteTracks: api.remoteVideoStream?.getTracks().map(track => ({ id: track.id, state: track.readyState }))
+      }]))
+    } : null;
+  }).catch(error => ({ diagnosticFailure: error.message }));
   console.log('[call-transport-safe]', JSON.stringify(diagnostics));
   await writeFile(testInfo.outputPath('call-safe.json'), JSON.stringify(diagnostics, null, 2));
   await testInfo.attach('call-transport-safe-diagnostics', { body: JSON.stringify(diagnostics, null, 2), contentType: 'application/json' });
@@ -381,6 +391,15 @@ test('removing a remote group member closes its existing media path without coop
   expect((await snapshot(page)).peers).toHaveLength(before.peers.length);
 });
 
+async function videoAdvancing(page) {
+  const before = await snapshot(page);
+  await expect.poll(async () => {
+    const after = await snapshot(page);
+    return after.peers.some((peer, index) => peer.videoOutgoing > before.peers[index].videoOutgoing)
+      && after.peers.some((peer, index) => peer.videoIncoming > before.peers[index].videoIncoming);
+  }, { timeout: 8_000 }).toBe(true);
+}
+
 for (const group of [false, true]) {
   test(`${group ? 'group' : 'personal'} screen source metadata follows camera replacement and restoration`, async ({ page }) => {
     await open(page, group ? '?group=1' : '');
@@ -396,16 +415,23 @@ for (const group of [false, true]) {
     }, group);
     await page.getByRole('button', { name: 'Screen A', exact: true }).click();
     await expect.poll(remoteKind).toBe('screen');
+    await videoAdvancing(page);
     const display = await page.evaluate(() => window.__callTransportTest.apis.A.localVideoStream.getVideoTracks()[0].id);
     await page.getByRole('button', { name: 'Camera A', exact: true }).click();
     await expect.poll(remoteKind).toBe('camera');
+    await videoAdvancing(page);
     expect(await page.evaluate(() => window.__callTransportTest.apis.A.isScreenSharing)).toBe(false);
     expect(await page.evaluate(id => window.__callTransportTest.captures.flatMap(capture => capture.stream.getVideoTracks())
       .find(track => track.id === id)?.readyState, display)).toBe('ended');
     await page.getByRole('button', { name: 'Screen A', exact: true }).click();
     await expect.poll(remoteKind).toBe('screen');
+    await videoAdvancing(page);
     await page.getByRole('button', { name: 'Screen A', exact: true }).click();
     await expect.poll(remoteKind).toBe('camera');
+    await videoAdvancing(page);
+    expect(await page.evaluate(() => window.__callTransportTest.captures.filter(capture => capture.kind)
+      .map(capture => capture.stream.getVideoTracks().map(track => track.readyState))))
+      .toEqual([['ended'], ['ended'], ['ended'], ['live']]);
     await advancing(page, await snapshot(page));
   });
 }
