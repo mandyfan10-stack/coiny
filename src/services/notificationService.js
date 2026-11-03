@@ -1,3 +1,24 @@
+// @ts-check
+import { parseNotificationTarget } from '../utils/notificationTarget.ts';
+
+export const NOTIFICATION_READY_TIMEOUT_MS = 1500;
+
+/**
+ * A failed registration must never leave notification delivery waiting forever.
+ * @param {Pick<ServiceWorkerContainer, 'ready'> | undefined} serviceWorker
+ * @param {number} [timeoutMs]
+ * @returns {Promise<ServiceWorkerRegistration | null>}
+ */
+export function waitForNotificationRegistration(serviceWorker, timeoutMs = NOTIFICATION_READY_TIMEOUT_MS) {
+  return new Promise(resolve => {
+    const timer = setTimeout(() => resolve(null), timeoutMs);
+    Promise.resolve(serviceWorker?.ready).then(
+      registration => { clearTimeout(timer); resolve(registration || null); },
+      () => { clearTimeout(timer); resolve(null); }
+    );
+  });
+}
+
 export function isNotificationSupported() {
   return typeof window !== 'undefined' && 'Notification' in window;
 }
@@ -30,9 +51,9 @@ export async function initNotificationService() {
       const swPath = typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL
         ? `${import.meta.env.BASE_URL.replace(/\/+$/, '')}/sw.js`
         : './sw.js';
-      await navigator.serviceWorker.register(swPath).catch(() => {});
+      return await navigator.serviceWorker.register(swPath);
     } catch {
-      /* ignore service worker errors in restricted environments */
+      // Desktop Notification remains available if worker registration fails.
     }
   }
 }
@@ -43,16 +64,16 @@ export async function initNotificationService() {
  *
  * @param {Object} options
  * @param {string} options.title - Notification title (e.g. sender name)
- * @param {string} options.body - Message preview text or call status
- * @param {string} [options.icon] - Icon or avatar URL
+ * @param {string} [options.body] - Message preview text or call status
+ * @param {string | null} [options.icon] - Icon or avatar URL
  * @param {string} [options.tag] - Grouping tag (e.g. chatId)
- * @param {any} [options.data] - Arbitrary payload
- * @param {() => void} [options.onClick] - Click handler (brings chat into focus)
+ * @param {unknown} [options.data] - Recipient-bound routing target
+ * @param {(() => void) | null} [options.onClick] - Click handler (brings chat into focus)
  */
 export async function showIncomingNotification({
   title,
   body,
-  icon = '/favicon.svg',
+  icon = null,
   tag = 'coingram-notification',
   data = null,
   onClick = null
@@ -65,19 +86,21 @@ export async function showIncomingNotification({
     const isTabActive = typeof document !== 'undefined' && !document.hidden && (typeof document.hasFocus === 'function' ? document.hasFocus() : true);
     if (isTabActive) return null;
 
+    const target = parseNotificationTarget(data);
+    const defaultIcon = `${import.meta.env?.BASE_URL || './'}favicon.svg`;
     const notifOptions = {
       body: body || 'Новое сообщение',
-      icon: icon || '/favicon.svg',
-      badge: '/favicon.svg',
+      icon: icon || defaultIcon,
+      badge: defaultIcon,
       tag,
-      data,
+      data: target,
       silent: false
     };
 
     // Tier 1: ServiceWorkerRegistration (Required on Android / Chrome Mobile / PWA)
     if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
       try {
-        const registration = await navigator.serviceWorker.ready;
+        const registration = await waitForNotificationRegistration(navigator.serviceWorker);
         if (registration && typeof registration.showNotification === 'function') {
           await registration.showNotification(title || 'Coiny', notifOptions);
           return registration;
@@ -121,4 +144,3 @@ export default {
   initNotificationService,
   showIncomingNotification
 };
-

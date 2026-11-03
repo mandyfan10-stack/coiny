@@ -100,7 +100,7 @@ sequenceDiagram
   B->>B: decrypt with shared key
 ```
 
-- **Algorithms:** ECDH P-256, AES-GCM-256, PBKDF2 600k for password backup  
+- **Algorithms:** ECDH P-256, AES-GCM-256, Argon2id for new password/recovery backups; PBKDF2 600k for legacy restore
 - **Local:** `CryptoKey` `extractable: false` in memory / IndexedDB  
 - **MITM:** Safety Numbers in `ChatInfo`  
 - **Helpers:** `utils/e2eeHelper.js` (+ `.d.ts`)

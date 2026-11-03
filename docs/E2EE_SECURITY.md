@@ -2,8 +2,14 @@
 
 Coiny currently encrypts message and media payloads with an AES-GCM-256 key
 derived from each participants' long-lived ECDH P-256 keys. Public keys are
-published in the profile, while a private-key backup is encrypted with
-PBKDF2-SHA-256 (600,000 iterations) and a user secret.
+published in the profile. New private-key backups use Argon2id (64 MiB, three
+iterations, parallelism one) and AES-GCM with a user secret. Legacy PBKDF2-SHA-256
+backups (600,000 iterations) remain readable.
+
+This protocol applies to personal conversations, excluding verified notes-to-self.
+Group/channel messages do not use this E2EE path. The MLS/v2 code remains behind
+an off-by-default feature flag and requires pinned runtime artifacts and audit
+approval before it can be described as the production protocol.
 
 ## What this protects
 

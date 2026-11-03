@@ -42,6 +42,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Check Web Push Edge Function
+        run: npx --yes --package deno@2.9.6 deno check --config=supabase/functions/send-web-push/deno.json --frozen supabase/functions/send-web-push/index.ts
+
       - name: Test
         run: npm test
 

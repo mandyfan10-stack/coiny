@@ -19,6 +19,8 @@ import { isMisconfigured } from './supabaseClient';
 import { initNotificationService } from './services/notificationService';
 import { parseInviteParam, savePendingInvite, clearInviteParamFromUrl } from './utils/inviteLink';
 import { useInviteHandler } from './hooks/useInviteHandler';
+import { useNotificationNavigation } from './hooks/useNotificationNavigation';
+import { useWebPushSync } from './hooks/useWebPushSync';
 import InviteLinkStatus from './components/InviteLinkStatus';
 import AppUpdateModal from './components/AppUpdateModal';
 // Shared by SettingsModal, NewChatModal, CreateStoryModal — must load with shell
@@ -121,6 +123,9 @@ function MainLayout() {
   const [showUpdate, setShowUpdate] = useState(false);
   const [releaseInfo, setReleaseInfo] = useState(null);
 
+  useNotificationNavigation({ currentUser, chats, setActiveChatId });
+  useWebPushSync(currentUser);
+
   const inviteState = useInviteHandler({
     currentUser,
     chats,
@@ -190,7 +195,7 @@ function MainLayout() {
         // Check at most once every 6 hours
         if (now - lastCheck < 6 * 60 * 60 * 1000) return;
 
-        const repo = import.meta.env.VITE_GITHUB_REPO || 'mandyfan10-stack/coingram-chat';
+        const repo = import.meta.env.VITE_GITHUB_REPO || 'mandyfan10-stack/coiny';
         const response = await fetch(`https://api.github.com/repos/${repo}/releases/latest`);
         localStorage.setItem(STORAGE_KEY, String(now));
         if (!response.ok) return;

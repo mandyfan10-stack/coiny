@@ -174,6 +174,7 @@ test('message confirmation updates isOptimistic status in IndexedDB across actio
 
 test('ChatArea and Sidebar calculate unread status and divider accurately', () => {
   assert.match(chatAreaCode, /firstUnreadIndex/);
-  assert.match(chatAreaCode, /findIndex\(\(m\)\s*=>\s*m\.senderId\s*!==\s*currentUser\?\.id/);
+  // Behavior and linear work are covered by messageListIndex.test.mjs.
+  assert.match(chatAreaCode, /buildMessageListIndex\(activeChat\?\.messages/);
   assert.match(sidebarCode, /typeof chat\.unread_count === 'number'/);
 });

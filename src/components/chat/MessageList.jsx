@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowDown } from 'lucide-react';
 import MessageBubble from './MessageBubble';
+import { buildMessageListIndex } from '../../utils/messageListIndex.ts';
 
 function formatDateDivider(timestamp) {
   if (!timestamp) return null;
@@ -51,6 +52,9 @@ export default function MessageList({
   emojis
 }) {
   const [hoveredMessageId, setHoveredMessageId] = useState(null);
+  const { messagesById } = useMemo(
+    () => buildMessageListIndex(activeChat.messages), [activeChat.messages]
+  );
   useEffect(() => {
     setHoveredMessageId(null);
     setShowMsgActionsId(null);
@@ -79,6 +83,7 @@ export default function MessageList({
                 )}
                 <MessageBubble
                   msg={msg}
+                  messagesById={messagesById}
                   index={index}
                   activeChat={activeChat}
                   currentUser={currentUser}
