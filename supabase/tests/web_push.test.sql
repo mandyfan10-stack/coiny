@@ -39,6 +39,7 @@ select set_config('request.jwt.claim.sub','bb100000-0000-4000-8000-000000000003'
 select public.register_web_push_subscription('https://fcm.googleapis.com/fcm/send/outsider',repeat('A',87),repeat('B',22));
 reset role;
 select is((select count(*)::int from public.get_message_push_recipients('bb300000-0000-4000-8000-000000000001')),1,'delivery includes the recipient and excludes outsiders');
+select set_config('request.jwt.claim.sub','bb100000-0000-4000-8000-000000000002',true);
 update public.chat_members set notifications=false where profile_id='bb100000-0000-4000-8000-000000000002';
 select is((select count(*)::int from public.get_message_push_recipients('bb300000-0000-4000-8000-000000000001')),0,'muting a chat prevents delivery');
 update public.chat_members set notifications=true where profile_id='bb100000-0000-4000-8000-000000000002';
