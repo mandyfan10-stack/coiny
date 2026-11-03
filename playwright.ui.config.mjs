@@ -1,7 +1,11 @@
 import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
-  testDir: './tests/ui', timeout: 30_000, expect: { timeout: 5_000 }, workers: 1,
+  testDir: './tests/ui', timeout: 30_000, expect: { timeout: 5_000 },
+  // The suite (~1000 tests across four projects) outgrew one serial worker: on
+  // GitHub runners it took ~34 min and hit the 35 min step limit in Release.
+  // Two workers fit the 4-vCPU runner without starving timing-sensitive tests.
+  workers: process.env.CI ? 2 : 1,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['list'], ['github']] : 'list',
   use: { baseURL: 'http://127.0.0.1:5194', trace: 'retain-on-failure', screenshot: 'only-on-failure' },

@@ -145,6 +145,13 @@ test('group recovery restarts only the failing peer and retains healthy media', 
   await start(page);
   await page.getByRole('button', { name: 'Accept C', exact: true }).click();
   await connected(page, 6);
+  // Under CPU load a peer can take a spontaneous ICE restart while the group
+  // is still settling; take the baseline only once the restart count is stable
+  // so the injected failure is not swallowed by that earlier recovery.
+  const totalRestarts = async () => (await snapshot(page)).peers.reduce((sum, peer) => sum + peer.restarts, 0);
+  let settled = -1;
+  await expect.poll(async () => { const previous = settled; settled = await totalRestarts(); return settled === previous; }, { intervals: [1_000], timeout: 15_000 }).toBe(true);
+  await connected(page, 6);
   const before = await snapshot(page);
   const previousRestarts = before.peers.reduce((sum, peer) => sum + peer.restarts, 0);
   const affected = await page.evaluate(() => [0, window.__callTransportTest.counterpart(0)]);
@@ -152,7 +159,8 @@ test('group recovery restarts only the failing peer and retains healthy media', 
   // Inject a browser failure notification into one actual connection. The
   // recovery itself performs a real ICE restart; the other four remain real.
   await page.evaluate(() => window.__callTransportTest.fail(0));
-  await expect.poll(async () => (await snapshot(page)).peers.reduce((sum, peer) => sum + peer.restarts, 0)).toBe(previousRestarts + 1);
+  // A polite peer delegates via restart-request, retried after 1 s, 2 s and 4 s.
+  await expect.poll(totalRestarts, { timeout: 15_000 }).toBe(previousRestarts + 1);
   await connected(page, 6);
   const after = await snapshot(page);
   expect(after.peers.filter((peer, index) => peer.restarts > before.peers[index].restarts)).toHaveLength(1);
