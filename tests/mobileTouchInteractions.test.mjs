@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
+import { shouldCloseMessageActions } from '../src/components/chat/chatAreaModel.ts';
 
 const mobileActionSheetCode = await readFile(
   new URL('../src/components/chat/MobileActionSheet.jsx', import.meta.url),
@@ -16,10 +17,6 @@ const chatAreaCssCode = await readFile(
 );
 const sheetCssCode = await readFile(
   new URL('../src/components/chat/MobileActionSheet.css', import.meta.url),
-  'utf8'
-);
-const chatAreaCode = await readFile(
-  new URL('../src/components/ChatArea.jsx', import.meta.url),
   'utf8'
 );
 
@@ -54,10 +51,12 @@ test('MessageBubble ignores tap/long-press on interactive controls', () => {
   assert.match(messageBubbleCode, /reaction-badge/);
 });
 
-test('ChatArea includes mobile action sheet in click-outside dismiss logic', () => {
-  assert.match(chatAreaCode, /!e\.target\.closest\('\.mobile-action-sheet'\)/);
-  assert.match(chatAreaCode, /!e\.target\.closest\('\.mobile-action-sheet-backdrop'\)/);
-  assert.match(chatAreaCode, /document\.addEventListener\('pointerdown', handleOutsideClick\)/);
+test('outside-click dismissal treats the portaled mobile action sheet as inside', () => {
+  const inside = selector => ({ closest: candidate => (candidate === selector ? {} : null) });
+  assert.equal(shouldCloseMessageActions(inside('.mobile-action-sheet')), false);
+  assert.equal(shouldCloseMessageActions(inside('.mobile-action-sheet-backdrop')), false);
+  assert.equal(shouldCloseMessageActions(inside('.chat-body')), true);
+  // Backdrop taps closing the sheet on a touch device: tests/ui/reaction-hover.spec.mjs.
 });
 
 test('ChatArea prevents touch callouts and the sheet owns its 44px touch targets', () => {

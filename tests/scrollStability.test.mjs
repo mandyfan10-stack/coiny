@@ -1,149 +1,133 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import {
+  classifyMessageListUpdate,
+  getNewMessageScrollBehavior,
+  isHydratingChatHistory,
+} from '../src/components/chat/chatScrollPolicy.ts';
 
-const chatAreaSource = readFileSync(
-  new URL('../src/components/ChatArea.jsx', import.meta.url),
-  'utf8'
-);
+// When does a message-list change move the view? These run the same policy
+// functions useChatScroll calls on every list update.
 
-class MockChatScrollState {
-  constructor(initialMessages = [], initialScrollTop = 500, initialScrollHeight = 1000, clientHeight = 500) {
-    this.messages = [...initialMessages];
-    this.scrollTop = initialScrollTop;
-    this.scrollHeight = initialScrollHeight;
-    this.clientHeight = clientHeight;
-    this.prevMessageCount = this.messages.length;
-    this.prevLatestMessageId = this.messages[this.messages.length - 1]?.id || null;
-    this.shouldAutoScroll = this.getDistanceFromBottom() < 120;
-    this.scrollEvents = [];
-  }
-
-  getDistanceFromBottom() {
-    return this.scrollHeight - this.scrollTop - this.clientHeight;
-  }
-
-  scrollToBottom(behavior = 'smooth') {
-    this.scrollEvents.push({ type: 'scrollToBottom', behavior });
-    this.scrollTop = this.scrollHeight - this.clientHeight;
-  }
-
-  // Simulate ChatArea's useEffect logic
-  onMessageUpdate(newMessages, currentUserId) {
-    const latestMessage = newMessages[newMessages.length - 1];
-    const latestMessageId = latestMessage?.id;
-    const latestMessageSenderId = latestMessage?.senderId;
-    const messageCount = newMessages.length;
-
-    const isNewMessage = (
-      messageCount > this.prevMessageCount &&
-      latestMessageId !== this.prevLatestMessageId
-    );
-    const isOwnMessage = isNewMessage && (latestMessageSenderId === currentUserId || latestMessageSenderId === 'current');
-
-    if (isNewMessage) {
-      if (this.shouldAutoScroll || isOwnMessage) {
-        this.scrollToBottom('smooth');
-      }
-    }
-
-    this.prevMessageCount = messageCount;
-    this.prevLatestMessageId = latestMessageId;
-    this.messages = [...newMessages];
-  }
+/**
+ * Drives successive message lists through the policy the way useChatScroll's
+ * effect does, recording the scroll behaviour each update would trigger.
+ */
+function createFollower({ messages, currentUserId = 'u1', shouldAutoScroll = true, isInitialChatLoad = false }) {
+  const state = {
+    previousCount: messages.length,
+    previousLatestId: messages.at(-1)?.id,
+    shouldAutoScroll,
+    isInitialChatLoad,
+    scrolls: [],
+  };
+  return {
+    state,
+    update(next, { isChatLoading = false, isLoadingOlder = false } = {}) {
+      const latest = next.at(-1);
+      const { isNewMessage, isOwnMessage } = classifyMessageListUpdate({
+        previousCount: state.previousCount,
+        previousLatestId: state.previousLatestId,
+        count: next.length,
+        latestId: latest?.id,
+        latestSenderId: latest?.senderId,
+        currentUserId,
+      });
+      const behavior = getNewMessageScrollBehavior({
+        isNewMessage,
+        isOwnMessage,
+        isHydrating: isHydratingChatHistory({
+          isInitialChatLoad: state.isInitialChatLoad,
+          isChatLoading,
+          previousCount: state.previousCount,
+          count: next.length,
+        }),
+        isLoadingOlder,
+        shouldAutoScroll: state.shouldAutoScroll,
+      });
+      if (behavior) state.scrolls.push(behavior);
+      state.previousCount = next.length;
+      state.previousLatestId = latest?.id;
+      return behavior;
+    },
+  };
 }
 
-test('ChatArea contains guard preventing scroll jumps on message deletion and reaction toggle', () => {
-  assert.match(
-    chatAreaSource,
-    /isNewMessage\s*=\s*\(\s*messageCount\s*>\s*prevMessageCountRef\.current\s*&&\s*latestMessageId\s*!==\s*prevLatestMessageIdRef\.current\s*\)/,
-    'ChatArea must guard autoscroll with isNewMessage checks'
-  );
-  assert.match(
-    chatAreaSource,
-    /distanceFromBottom\s*=\s*scrollHeight\s*-\s*scrollTop\s*-\s*clientHeight/,
-    'ChatArea must calculate distanceFromBottom accurately'
-  );
-  assert.match(
-    chatAreaSource,
-    /distanceFromBottom\s*<\s*120/,
-    'ChatArea must use a 120px threshold when returning to the bottom pin'
-  );
-  assert.match(
-    chatAreaSource,
-    /chatBodyRef\.current\.scrollTop\s*=\s*previousTop\s*\+\s*chatBodyRef\.current\.scrollHeight\s*-\s*previousHeight/,
-    'ChatArea must compensate scrollTop during older message pagination'
-  );
+const msg = (id, senderId = 'u2', extra = {}) => ({ id, senderId, text: `text ${id}`, ...extra });
+
+test('deleting a message never scrolls', () => {
+  const initial = [msg('1', 'u1'), msg('2'), msg('3', 'u1')];
+  const chat = createFollower({ messages: initial, shouldAutoScroll: false });
+  chat.update([initial[0], initial[2]]);
+  assert.deepEqual(chat.state.scrolls, []);
 });
 
-test('Message deletion does not trigger autoscroll jump', () => {
-  const initial = [
-    { id: '1', text: 'Hello', senderId: 'u1' },
-    { id: '2', text: 'World', senderId: 'u2' },
-    { id: '3', text: 'Coiny', senderId: 'u1' }
-  ];
-  // User is scrolled mid-history (distanceFromBottom = 400 > 120)
-  const chat = new MockChatScrollState(initial, 100, 1000, 500);
-  assert.equal(chat.shouldAutoScroll, false);
-
-  // Delete message 2
-  const afterDelete = [initial[0], initial[2]];
-  chat.onMessageUpdate(afterDelete, 'u1');
-
-  assert.equal(chat.scrollEvents.length, 0, 'No autoscroll event should fire on message deletion');
-  assert.equal(chat.scrollTop, 100, 'Scroll position must be preserved on deletion');
+test('toggling a reaction or editing keeps the tail and never scrolls', () => {
+  const initial = [msg('1', 'u1'), msg('2')];
+  const chat = createFollower({ messages: initial });
+  chat.update([initial[0], { ...initial[1], reactions: [{ emoji: '👍', count: 1, users: ['u1'] }] }]);
+  chat.update([initial[0], { ...initial[1], text: 'edited' }]);
+  assert.deepEqual(chat.state.scrolls, [], 'same length and tail id is not a new message, even while pinned');
 });
 
-test('Reaction toggle does not trigger autoscroll jump', () => {
-  const initial = [
-    { id: '1', text: 'Hello', senderId: 'u1', reactions: [] },
-    { id: '2', text: 'World', senderId: 'u2', reactions: [] }
-  ];
-  // User is scrolled mid-history
-  const chat = new MockChatScrollState(initial, 150, 1000, 500);
-
-  // Toggle reaction on message 2 (message count stays same, latest message id stays same)
-  const afterReaction = [
-    initial[0],
-    { id: '2', text: 'World', senderId: 'u2', reactions: [{ emoji: '👍', count: 1, users: ['u1'] }] }
-  ];
-  chat.onMessageUpdate(afterReaction, 'u1');
-
-  assert.equal(chat.scrollEvents.length, 0, 'No autoscroll event should fire on reaction toggle');
-  assert.equal(chat.scrollTop, 150, 'Scroll position must be preserved on reaction toggle');
+test('replacing the tail without growing the list is not a new message', () => {
+  const chat = createFollower({ messages: [msg('1'), msg('optimistic', 'u1')] });
+  // Server confirmation swaps the optimistic id in place.
+  chat.update([msg('1'), msg('server-id', 'u1')]);
+  assert.deepEqual(chat.state.scrolls, []);
 });
 
-test('New own message always scrolls to bottom', () => {
-  const initial = [
-    { id: '1', text: 'Hello', senderId: 'u1' }
-  ];
-  const chat = new MockChatScrollState(initial, 0, 1000, 500);
-  chat.shouldAutoScroll = false; // Even if user was scrolled up
-
-  const newMessages = [
-    ...initial,
-    { id: '2', text: 'My own reply', senderId: 'u1' }
-  ];
-  chat.onMessageUpdate(newMessages, 'u1');
-
-  assert.equal(chat.scrollEvents.length, 1);
-  assert.equal(chat.scrollEvents[0].type, 'scrollToBottom');
+test('an own message always jumps to the bottom instantly, even when reading history', () => {
+  const chat = createFollower({ messages: [msg('0'), msg('1')], shouldAutoScroll: false });
+  assert.equal(chat.update([msg('0'), msg('1'), msg('2', 'u1')]), 'auto');
+  assert.equal(chat.update([msg('0'), msg('1'), msg('2', 'u1'), msg('3', 'current')]), 'auto', 'mock-mode sender id counts as own');
 });
 
-test('New incoming message scrolls only when user is near bottom (<120px)', () => {
-  const initial = [
-    { id: '1', text: 'Hello', senderId: 'u1' }
-  ];
-  
-  // Case A: User scrolled up -> no scroll on incoming
-  const chatScrolledUp = new MockChatScrollState(initial, 0, 1000, 500);
-  chatScrolledUp.shouldAutoScroll = false;
-  chatScrolledUp.onMessageUpdate([...initial, { id: '2', text: 'Bob message', senderId: 'u2' }], 'u1');
-  assert.equal(chatScrolledUp.scrollEvents.length, 0, 'Should not autoscroll when user is reading past history');
+test('an incoming message follows smoothly only while the reader is pinned', () => {
+  const reading = createFollower({ messages: [msg('0'), msg('1')], shouldAutoScroll: false });
+  assert.equal(reading.update([msg('0'), msg('1'), msg('2')]), null);
 
-  // Case B: User at bottom -> autoscrolls smoothly
-  const chatAtBottom = new MockChatScrollState(initial, 500, 1000, 500);
-  chatAtBottom.shouldAutoScroll = true;
-  chatAtBottom.onMessageUpdate([...initial, { id: '2', text: 'Bob message', senderId: 'u2' }], 'u1');
-  assert.equal(chatAtBottom.scrollEvents.length, 1, 'Should autoscroll when user is at bottom');
+  const pinned = createFollower({ messages: [msg('0'), msg('1')], shouldAutoScroll: true });
+  assert.equal(pinned.update([msg('0'), msg('1'), msg('2')]), 'smooth');
+});
+
+test('entering a chat and hydrating its history does not count as new messages', () => {
+  const chat = createFollower({ messages: [msg('preview')], isInitialChatLoad: true });
+  const history = Array.from({ length: 30 }, (_, index) => msg(`h${index}`));
+  assert.equal(chat.update(history), null, 'initial restore phase');
+
+  chat.state.isInitialChatLoad = false;
+  const fromPreview = createFollower({ messages: [msg('preview')] });
+  assert.equal(fromPreview.update(history), null, 'growing from a 1-message preview is hydration');
+  // Consequence: in a chat holding a single message, the second one is also
+  // treated as hydration. Harmless: two rows never overflow the viewport.
+  assert.equal(createFollower({ messages: [msg('only')] }).update([msg('only'), msg('second', 'u1')]), null);
+
+  assert.equal(chat.update([...history, msg('live')]), 'smooth', 'a real arrival afterwards still follows');
+});
+
+test('messages arriving while history loads or older pages prepend do not scroll', () => {
+  const chat = createFollower({ messages: [msg('1'), msg('2')] });
+  assert.equal(chat.update([msg('1'), msg('2'), msg('3')], { isChatLoading: true }), null);
+  assert.equal(chat.update([msg('1'), msg('2'), msg('3'), msg('4')], { isLoadingOlder: true }), null);
+});
+
+test('rapid reaction cycles never accumulate scrolls', () => {
+  let list = [msg('1', 'u1', { reactions: [] }), msg('2', 'u2', { reactions: [] })];
+  const chat = createFollower({ messages: list, shouldAutoScroll: false });
+  for (let cycle = 0; cycle < 50; cycle += 1) {
+    list = list.map(item => (item.id === '2'
+      ? { ...item, reactions: cycle % 2 ? [] : [{ emoji: '🔥', count: 1, users: ['u1'] }] }
+      : item));
+    chat.update(list);
+  }
+  assert.deepEqual(chat.state.scrolls, []);
+});
+
+test('classification reports own vs incoming only for genuinely new tails', () => {
+  const base = { previousCount: 2, previousLatestId: 'b', currentUserId: 'me' };
+  assert.deepEqual(classifyMessageListUpdate({ ...base, count: 3, latestId: 'c', latestSenderId: 'me' }), { isNewMessage: true, isOwnMessage: true });
+  assert.deepEqual(classifyMessageListUpdate({ ...base, count: 3, latestId: 'c', latestSenderId: 'them' }), { isNewMessage: true, isOwnMessage: false });
+  assert.deepEqual(classifyMessageListUpdate({ ...base, count: 3, latestId: 'b', latestSenderId: 'me' }), { isNewMessage: false, isOwnMessage: false },
+    'an older page prepended keeps the tail');
 });

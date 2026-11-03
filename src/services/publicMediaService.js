@@ -1,3 +1,4 @@
+// @ts-check
 import { supabase } from '../supabaseClient.js';
 
 const IMAGE_MIME_TYPES = new Set(['image/avif', 'image/jpeg', 'image/png', 'image/webp']);
@@ -9,11 +10,22 @@ const LIMITS = {
   'group-avatar': 5 * 1024 * 1024,
 };
 
+/** @typedef {'avatar' | 'story' | 'wallpaper' | 'banner' | 'group-avatar'} PublicImageKind */
+
+/**
+ * Upload a public image through the sanitizing Edge Function (re-encodes and
+ * strips metadata server-side).
+ * @param {Blob} file
+ * @param {string} kind one of {@link PublicImageKind}; others are rejected
+ * @param {{ chatId?: string }} [options]
+ * @returns {Promise<{ reference: string, path: string }>}
+ */
 export async function uploadSanitizedPublicImage(file, kind, { chatId } = {}) {
   if (!(file instanceof Blob) || !IMAGE_MIME_TYPES.has(file.type)) {
     throw new Error('Поддерживаются только JPEG, PNG, WebP и AVIF изображения.');
   }
-  if (!LIMITS[kind] || file.size < 1 || file.size > LIMITS[kind]) {
+  const limit = Object.hasOwn(LIMITS, kind) ? LIMITS[/** @type {PublicImageKind} */ (kind)] : 0;
+  if (!limit || file.size < 1 || file.size > limit) {
     throw new Error('Размер изображения превышает допустимый лимит.');
   }
   if (!supabase) throw new Error('Supabase не настроен.');

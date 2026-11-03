@@ -1,3 +1,4 @@
+// @ts-check
 import { TRENDING_GIFS } from '../components/chat/emojiData.js';
 
 // API keys are deployment configuration. A bundled key is public and will be
@@ -18,6 +19,20 @@ export const TENOR_CATEGORIES = [
   { id: 'sad', label: '🥺 Грусть', query: 'sad' }
 ];
 
+/**
+ * @typedef {object} GifResult
+ * @property {string} id
+ * @property {string} title
+ * @property {string} url
+ * @property {string} preview
+ * @property {number} width
+ * @property {number} height
+ */
+
+/**
+ * @param {any} item raw Tenor v2 result
+ * @returns {GifResult}
+ */
 function normalizeTenorItem(item) {
   const formats = item.media_formats || {};
   const gifUrl = formats.gif?.url || formats.mediumgif?.url || formats.tinygif?.url || item.url;
@@ -36,6 +51,11 @@ function normalizeTenorItem(item) {
 
 /**
  * Filter curated GIFs with tokenized multilingual search and pagination
+ *
+ * @param {string} [query]
+ * @param {string} [category]
+ * @param {string | null} [pos] offset cursor
+ * @param {number} [limit]
  */
 function searchLocalGifs(query = '', category = '', pos = null, limit = 20) {
   const clean = String(query || '').trim().toLowerCase();
@@ -74,13 +94,18 @@ function searchLocalGifs(query = '', category = '', pos = null, limit = 20) {
       title: g.title,
       url: g.url,
       preview: g.preview || g.url,
-      width: g.width || 180,
-      height: g.height || 120
+      // Curated local GIFs carry no dimensions; use the grid's default tile.
+      width: /** @type {{ width?: number }} */ (g).width || 180,
+      height: /** @type {{ height?: number }} */ (g).height || 120
     })),
     nextPos
   };
 }
 
+/**
+ * @param {string} path Tenor endpoint, e.g. `search`
+ * @param {Record<string, string | number | null | undefined>} params
+ */
 async function fetchTenor(path, params) {
   if (!TENOR_API_KEY) return null;
 
@@ -102,6 +127,9 @@ async function fetchTenor(path, params) {
 
 /**
  * Fetch featured/trending GIFs from Tenor or local curated database
+ *
+ * @param {string | null} [pos] pagination cursor
+ * @param {number} [limit]
  */
 export async function fetchTrendingTenorGifs(pos = null, limit = 20) {
   if (TENOR_API_KEY) {
@@ -122,6 +150,11 @@ export async function fetchTrendingTenorGifs(pos = null, limit = 20) {
 
 /**
  * Search GIFs using Tenor API or local curated database
+ *
+ * @param {string} query
+ * @param {string | null} [pos] pagination cursor
+ * @param {number} [limit]
+ * @param {string} [category]
  */
 export async function searchTenorGifs(query, pos = null, limit = 20, category = '') {
   const cleanQuery = String(query || '').trim();

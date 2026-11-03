@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { prepareFiniteMediaDuration } from '../src/utils/mediaDuration.js';
+import { SENDER_COLOR_COUNT, getMessageGrouping, getSenderColor } from '../src/utils/messageGrouping.ts';
+import {
+  classifyMessageListUpdate,
+  getNewMessageScrollBehavior,
+  getPaginationRestoreTop,
+  isHydratingChatHistory,
+} from '../src/components/chat/chatScrollPolicy.ts';
 
 // ============================================================================
 // 1. VOICE NOTE PROBING & WEBM INFINITY EDGE CASES
@@ -216,71 +223,31 @@ test('ADVERSARIAL: prepareFiniteMediaDuration handles 0, negative, NaN, Infinity
 // 2. TELEGRAM MESSAGE GROUPING & 8-COLOR PALETTE EDGE CASES
 // ============================================================================
 
-const TELEGRAM_SENDER_COLORS = [
-  '#e17076', '#faa774', '#a695e7', '#7bc862',
-  '#6ec9cb', '#65aadd', '#ee7aae', '#e5a55d'
-];
-
-function getSenderColor(idOrName) {
-  if (!idOrName) return '#65aadd';
-  let hash = 0;
-  for (let i = 0; i < idOrName.length; i++) {
-    hash = (hash * 31 + idOrName.charCodeAt(i)) >>> 0;
-  }
-  return TELEGRAM_SENDER_COLORS[hash % TELEGRAM_SENDER_COLORS.length];
-}
-
+/**
+ * Bubble identity as MessageBubble derives it: grouping comes from the real
+ * getMessageGrouping; the sender name shows on the first bubble of another
+ * member's group in group chats.
+ */
 function computeGrouping({ messages, index, currentUser, activeChat }) {
   const msg = messages[index];
   const isMe = msg.senderId === currentUser?.id || msg.senderId === 'current';
   const isGroupOther = activeChat?.type === 'group' && !isMe;
-
-  const nextMsg = messages[index + 1];
-  const prevMsg = messages[index - 1];
-
-  const getSenderKey = (m) => {
-    if (!m) return null;
-    return m.senderId || m.sender_id || m.senderName || null;
-  };
-
-  const currentSenderKey = getSenderKey(msg);
-  const prevSenderKey = getSenderKey(prevMsg);
-  const nextSenderKey = getSenderKey(nextMsg);
-
-  const isSameSenderAsPrev = Boolean(
-    prevMsg &&
-    prevSenderKey &&
-    currentSenderKey &&
-    prevSenderKey === currentSenderKey &&
-    Math.abs(new Date(msg.timestamp).getTime() - new Date(prevMsg.timestamp).getTime()) < 10 * 60 * 1000
-  );
-
-  const isSameSenderAsNext = Boolean(
-    nextMsg &&
-    nextSenderKey &&
-    currentSenderKey &&
-    nextSenderKey === currentSenderKey &&
-    Math.abs(new Date(nextMsg.timestamp).getTime() - new Date(msg.timestamp).getTime()) < 10 * 60 * 1000
-  );
-
-  const isFirstInGroup = !isSameSenderAsPrev;
-  const isLastInGroup = !isSameSenderAsNext;
-  const showSenderName = isGroupOther && isFirstInGroup;
-
+  const { isFirstInGroup, isLastInGroup } = getMessageGrouping(msg, messages[index - 1], messages[index + 1]);
   return {
     isMe,
     isGroupOther,
     isFirstInGroup,
     isLastInGroup,
-    showSenderName,
-    senderColor: getSenderColor(msg.senderId || msg.sender_id || msg.senderName)
+    showSenderName: isGroupOther && isFirstInGroup,
+    senderColor: getSenderColor(msg.senderId || msg.sender_id || msg.senderName),
   };
 }
 
-test('ADVERSARIAL: Telegram 8-color palette full distribution & deterministic hashing', () => {
+test('ADVERSARIAL: sender colour palette full distribution & deterministic hashing', () => {
+  const palette = Array.from({ length: SENDER_COLOR_COUNT }, (_, index) => `var(--sender-color-${index})`);
   const hits = new Set();
   const testInputs = [
-    '', 'a', 'b', 'c', 'user1', 'user2', 'user_alpha', 'user_beta',
+    'a', 'b', 'c', 'user1', 'user2', 'user_alpha', 'user_beta',
     'alice', 'bob', 'charlie', 'david', 'elena', 'felix', 'gleb', 'helen',
     'Сергей', 'Алексей', 'Дмитрий', 'Мария', 'Екатерина', 'Владислав',
     '🔥', '💎', '🚀', '⭐', 'user_1234567890_super_long_identifier_test',
@@ -290,24 +257,35 @@ test('ADVERSARIAL: Telegram 8-color palette full distribution & deterministic ha
 
   for (const input of testInputs) {
     const color = getSenderColor(input);
-    assert.ok(TELEGRAM_SENDER_COLORS.includes(color), `Color ${color} must be in TELEGRAM_SENDER_COLORS`);
+    assert.ok(palette.includes(color), `Color ${color} must be one of the theme sender colours`);
     hits.add(color);
-
-    // Consistency check
     assert.equal(getSenderColor(input), color, 'Hashing must be strictly deterministic');
   }
 
-  // Generate 500 pseudorandom inputs to verify full 8-color coverage
+  // 500 pseudorandom inputs must reach every palette entry.
   for (let i = 0; i < 500; i++) {
-    const randomStr = `usr_${Math.sin(i).toString(36).substring(2, 10)}`;
-    const col = getSenderColor(randomStr);
-    assert.ok(TELEGRAM_SENDER_COLORS.includes(col));
+    const col = getSenderColor(`usr_${Math.sin(i).toString(36).substring(2, 10)}`);
+    assert.ok(palette.includes(col));
     hits.add(col);
   }
 
-  assert.equal(hits.size, 8, 'All 8 Telegram palette colors must be reachable via hash function');
-  assert.equal(getSenderColor(null), '#65aadd', 'Null/empty input must fall back to #65aadd');
-  assert.equal(getSenderColor(''), '#65aadd', 'Empty string must fall back to #65aadd');
+  assert.equal(hits.size, SENDER_COLOR_COUNT, 'All palette colours must be reachable via the hash');
+  assert.equal(getSenderColor(null), 'var(--accent-color)', 'Missing sender falls back to the accent colour');
+  assert.equal(getSenderColor(''), 'var(--accent-color)', 'Empty sender falls back to the accent colour');
+});
+
+test('ADVERSARIAL: grouping splits at midnight even within 10 minutes', () => {
+  const lateEvening = new Date(2026, 7, 20, 23, 58);
+  const afterMidnight = new Date(2026, 7, 21, 0, 2);
+  const messages = [
+    { id: 'm1', senderId: 'user_other', timestamp: lateEvening.toISOString() },
+    { id: 'm2', senderId: 'user_other', timestamp: afterMidnight.toISOString() },
+  ];
+  const currentUser = { id: 'me' };
+  const activeChat = { type: 'group' };
+  assert.equal(computeGrouping({ messages, index: 0, currentUser, activeChat }).isLastInGroup, true);
+  assert.equal(computeGrouping({ messages, index: 1, currentUser, activeChat }).isFirstInGroup, true,
+    'a date divider separates them, so the bubbles must not merge');
 });
 
 test('ADVERSARIAL: Telegram grouping exact boundary at 9m59s vs 10m00s vs 10m01s', () => {
@@ -479,23 +457,33 @@ class ComprehensiveScrollHarness {
     this.scrollTop = this.scrollHeight - this.clientHeight;
   }
 
+  // Runs the same policy calls as useChatScroll's message-update effect.
   applyMessageUpdate(newMessages, currentUserId) {
     const latestMessage = newMessages[newMessages.length - 1];
     const latestMessageId = latestMessage?.id;
-    const latestMessageSenderId = latestMessage?.senderId;
     const messageCount = newMessages.length;
 
-    const isNewMessage = (
-      messageCount > this.prevMessageCount &&
-      latestMessageId !== this.prevLatestMessageId
-    );
-    const isOwnMessage = isNewMessage && (latestMessageSenderId === currentUserId || latestMessageSenderId === 'current');
-
-    if (isNewMessage) {
-      if (this.shouldAutoScroll || isOwnMessage) {
-        this.scrollToBottom('smooth');
-      }
-    }
+    const { isNewMessage, isOwnMessage } = classifyMessageListUpdate({
+      previousCount: this.prevMessageCount,
+      previousLatestId: this.prevLatestMessageId,
+      count: messageCount,
+      latestId: latestMessageId,
+      latestSenderId: latestMessage?.senderId,
+      currentUserId,
+    });
+    const behavior = getNewMessageScrollBehavior({
+      isNewMessage,
+      isOwnMessage,
+      isHydrating: isHydratingChatHistory({
+        isInitialChatLoad: false,
+        isChatLoading: false,
+        previousCount: this.prevMessageCount,
+        count: messageCount,
+      }),
+      isLoadingOlder: false,
+      shouldAutoScroll: this.shouldAutoScroll,
+    });
+    if (behavior) this.scrollToBottom(behavior);
 
     this.prevMessageCount = messageCount;
     this.prevLatestMessageId = latestMessageId;
@@ -574,12 +562,18 @@ test('ADVERSARIAL: 20 rapid reaction toggles preserve scroll position with 0 aut
 });
 
 test('ADVERSARIAL: Pagination top compensation formula preserves visible viewport anchor', () => {
-  // ChatArea.jsx line 821: chatBodyRef.current.scrollTop = previousTop + chatBodyRef.current.scrollHeight - previousHeight;
   const previousTop = 15; // User scrolled near top to trigger older load
   const previousHeight = 1200;
   const newHeight = 2600; // Loaded 30 older messages above
 
-  const compensatedScrollTop = previousTop + newHeight - previousHeight;
+  const compensatedScrollTop = getPaginationRestoreTop({
+    shouldAutoScroll: false,
+    scrollHeight: newHeight,
+    anchorOffsetTop: null,
+    anchorOffset: 0,
+    previousTop,
+    previousHeight,
+  });
 
   assert.equal(compensatedScrollTop, 15 + 1400, 'Compensated scrollTop must push viewport down by exactly the added height (1415px)');
 });

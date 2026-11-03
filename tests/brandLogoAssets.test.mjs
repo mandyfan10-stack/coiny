@@ -46,9 +46,9 @@ test('AuthScreen and ChatArea use the brand logo', () => {
   assert.ok(authScreen.includes('className="auth-logo-img"'), 'AuthScreen must render auth-logo-img');
   assert.ok(authScreen.includes('src={coinyLogo}'), 'AuthScreen must use bundled coinyLogo');
 
-  const chatArea = fs.readFileSync(path.join(rootDir, 'src', 'components', 'ChatArea.jsx'), 'utf8');
-  assert.ok(chatArea.includes('className="empty-state-logo-img"'), 'ChatArea must render empty-state-logo-img');
-  assert.ok(chatArea.includes('src={coinyLogo}'), 'ChatArea must use bundled coinyLogo');
+  const emptyState = fs.readFileSync(path.join(rootDir, 'src', 'components', 'chat', 'ChatEmptyState.jsx'), 'utf8');
+  assert.ok(emptyState.includes('className="empty-state-logo-img"'), 'Chat empty state must render empty-state-logo-img');
+  assert.ok(emptyState.includes('src={coinyLogo}'), 'Chat empty state must use bundled coinyLogo');
 });
 
 test('Android mipmap launcher icons and splash screens exist across densities', () => {

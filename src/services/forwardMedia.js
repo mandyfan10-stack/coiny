@@ -1,3 +1,4 @@
+// @ts-check
 import { supabase } from '../supabaseClient';
 import { createMediaCacheContext, getCachedMedia } from '../utils/indexedDbHelper';
 import { getPrivateMediaReference, getAttachmentMimeType } from '../utils/storageMedia';
@@ -7,7 +8,28 @@ import { decryptFile, encryptFileForE2EE, requireE2EEKey } from '../utils/e2eeHe
 import { resolveSharedKey } from '../context/chat/decryptHelpers';
 import { extensionForMedia, validateChatMedia } from '../utils/mediaValidation';
 import { dataService } from './dataLayer';
+import { requireClient } from './serviceUtils.ts';
 
+/**
+ * @typedef {object} ForwardKeyContext
+ * @property {CryptoKey | null} e2eePrivateKey
+ * @property {Record<string, CryptoKey>} sharedKeysCache
+ * @property {(update: (previous: Record<string, CryptoKey>) => Record<string, CryptoKey>) => void} setSharedKeysCache
+ * @property {() => void} guard throws once the forward was cancelled or the session changed
+ */
+
+/**
+ * Re-host a message's attachment for the target chat: download (and decrypt)
+ * it from the source chat, then upload (re-encrypted when the target is a
+ * personal E2EE chat). Public sticker/GIF URLs are forwarded as-is.
+ * @param {import('../types').ChatMessage} message
+ * @param {import('../types').Chat} source
+ * @param {import('../types').Chat} target
+ * @param {string} userId
+ * @param {string} messageId id of the forwarded copy
+ * @param {ForwardKeyContext} keys
+ * @returns {Promise<string | null>} media reference for the new message
+ */
 export async function prepareForwardMedia(message, source, target, userId, messageId, keys) {
   const cacheContext = createMediaCacheContext(userId);
   if (!message.media) return null;
@@ -22,7 +44,7 @@ export async function prepareForwardMedia(message, source, target, userId, messa
     blob = await getCachedMedia(`media:${reference.bucket}:${reference.path}`, cacheContext);
     keys.guard();
     if (!blob) {
-      const { data, error } = await supabase.storage.from(reference.bucket).download(reference.path);
+      const { data, error } = await requireClient(supabase).storage.from(reference.bucket).download(reference.path);
       if (error) throw new Error('Не удалось загрузить исходное вложение.');
       blob = data;
       if (reference.bucket === 'chat-attachments' && blob.type.split(';')[0] === 'application/octet-stream') {
@@ -47,7 +69,7 @@ export async function prepareForwardMedia(message, source, target, userId, messa
     payload = await encryptFileForE2EE(blob, key);
   }
   keys.guard();
-  const { error } = await supabase.storage.from('chat-attachments').upload(path, payload, {
+  const { error } = await requireClient(supabase).storage.from('chat-attachments').upload(path, payload, {
     contentType: requiresPersonalE2EE(target, userId) ? 'application/octet-stream' : info.mimeType
   });
   if (error) throw new Error('Не удалось загрузить вложение в выбранный чат.');

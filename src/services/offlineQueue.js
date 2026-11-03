@@ -1,3 +1,4 @@
+// @ts-check
 import {
   isNetworkError,
   createOfflineQueueItem
@@ -8,6 +9,7 @@ import {
 } from '../utils/indexedDbHelper.js';
 import { requiresPersonalE2EE } from '../utils/savedMessages.ts';
 import { extensionForMedia as defaultExtensionForMedia } from '../utils/mediaValidation.ts';
+import { requireClient } from './serviceUtils.ts';
 
 export {
   isNetworkError,
@@ -17,25 +19,52 @@ export {
 export const loadOfflineQueue = loadEncryptedOfflineQueue;
 export const saveOfflineQueue = saveEncryptedOfflineQueue;
 
+/** @param {any} error storage error */
 function isAlreadyUploaded(error) {
   return Number(error?.statusCode ?? error?.status) === 409;
 }
 
+/** @param {any} error PostgREST error */
 function isDuplicateMessageId(error) {
   return error?.code === '23505';
 }
 
+/** @typedef {typeof import('../utils/e2eeHelper.js')} E2EEHelper */
+
+/**
+ * @typedef {object} AttachmentStorage
+ * @property {(bucket: string) => {
+ *   upload(path: string, body: Blob, options: { contentType: string }): PromiseLike<{ error: any }>
+ * }} from
+ */
+
+/**
+ * @typedef {object} OfflineQueueDeps
+ * @property {import('../types').Chat} chat
+ * @property {{ id: string }} currentUser
+ * @property {CryptoKey | null} [e2eePrivateKey]
+ * @property {CryptoKey | null} [sharedKey] cached shared key for the chat, if known
+ * @property {(key: CryptoKey) => void} [onSharedKey] receives a freshly derived shared key
+ * @property {E2EEHelper['importPublicKey']} [importPublicKey]
+ * @property {E2EEHelper['deriveSymmetricKey']} [deriveSymmetricKey]
+ * @property {E2EEHelper['encryptMessage']} [encryptMessage]
+ * @property {E2EEHelper['encryptFileForE2EE']} [encryptFileForE2EE]
+ * @property {E2EEHelper['requireE2EEKey']} [requireE2EEKey]
+ * @property {(id: string) => Promise<Blob | null | undefined>} [getAttachment]
+ * @property {(id: string) => Promise<unknown>} [deleteAttachment]
+ * @property {typeof defaultExtensionForMedia} [extensionForMedia]
+ * @property {AttachmentStorage} [storage]
+ * @property {(...args: any[]) => Promise<any>} [sendMessage]
+ * @property {(messageId: string) => Promise<any>} [findMessageById]
+ */
+
 /**
  * Upload offline media (if any), optionally E2EE-encrypt, and send the message.
+ * Every optional dependency is injectable for unit tests.
  *
- * Optional injects on `deps` (for unit tests):
- * `sendMessage`, `getAttachment`, `deleteAttachment`, `storage`,
- * `importPublicKey`, `deriveSymmetricKey`, `encryptMessage`, `encryptFileForE2EE`, `requireE2EEKey`,
- * `extensionForMedia`
- *
- * @param {object} item - offline queue entry
- * @param {object} deps
- * @returns {Promise<{ data: object, finalMediaUrl: string|null }>}
+ * @param {import('../types').OfflineQueueItem} item - offline queue entry
+ * @param {OfflineQueueDeps} deps
+ * @returns {Promise<{ data: any, finalMediaUrl: string|null }>}
  */
 export async function processOfflineQueueItem(item, deps) {
   const {
@@ -51,6 +80,7 @@ export async function processOfflineQueueItem(item, deps) {
   const otherMember = requiresE2EE
     ? chat.members?.find((m) => m.id !== currentUser.id)
     : null;
+  /** @type {CryptoKey | null | undefined} */
   let sharedKey = requiresE2EE ? initialSharedKey : null;
 
   const e2ee = requiresE2EE
@@ -68,18 +98,22 @@ export async function processOfflineQueueItem(item, deps) {
       }
     : null;
 
+  // `e2ee` is non-null exactly when `requiresE2EE`; the casts below restate that.
+  const e2eeOps = /** @type {NonNullable<typeof e2ee>} */ (e2ee);
+
   if (requiresE2EE && !sharedKey) {
     if (!e2eePrivateKey || !otherMember?.publicKey) {
-      e2ee.requireE2EEKey(null);
+      e2eeOps.requireE2EEKey(null);
     }
-    const otherPublicKeyObj = await e2ee.importPublicKey(otherMember.publicKey);
-    sharedKey = await e2ee.deriveSymmetricKey(e2eePrivateKey, otherPublicKeyObj);
+    const peer = /** @type {NonNullable<typeof otherMember>} */ (otherMember);
+    const otherPublicKeyObj = await e2eeOps.importPublicKey(/** @type {string} */ (peer.publicKey));
+    sharedKey = await e2eeOps.deriveSymmetricKey(/** @type {CryptoKey} */ (e2eePrivateKey), otherPublicKeyObj);
     onSharedKey?.(sharedKey);
   }
 
   if (item.hasOfflineMedia) {
     const getAttachment = deps.getAttachment
-      ?? ((id) => import('../utils/indexedDbHelper.js')
+      ?? ((/** @type {string} */ id) => import('../utils/indexedDbHelper.js')
         .then(({ getOfflineAttachment }) => getOfflineAttachment(id, currentUser.id)));
 
     const blob = await getAttachment(item.optimisticId);
@@ -87,13 +121,13 @@ export async function processOfflineQueueItem(item, deps) {
 
     const extensionForMedia = deps.extensionForMedia ?? defaultExtensionForMedia;
     const storage = deps.storage
-      ?? (await import('../supabaseClient.js')).supabase.storage;
+      ?? requireClient((await import('../supabaseClient.js')).supabase).storage;
 
-    const fileExt = extensionForMedia(blob.type, item.mediaType);
+    const fileExt = extensionForMedia(blob.type, /** @type {string} */ (item.mediaType));
     const fileName = `msg_${item.optimisticId}.${fileExt}`;
     const filePath = `${item.chatId}/${item.senderId}/${fileName}`;
     const blobToUpload = requiresE2EE
-      ? await e2ee.encryptFileForE2EE(blob, sharedKey)
+      ? await e2eeOps.encryptFileForE2EE(blob, sharedKey)
       : blob;
 
     const { error: uploadError } = await storage
@@ -114,17 +148,19 @@ export async function processOfflineQueueItem(item, deps) {
   let forwardedFrom = item.forwardedFrom ? JSON.stringify(item.forwardedFrom) : null;
 
   if (requiresE2EE) {
-    e2ee.requireE2EEKey(sharedKey);
+    // Guard only: injected test doubles may not return the key.
+    e2eeOps.requireE2EEKey(sharedKey);
+    const key = /** @type {CryptoKey} */ (sharedKey);
     if (item.text) {
-      const encryptedText = await e2ee.encryptMessage(item.text, sharedKey);
+      const encryptedText = await e2eeOps.encryptMessage(item.text, key);
       textToSend = `e2ee:aes-gcm:${encryptedText.ciphertext}:${encryptedText.iv}`;
     }
     if (forwardedFrom) {
-      const encrypted = await e2ee.encryptMessage(forwardedFrom, sharedKey);
+      const encrypted = await e2eeOps.encryptMessage(forwardedFrom, key);
       forwardedFrom = `e2ee:aes-gcm:${encrypted.ciphertext}:${encrypted.iv}`;
     }
     if (finalMediaUrl) {
-      const encryptedMedia = await e2ee.encryptMessage(finalMediaUrl, sharedKey);
+      const encryptedMedia = await e2eeOps.encryptMessage(finalMediaUrl, key);
       mediaToSend = `e2ee:aes-gcm:${encryptedMedia.ciphertext}:${encryptedMedia.iv}`;
     }
   }
@@ -147,8 +183,8 @@ export async function processOfflineQueueItem(item, deps) {
     );
   } catch (error) {
     if (!isDuplicateMessageId(error)) throw error;
-    const findMessageById = deps.findMessageById ?? (async (messageId) => {
-      const client = (await import('../supabaseClient.js')).supabase;
+    const findMessageById = deps.findMessageById ?? (async (/** @type {string} */ messageId) => {
+      const client = requireClient((await import('../supabaseClient.js')).supabase);
       const { data: existing, error: lookupError } = await client
         .from('messages')
         .select('*')

@@ -1,10 +1,12 @@
+// @ts-check
 import { supabase, isSupabaseConfigured } from '../supabaseClient';
 import { getStorageObjectPath } from '../utils/urlSecurity';
+import { requireClient } from './serviceUtils.ts';
 
 export const mediaService = {
   fetchStories: async () => {
     if (isSupabaseConfigured) {
-      const { data, error } = await supabase
+      const { data, error } = await requireClient(supabase)
         .from('stories')
         .select('*, profiles(display_name, username, avatar, avatar_color)')
         .order('created_at', { ascending: true });
@@ -15,6 +17,7 @@ export const mediaService = {
       }));
     }
 
+    /** @type {any[]} */
     let savedStories = [];
     try {
       const stored = localStorage.getItem('tg-stories-mock');
@@ -47,9 +50,14 @@ export const mediaService = {
     return savedStories;
   },
 
+  /**
+   * @param {string} userId
+   * @param {string} media storage reference or URL
+   * @param {string} caption
+   */
   publishStory: async (userId, media, caption) => {
     if (isSupabaseConfigured) {
-      const { data, error } = await supabase
+      const { data, error } = await requireClient(supabase)
         .from('stories')
         .insert({
           user_id: userId,
@@ -78,6 +86,7 @@ export const mediaService = {
       created_at: new Date().toISOString()
     };
 
+    /** @type {any[]} */
     let savedStories = [];
     try {
       const stored = localStorage.getItem('tg-stories-mock');
@@ -91,9 +100,10 @@ export const mediaService = {
     return newStory;
   },
 
+  /** @param {string} storyId */
   deleteStory: async (storyId) => {
     if (isSupabaseConfigured) {
-      const { error } = await supabase
+      const { error } = await requireClient(supabase)
         .from('stories')
         .delete()
         .eq('id', storyId);
@@ -101,6 +111,7 @@ export const mediaService = {
       return true;
     }
 
+    /** @type {any[]} */
     let savedStories = [];
     try {
       const stored = localStorage.getItem('tg-stories-mock');
@@ -113,10 +124,11 @@ export const mediaService = {
     return true;
   },
 
+  /** @param {string} userId */
   fetchStickers: async (userId) => {
     if (!isSupabaseConfigured) return null;
 
-    const { data: userPacks, error: err1 } = await supabase
+    const { data: userPacks, error: err1 } = await requireClient(supabase)
       .from('user_sticker_packs')
       .select('pack_id, sticker_packs(*)')
       .eq('user_id', userId);
@@ -124,9 +136,11 @@ export const mediaService = {
     if (err1) throw err1;
 
     return await Promise.all((userPacks || []).map(async (up) => {
-      const pack = up.sticker_packs;
+      // Many-to-one embed: PostgREST returns one object, but the untyped
+      // client infers an array for embedded relations.
+      const pack = /** @type {any} */ (up.sticker_packs);
       if (!pack) return null;
-      const { data: stickerList, error: err2 } = await supabase
+      const { data: stickerList, error: err2 } = await requireClient(supabase)
         .from('stickers')
         .select('*')
         .eq('pack_id', pack.id)
@@ -151,10 +165,14 @@ export const mediaService = {
     }));
   },
 
+  /**
+   * @param {string} _userId
+   * @param {string} packName
+   */
   importStickerPack: async (_userId, packName) => {
     if (!isSupabaseConfigured) return null;
 
-    const { data, error } = await supabase.functions.invoke('import-sticker-pack', {
+    const { data, error } = await requireClient(supabase).functions.invoke('import-sticker-pack', {
       body: { packName }
     });
     if (error) throw error;

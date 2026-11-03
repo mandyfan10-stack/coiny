@@ -1,437 +1,233 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import {
+  AT_BOTTOM_TOLERANCE_PX,
+  SCROLL_STORAGE_KEY_PREFIX,
+  createBottomScrollSnapshot,
+  createScrollSnapshot,
+  findSavedScrollTarget,
+  findTopVisibleRow,
+  getClampedDistanceFromBottom,
+  getDistanceFromBottom,
+  getPaginationRestoreTop,
+  getResizeAction,
+  hasProgrammaticScrollArrived,
+  readSavedChatScroll,
+  resolveUserScrollPin,
+  shouldLoadOlderMessages,
+  shouldWaitForOlderHistory,
+  writeSavedChatScroll,
+} from '../src/components/chat/chatScrollPolicy.ts';
 
-const chatAreaSource = readFileSync(
-  new URL('../src/components/ChatArea.jsx', import.meta.url),
-  'utf8'
-);
+// Behaviour of the scroll policy used by useChatScroll. Browser-level
+// integration (real layout, pagination, resize) lives in tests/scroll/.
 
-test('ChatArea defines ResizeObserver and multi-stage anchor refs for scroll stability', () => {
-  assert.match(chatAreaSource, /userScrolledManuallyRef/);
-  assert.match(chatAreaSource, /anchorMessageIdRef/);
-  assert.match(chatAreaSource, /anchorOffsetRef/);
-  assert.match(chatAreaSource, /prevChatIdRef/);
-  assert.match(chatAreaSource, /new ResizeObserver/);
-});
-
-test('ChatArea guards saveCurrentScrollPosition against saving during initial load', () => {
-  assert.match(chatAreaSource, /if\s*\(\s*isInitialChatLoadRef\.current\s*\)\s*return;/);
-});
-
-test('ChatArea hooks pagehide and visibilitychange for persistent scroll saves', () => {
-  assert.match(chatAreaSource, /addEventListener\('pagehide'/);
-  assert.match(chatAreaSource, /addEventListener\('visibilitychange'/);
-});
-
-test('ChatArea attaches manual scroll interaction listeners on chat container', () => {
-  assert.match(chatAreaSource, /onWheel=\{[^}]*userScrolledManuallyRef\.current\s*=\s*true/);
-  assert.match(chatAreaSource, /onTouchStart=\{[^}]*userScrolledManuallyRef\.current\s*=\s*true/);
-  assert.match(chatAreaSource, /onPointerDown=\{[^}]*userScrolledManuallyRef\.current\s*=\s*true/);
-});
-
-test('Chat switch does not trigger autoscroll when message counts differ', () => {
-  let scrollInvocations = 0;
-  let prevChatId = 'chat-1';
-  let prevMessageCount = 5;
-  let prevLatestMessageId = 'msg-5';
-
-  function onChatOrMessageUpdate(chatId, messages) {
-    const isChatChanged = prevChatId !== chatId;
-    prevChatId = chatId;
-
-    const messageCount = messages.length;
-    const latestMessage = messages[messages.length - 1];
-    const latestMessageId = latestMessage?.id;
-
-    if (isChatChanged) {
-      prevMessageCount = messageCount;
-      prevLatestMessageId = latestMessageId;
-      return;
-    }
-
-    const isNewMessage = (
-      messageCount > prevMessageCount &&
-      latestMessageId !== prevLatestMessageId
-    );
-
-    if (isNewMessage) {
-      scrollInvocations++;
-    }
-
-    prevMessageCount = messageCount;
-    prevLatestMessageId = latestMessageId;
-  }
-
-  // Switch to chat-2 which has 30 messages (30 > 5)
-  const chat2Messages = Array.from({ length: 30 }, (_, i) => ({
-    id: `c2-msg-${i + 1}`,
-    text: `Text ${i + 1}`,
-    senderId: 'current'
-  }));
-
-  onChatOrMessageUpdate('chat-2', chat2Messages, 'current');
-
-  assert.equal(scrollInvocations, 0, 'Switching chat must not be treated as a new message autoscroll');
-
-  // Now a real new message arrives in chat-2
-  const chat2Updated = [
-    ...chat2Messages,
-    { id: 'c2-msg-31', text: 'New text', senderId: 'current' }
-  ];
-  onChatOrMessageUpdate('chat-2', chat2Updated, 'current');
-  assert.equal(scrollInvocations, 1, 'Real new message in same chat triggers scroll');
-});
-
-test('ResizeObserver anchor policy preserves target message offset', () => {
-  let scrollTop = 500;
-  const targetMessageOffsetTop = 600;
-  const savedOffset = 50;
-
-  // Expected restored scrollTop: targetMessageOffsetTop - savedOffset = 550
-  scrollTop = targetMessageOffsetTop - savedOffset;
-  assert.equal(scrollTop, 550);
-
-  // When content above expands (e.g. image loads), message offset changes to 800
-  const updatedMessageOffsetTop = 800;
-  scrollTop = updatedMessageOffsetTop - savedOffset;
-  assert.equal(scrollTop, 750, 'Scroll top adjusts to keep message at exact relative viewport position');
-});
-
-test('ChatArea integrates persistSettledScroll for immediate durable persistence', () => {
-  assert.match(chatAreaSource, /persistSettledScroll/);
-  assert.match(chatAreaSource, /isPointerDownRef/);
-  assert.match(chatAreaSource, /initialMountTickRef/);
-});
-
-test('Hydration pipeline holds isInitialChatLoad active across 1-message preview tick', () => {
-  let isInitialChatLoad = true;
-  let initialMountTick = true;
-  let restoredScrollTop = 0;
-  const scrollHeightPreview = 60;
-  const scrollHeightHydrated = 3000;
-
-  function runLayoutEffect(messageCount, isSyncing, isChatLoading, targetMessageInDom) {
-    if (!isInitialChatLoad) return;
-
-    if (targetMessageInDom) {
-      restoredScrollTop = 1450;
-      isInitialChatLoad = false;
-      initialMountTick = false;
-      return;
-    }
-
-    // Default or bottom restoration
-    restoredScrollTop = messageCount > 1 ? scrollHeightHydrated : scrollHeightPreview;
-
-    if (messageCount > 1 || (!initialMountTick && !isSyncing && !isChatLoading)) {
-      isInitialChatLoad = false;
-      initialMountTick = false;
-    } else {
-      initialMountTick = false;
-    }
-  }
-
-  // Tick 0: 1 preview message present, sync in-flight
-  runLayoutEffect(1, true, false, false);
-  assert.equal(isInitialChatLoad, true, 'Must stay in initial load during preview tick');
-  assert.equal(restoredScrollTop, 60, 'Sets preview scroll top without completing');
-
-  // Tick 1: 50 cached messages arrive from IndexedDB, target message found
-  runLayoutEffect(50, true, false, true);
-  assert.equal(isInitialChatLoad, false, 'Restoration completes once full messages hydrate');
-  assert.equal(restoredScrollTop, 1450, 'Restores target message scrollTop');
-});
-
-test('scrollToBottom records isAtBottom and distanceFromBottom: 0 for instant chat switch restoration', () => {
-  const scrollMap = new Map();
-  const mockLocalStorage = {};
-
-  function performScrollToBottom(chatId, scrollHeight) {
-    const scrollData = {
-      scrollTop: scrollHeight,
-      scrollHeight,
-      distanceFromBottom: 0,
-      isAtBottom: true,
-      topMessageId: null,
-      topMessageOffset: 0,
-      timestamp: Date.now()
+/** Minimal chat body: rows stacked at `height` px each, viewport scrolled to `scrollTop`. */
+function fakeChatBody(rows, { scrollTop = 0, height = 100, containerTop = 0 } = {}) {
+  const elements = rows.map(({ id, timestamp }, index) => {
+    const top = containerTop + index * height - scrollTop;
+    return {
+      dataset: { messageId: id, messageTimestamp: timestamp === undefined ? undefined : String(timestamp) },
+      offsetTop: index * height,
+      getAttribute: name => (name === 'data-message-id' ? id : null),
+      getBoundingClientRect: () => ({ top, bottom: top + height }),
     };
-    scrollMap.set(chatId, scrollData);
-    mockLocalStorage[`coingram_chat_scroll_${chatId}`] = JSON.stringify(scrollData);
-  }
-
-  performScrollToBottom('chat-abc', 4200);
-
-  const savedMemory = scrollMap.get('chat-abc');
-  assert.equal(savedMemory.isAtBottom, true);
-  assert.equal(savedMemory.distanceFromBottom, 0);
-
-  const savedStorage = JSON.parse(mockLocalStorage['coingram_chat_scroll_chat-abc']);
-  assert.equal(savedStorage.isAtBottom, true);
-  assert.equal(savedStorage.scrollTop, 4200);
-});
-
-test('ChatArea scroll to bottom button and programmatic scroll contracts', () => {
-  assert.match(chatAreaSource, /isScrollingToBottomRef/);
-  assert.match(chatAreaSource, /scrollTimeoutRef/);
-  assert.match(chatAreaSource, /footerRef/);
-  assert.match(chatAreaSource, /setFooterHeight/);
-  assert.match(chatAreaSource, /if\s*\(isScrollingToBottomRef\.current\)[\s\S]*scrollTo\(\{[\s\S]*behavior:\s*'smooth'/);
-  assert.match(chatAreaSource, /Math\.max\(0,\s*scrollHeight\s*-\s*scrollTop\s*-\s*clientHeight\)/);
-  assert.match(chatAreaSource, /className="scroll-bottom-btn"[\s\S]*setShowScrollBottom\(false\)[\s\S]*scrollToBottom\('smooth'\)/);
-});
-
-test('Programmatic scroll to bottom preserves autoscroll across intermediate scroll events', () => {
-  let isScrollingToBottom = false;
-  let shouldAutoScroll = false;
-  let showScrollBottom = true;
-  let anchorMessageId = 'msg-10';
-
-  function onScrollToBottom() {
-    isScrollingToBottom = true;
-    shouldAutoScroll = true;
-    showScrollBottom = false;
-    anchorMessageId = null;
-  }
-
-  function onHandleScroll(scrollTop, scrollHeight, clientHeight) {
-    const distanceFromBottom = Math.max(0, scrollHeight - scrollTop - clientHeight);
-    if (isScrollingToBottom) {
-      if (distanceFromBottom <= 30) {
-        isScrollingToBottom = false;
-        shouldAutoScroll = true;
-        showScrollBottom = false;
-      } else {
-        shouldAutoScroll = true;
-        showScrollBottom = false;
-      }
-      return;
-    }
-
-    shouldAutoScroll = distanceFromBottom < 120;
-    showScrollBottom = distanceFromBottom > 300;
-    anchorMessageId = 'msg-mid';
-  }
-
-  onScrollToBottom();
-  assert.equal(isScrollingToBottom, true);
-  assert.equal(showScrollBottom, false);
-  assert.equal(shouldAutoScroll, true);
-
-  // Intermediate scroll event at mid-flight (distance: 500px)
-  onHandleScroll(1000, 2000, 500);
-  assert.equal(shouldAutoScroll, true, 'Autoscroll must not be flipped to false during programmatic scroll');
-  assert.equal(showScrollBottom, false, 'Scroll button must stay hidden during programmatic scroll');
-  assert.equal(anchorMessageId, null, 'Anchor message must not be overwritten during programmatic scroll');
-
-  // Subpixel distance (15px) arrives cleanly at bottom
-  onHandleScroll(1485, 2000, 500);
-  assert.equal(isScrollingToBottom, false, 'Programmatic scroll flag clears within arrival threshold');
-  assert.equal(shouldAutoScroll, true);
-  assert.equal(showScrollBottom, false);
-});
-
-test('Manual user scroll gesture interrupts programmatic scroll to bottom', () => {
-  let isScrollingToBottom = true;
-  let userScrolledManually = false;
-
-  function onUserWheel() {
-    userScrolledManually = true;
-    isScrollingToBottom = false;
-  }
-
-  onUserWheel();
-  assert.equal(isScrollingToBottom, false, 'Manual interaction must cancel programmatic scroll flag');
-  assert.equal(userScrolledManually, true, 'Manual interaction marks userScrolledManually');
-});
-
-test('Chat switch resets showScrollBottom and prevents sticky visibility', () => {
-  let showScrollBottom = true;
-  let prevChatId = 'chat-1';
-
-  function onChatSwitch(nextChatId, savedDistanceFromBottom) {
-    if (prevChatId !== nextChatId) {
-      prevChatId = nextChatId;
-      showScrollBottom = false;
-    }
-    if (typeof savedDistanceFromBottom === 'number') {
-      showScrollBottom = savedDistanceFromBottom > 300;
-    }
-  }
-
-  // Switch to chat-2 which is saved at bottom (distance: 0)
-  onChatSwitch('chat-2', 0);
-  assert.equal(showScrollBottom, false, 'Button must not stick when switching to chat at bottom');
-
-  // Switch to chat-3 which is saved scrolled up (distance: 800)
-  onChatSwitch('chat-3', 800);
-  assert.equal(showScrollBottom, true, 'Button shows when switching to chat saved far from bottom');
-});
-
-test('Distance from bottom handles rubber-band overscroll gracefully', () => {
-  const scrollHeight = 1000;
-  const clientHeight = 600;
-  const overscrollTop = 450;
-  const rawDistance = scrollHeight - overscrollTop - clientHeight;
-  assert.equal(rawDistance < 0, true, 'Raw distance is negative under overscroll');
-
-  const clampedDistance = Math.max(0, scrollHeight - overscrollTop - clientHeight);
-  assert.equal(clampedDistance, 0, 'Clamped distance must not be negative');
-});
-
-test('ResizeObserver does not snap scrollTop during programmatic smooth scroll', () => {
-  let isScrollingToBottom = true;
-  let shouldAutoScroll = false;
-  let scrollTop = 500;
-  const scrollCalls = [];
-
-  const mockElement = {
-    scrollHeight: 2000,
-    scrollTo({ top, behavior }) {
-      scrollCalls.push({ top, behavior });
-    }
+  });
+  return {
+    querySelectorAll: () => elements,
+    getBoundingClientRect: () => ({ top: containerTop, bottom: containerTop + 600 }),
+    rows: elements,
   };
+}
 
-  if (isScrollingToBottom) {
-    mockElement.scrollTo({ top: mockElement.scrollHeight, behavior: 'smooth' });
-  } else if (shouldAutoScroll) {
-    scrollTop = mockElement.scrollHeight;
-  }
+function memoryStorage() {
+  const map = new Map();
+  return {
+    map,
+    getItem: key => (map.has(key) ? map.get(key) : null),
+    setItem: (key, value) => map.set(key, value),
+  };
+}
 
-  assert.equal(scrollTop, 500, 'scrollTop must not jump instantly during smooth scroll');
-  assert.equal(scrollCalls.length, 1);
-  assert.equal(scrollCalls[0].behavior, 'smooth', 'ResizeObserver retargets smoothly instead of snapping');
+test('distance from bottom is raw for thresholds and clamped under rubber-band overscroll', () => {
+  const overscrolled = { scrollTop: 450, scrollHeight: 1000, clientHeight: 600 };
+  assert.equal(getDistanceFromBottom(overscrolled), -50);
+  assert.equal(getClampedDistanceFromBottom(overscrolled), 0);
+  assert.equal(getClampedDistanceFromBottom({ scrollTop: 100, scrollHeight: 1000, clientHeight: 600 }), 300);
 });
 
-test('Smooth scroll idle debounce protects multi-second flights from premature cutoff', () => {
-  let timeoutId = null;
-  let settled = false;
+test('saved positions round-trip through storage under the per-chat key', () => {
+  const storage = memoryStorage();
+  const snapshot = createBottomScrollSnapshot(4200, 1);
+  writeSavedChatScroll('chat-abc', snapshot, storage);
 
-  function onIntermediateScroll() {
-    if (timeoutId) clearTimeout(timeoutId);
-    timeoutId = setTimeout(() => {
-      settled = true;
-    }, 300);
-  }
-
-  for (let t = 0; t <= 1000; t += 50) {
-    onIntermediateScroll();
-  }
-
-  assert.equal(settled, false, 'Debounced timeout must not settle while frames are continuously firing');
-  clearTimeout(timeoutId);
+  assert.ok(storage.map.has(`${SCROLL_STORAGE_KEY_PREFIX}chat-abc`));
+  assert.deepEqual(readSavedChatScroll('chat-abc', storage), snapshot);
+  assert.equal(readSavedChatScroll('chat-other', storage), null);
 });
 
-test('ChatArea ignores history hydration and does not trigger smooth scroll upon entering a chat', () => {
-  assert.match(chatAreaSource, /isHydratingChatHistory/);
-  assert.match(chatAreaSource, /!isHydratingChatHistory\s*&&\s*isNewMessage/);
+test('saved position storage tolerates missing ids, corrupt JSON and quota errors', () => {
+  const storage = memoryStorage();
+  storage.map.set(`${SCROLL_STORAGE_KEY_PREFIX}broken`, '{not json');
+  assert.equal(readSavedChatScroll('broken', storage), null);
+  assert.equal(readSavedChatScroll(null, storage), null);
+  assert.equal(readSavedChatScroll('chat', null), null);
 
-  let scrollCalls = 0;
-  let prevChatId = null;
-  let prevMessageCount = 0;
-  let prevLatestMessageId = null;
-  let isInitialChatLoad = true;
-
-  function handleMessageEffect(chatId, messages, isChatLoading = false) {
-    const isChatChanged = prevChatId !== chatId;
-    prevChatId = chatId;
-
-    const messageCount = messages.length;
-    const latestMessage = messages[messages.length - 1];
-    const latestMessageId = latestMessage?.id;
-
-    if (isChatChanged) {
-      prevMessageCount = messageCount;
-      prevLatestMessageId = latestMessageId;
-      isInitialChatLoad = true;
-      return;
-    }
-
-    const isNewMessage = (
-      messageCount > prevMessageCount &&
-      latestMessageId !== prevLatestMessageId
-    );
-
-    const isHydratingChatHistory = Boolean(
-      isInitialChatLoad ||
-      isChatLoading ||
-      (prevMessageCount <= 1 && messageCount > 1)
-    );
-
-    if (!isHydratingChatHistory && isNewMessage) {
-      scrollCalls++;
-    }
-
-    if (messageCount > 1) {
-      isInitialChatLoad = false;
-    }
-
-    prevMessageCount = messageCount;
-    prevLatestMessageId = latestMessageId;
-  }
-
-  // Step 1: User enters chat with 1 preview message
-  handleMessageEffect('chat-100', [{ id: 'msg-preview', text: 'Preview' }]);
-  assert.equal(scrollCalls, 0, 'Entering chat must not trigger autoscroll');
-
-  // Step 2: Full history hydrates from IndexedDB (30 messages)
-  const fullHistory = Array.from({ length: 30 }, (_, i) => ({
-    id: `msg-${i + 1}`,
-    text: `Message ${i + 1}`
-  }));
-  handleMessageEffect('chat-100', fullHistory);
-  assert.equal(scrollCalls, 0, 'Hydrating history must not trigger smooth autoscroll');
-
-  // Step 3: Now an actual new message arrives while chatting
-  handleMessageEffect('chat-100', [...fullHistory, { id: 'msg-31', text: 'Real new message' }]);
-  assert.equal(scrollCalls, 1, 'Real new message must trigger autoscroll');
+  const full = { getItem: () => null, setItem: () => { throw new Error('QuotaExceededError'); } };
+  assert.doesNotThrow(() => writeSavedChatScroll('chat', createBottomScrollSnapshot(10), full));
 });
 
-test('Upward scroll cancels programmatic scroll and unlocks scrolling up', () => {
-  assert.match(chatAreaSource, /lastScrollTopRef/);
-  assert.match(chatAreaSource, /isScrollingUp/);
-
-  let isScrollingToBottom = true;
-  let userScrolledManually = false;
-  let shouldAutoScroll = true;
-  let lastScrollTop = 1000;
-
-  function onScroll(scrollTop) {
-    const isScrollingUp = scrollTop < lastScrollTop;
-    lastScrollTop = scrollTop;
-
-    if (isScrollingUp && isScrollingToBottom) {
-      isScrollingToBottom = false;
-      userScrolledManually = true;
-      shouldAutoScroll = false;
-    }
-  }
-
-  // User scrolls UP from 1000 to 900
-  onScroll(900);
-
-  assert.equal(isScrollingToBottom, false, 'Upward scroll must cancel programmatic scroll');
-  assert.equal(userScrolledManually, true, 'Upward scroll marks userScrolledManually');
-  assert.equal(shouldAutoScroll, false, 'Upward scroll releases auto-scroll pin');
+test('scroll-to-bottom snapshot records the bottom so a chat switch restores instantly', () => {
+  const snapshot = createBottomScrollSnapshot(4200, 99);
+  assert.equal(snapshot.isAtBottom, true);
+  assert.equal(snapshot.distanceFromBottom, 0);
+  assert.equal(snapshot.scrollTop, 4200);
+  assert.equal(snapshot.topMessageId, null);
 });
 
-test('ResizeObserver does not snap to bottom when user scrolled manually or is looking at an anchor', () => {
-  let userScrolledManually = true;
-  let shouldAutoScroll = true;
-  let scrollTop = 500;
-  const scrollHeight = 2000;
-  const clientHeight = 600;
-  const currentDist = scrollHeight - scrollTop - clientHeight; // 900px away from bottom
+test('the top visible row is the first one whose bottom edge passes the viewport top', () => {
+  const body = fakeChatBody(
+    [{ id: 'a', timestamp: 1 }, { id: 'b', timestamp: 2 }, { id: 'c' }],
+    { scrollTop: 130 },
+  );
+  assert.deepEqual(findTopVisibleRow(body), { id: 'b', offset: -30, timestamp: 2 });
 
-  if (shouldAutoScroll) {
-    if (!userScrolledManually && currentDist <= 30) {
-      scrollTop = scrollHeight;
-    }
-  }
-
-  assert.equal(scrollTop, 500, 'scrollTop must stay untouched when user scrolled manually');
+  // A row showing only its last few pixels does not count as visible.
+  const sliver = fakeChatBody([{ id: 'a' }, { id: 'b' }], { scrollTop: 97 });
+  assert.equal(findTopVisibleRow(sliver).id, 'b');
+  assert.equal(findTopVisibleRow(sliver).timestamp, null, 'missing timestamps are reported as null');
+  assert.equal(findTopVisibleRow(fakeChatBody([])), null);
 });
 
+test('a settled snapshot keeps the reading anchor and only claims "at bottom" when pinned there', () => {
+  const topRow = { id: 'm7', offset: 12, timestamp: 70 };
+  const reading = createScrollSnapshot({
+    scrollTop: 100, scrollHeight: 2000, clientHeight: 500,
+    shouldAutoScroll: false, userScrolledManually: true, topRow, now: 5,
+  });
+  assert.equal(reading.isAtBottom, false);
+  assert.equal(reading.distanceFromBottom, 1400);
+  assert.equal(reading.topMessageId, 'm7');
+  assert.equal(reading.topMessageOffset, 12);
+  assert.equal(reading.topMessageTimestamp, 70);
 
+  const pinned = { scrollHeight: 2000, clientHeight: 500, shouldAutoScroll: true, topRow };
+  assert.equal(createScrollSnapshot({ ...pinned, scrollTop: 1000, userScrolledManually: false }).isAtBottom, true,
+    'a pinned reader with no manual scroll is at bottom regardless of transient distance');
+  assert.equal(createScrollSnapshot({ ...pinned, scrollTop: 1500 - AT_BOTTOM_TOLERANCE_PX, userScrolledManually: true }).isAtBottom, true);
+  assert.equal(createScrollSnapshot({ ...pinned, scrollTop: 1400, userScrolledManually: true }).isAtBottom, false,
+    'a manual reader 100px up is not at bottom even while auto-scroll is still armed');
+});
 
+test('a saved anchor resolves to its exact row when rendered', () => {
+  const body = fakeChatBody([{ id: 'a', timestamp: 10 }, { id: 'b', timestamp: 20 }]);
+  const target = findSavedScrollTarget(body, { topMessageId: 'b', topMessageTimestamp: 20 });
+  assert.equal(target.row, body.rows[1]);
+  assert.equal(target.needsOlder, false);
+});
+
+test('a deleted saved message falls back to the adjacent row by timestamp', () => {
+  const body = fakeChatBody([{ id: 'a', timestamp: 10 }, { id: 'c', timestamp: 30 }]);
+  const target = findSavedScrollTarget(body, { topMessageId: 'b', topMessageTimestamp: 20 });
+  assert.equal(target.row, body.rows[1]);
+  assert.equal(target.needsOlder, false);
+});
+
+test('a saved anchor older than the loaded window asks for older history', () => {
+  const body = fakeChatBody([{ id: 'x', timestamp: 500 }, { id: 'y', timestamp: 600 }]);
+  const target = findSavedScrollTarget(body, { topMessageId: 'gone', topMessageTimestamp: 100 });
+  assert.equal(target.needsOlder, true);
+  assert.equal(target.row, body.rows[0], 'meanwhile the closest loaded row is offered');
+
+  assert.deepEqual(findSavedScrollTarget(body, { topMessageId: 'gone' }), { row: null, needsOlder: true },
+    'without a timestamp the only safe answer is to load more');
+});
+
+test('restoration waits for older history only while more can still arrive', () => {
+  const base = { needsOlder: true, messageCount: 30, isSyncing: false, isChatLoading: false };
+  assert.equal(shouldWaitForOlderHistory({ ...base, hasMore: true }), true);
+  assert.equal(shouldWaitForOlderHistory({ ...base, hasMore: undefined }), true, 'unknown pagination may still have pages');
+  assert.equal(shouldWaitForOlderHistory({ ...base, hasMore: false }), false, 'the start of history was reached');
+  assert.equal(shouldWaitForOlderHistory({ ...base, hasMore: false, isSyncing: true }), true);
+  assert.equal(shouldWaitForOlderHistory({ ...base, hasMore: false, messageCount: 1 }), true, 'a 1-message preview is not the full history');
+  assert.equal(shouldWaitForOlderHistory({ ...base, needsOlder: false, hasMore: true }), false);
+});
+
+test('older pages load near the top but never during the initial restore or a pending request', () => {
+  const base = { isInitialChatLoad: false, scrollTop: 40, hasMore: true, isLoadingOlder: false };
+  assert.equal(shouldLoadOlderMessages(base), true);
+  assert.equal(shouldLoadOlderMessages({ ...base, scrollTop: 81 }), false);
+  assert.equal(shouldLoadOlderMessages({ ...base, hasMore: false }), false);
+  assert.equal(shouldLoadOlderMessages({ ...base, isLoadingOlder: true }), false);
+  assert.equal(shouldLoadOlderMessages({ ...base, scrollTop: 0, isInitialChatLoad: true }), false,
+    'a long chat opens at scrollTop 0 before layout restores it');
+});
+
+test('prepending history keeps the reading anchor, compensates without one, or follows the pin', () => {
+  const base = { scrollHeight: 2600, anchorOffset: 50, previousTop: 15, previousHeight: 1200 };
+  assert.equal(getPaginationRestoreTop({ ...base, shouldAutoScroll: false, anchorOffsetTop: 1600 }), 1550);
+  assert.equal(getPaginationRestoreTop({ ...base, shouldAutoScroll: false, anchorOffsetTop: null }), 15 + 1400,
+    'without an anchor, push the viewport down by exactly the added height');
+  assert.equal(getPaginationRestoreTop({ ...base, shouldAutoScroll: true, anchorOffsetTop: 1600 }), 2600);
+});
+
+test('resizes retarget an in-flight smooth scroll instead of snapping it', () => {
+  const idle = { isInitialChatLoad: false, isLoadingOlder: false, isPointerDown: false, shouldAutoScroll: true, hasAnchor: false };
+  assert.equal(getResizeAction({ ...idle, isScrollingToBottom: true }), 'retarget-smooth');
+  assert.equal(getResizeAction({ ...idle, isScrollingToBottom: false }), 'pin-bottom');
+});
+
+test('resizes keep the anchor for a reader and never interfere with restore, paging or touch', () => {
+  const reader = { isInitialChatLoad: false, isLoadingOlder: false, isPointerDown: false, isScrollingToBottom: false, shouldAutoScroll: false };
+  assert.equal(getResizeAction({ ...reader, hasAnchor: true }), 'restore-anchor');
+  assert.equal(getResizeAction({ ...reader, hasAnchor: false }), 'ignore');
+  for (const busy of ['isInitialChatLoad', 'isLoadingOlder', 'isPointerDown']) {
+    assert.equal(getResizeAction({ ...reader, hasAnchor: true, shouldAutoScroll: true, [busy]: true }), 'ignore', busy);
+  }
+});
+
+test('a programmatic scroll counts as arrived within 30px of the bottom', () => {
+  assert.equal(hasProgrammaticScrollArrived(15), true);
+  assert.equal(hasProgrammaticScrollArrived(30), true);
+  assert.equal(hasProgrammaticScrollArrived(500), false);
+});
+
+test('a small first upward scroll releases the pin and ends the initial restore', () => {
+  const pin = resolveUserScrollPin({
+    distanceFromBottom: 8, isScrollingUp: true, isScrollingDown: false,
+    wasPinnedToBottom: false, userScrolledManually: true,
+  });
+  assert.equal(pin.shouldAutoScroll, false, 'even a few pixels up expresses reading intent');
+  assert.equal(pin.endsInitialLoad, true);
+  assert.equal(pin.clearsManualScroll, false);
+});
+
+test('scrolling back down to the bottom re-attaches the pin and hides the button', () => {
+  const pin = resolveUserScrollPin({
+    distanceFromBottom: 10, isScrollingUp: false, isScrollingDown: true,
+    wasPinnedToBottom: false, userScrolledManually: true,
+  });
+  assert.deepEqual(pin, { shouldAutoScroll: true, showScrollBottom: false, endsInitialLoad: true, clearsManualScroll: true });
+});
+
+test('reading far up shows the scroll button; a pinned reader never sees it', () => {
+  const far = { distanceFromBottom: 900, isScrollingUp: true, isScrollingDown: false, userScrolledManually: true };
+  assert.equal(resolveUserScrollPin({ ...far, wasPinnedToBottom: false }).showScrollBottom, true);
+  assert.equal(resolveUserScrollPin({ ...far, distanceFromBottom: 250, wasPinnedToBottom: false }).showScrollBottom, false);
+  const pinned = resolveUserScrollPin({ ...far, isScrollingUp: false, userScrolledManually: false, wasPinnedToBottom: true });
+  assert.equal(pinned.showScrollBottom, false);
+  assert.equal(pinned.shouldAutoScroll, true, 'layout-driven scroll events cannot release an existing pin');
+});
+
+test('a reader within 120px of the bottom keeps following new messages', () => {
+  const near = resolveUserScrollPin({
+    distanceFromBottom: 100, isScrollingUp: false, isScrollingDown: false,
+    wasPinnedToBottom: false, userScrolledManually: false,
+  });
+  assert.equal(near.shouldAutoScroll, true);
+  const away = resolveUserScrollPin({
+    distanceFromBottom: 130, isScrollingUp: false, isScrollingDown: false,
+    wasPinnedToBottom: false, userScrolledManually: false,
+  });
+  assert.equal(away.shouldAutoScroll, false);
+});

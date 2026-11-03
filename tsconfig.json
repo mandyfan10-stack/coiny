@@ -23,6 +23,7 @@
     "src/**/*.ts",
     "src/**/*.tsx",
     "src/**/*.d.ts",
+    "src/**/*.js",
     "vite.config.js"
   ],
   "exclude": [

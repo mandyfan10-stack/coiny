@@ -1,6 +1,7 @@
+// @ts-check
 /** @param {unknown} err */
 export function isNetworkError(err) {
-  const message = err?.message || '';
+  const message = String(/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || '');
   const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
   return offline
     || /FetchError/i.test(message)
@@ -11,6 +12,17 @@ export function isNetworkError(err) {
 
 /**
  * Build a queue entry for an optimistic offline send.
+ * @param {object} input
+ * @param {string} input.chatId
+ * @param {string} input.senderId
+ * @param {string} input.text
+ * @param {string | null} [input.replyToId]
+ * @param {string | null} [input.media]
+ * @param {string} input.optimisticId
+ * @param {boolean} [input.hasOfflineMedia]
+ * @param {string | null} [input.mediaType]
+ * @param {{ name: string } | null} [input.forwardedFrom]
+ * @returns {import('../types').OfflineQueueItem}
  */
 export function createOfflineQueueItem({
   chatId,

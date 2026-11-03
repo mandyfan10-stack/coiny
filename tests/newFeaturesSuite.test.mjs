@@ -8,6 +8,13 @@ import {
   showIncomingNotification
 } from '../src/services/notificationService.js';
 import useEdgeSwipeBack from '../src/hooks/useSwipeGesture.js';
+import { getFirstUnreadIndex } from '../src/components/chat/chatAreaModel.ts';
+import {
+  SCROLL_STORAGE_KEY_PREFIX,
+  createBottomScrollSnapshot,
+  readSavedChatScroll,
+  writeSavedChatScroll,
+} from '../src/components/chat/chatScrollPolicy.ts';
 
 const callOverlayCode = await readFile(
   new URL('../src/components/call/CallOverlay.jsx', import.meta.url),
@@ -15,10 +22,6 @@ const callOverlayCode = await readFile(
 );
 const messageBubbleCode = await readFile(
   new URL('../src/components/chat/MessageBubble.jsx', import.meta.url),
-  'utf8'
-);
-const chatAreaCode = await readFile(
-  new URL('../src/components/ChatArea.jsx', import.meta.url),
   'utf8'
 );
 const composerCode = await readFile(new URL('../src/components/chat/ChatComposer.jsx', import.meta.url), 'utf8');
@@ -49,15 +52,19 @@ test('MessageBubble integrates swipeOffset transform and reply indicator', () =>
   assert.match(messageBubbleCode, /message-swipe-reply-indicator/);
 });
 
-test('ChatArea preserves scroll positions per chat and handles unread divider', () => {
-  assert.match(chatAreaCode, /chatScrollPositionsRef/);
-  assert.match(chatAreaCode, /coingram_chat_scroll_/);
-  assert.match(chatAreaCode, /getSavedChatScroll/);
-  assert.match(chatAreaCode, /saveChatScroll/);
-  assert.match(chatAreaCode, /saveCurrentScrollPosition/);
-  assert.match(chatAreaCode, /unread-messages-divider/);
-  assert.match(chatAreaCode, /Непрочитанные сообщения/);
-  assert.match(chatAreaCode, /useEdgeSwipeBack/);
+test('scroll positions are kept per chat and the unread divider marks the first unread message', () => {
+  const store = new Map();
+  const storage = { getItem: key => store.get(key) ?? null, setItem: (key, value) => store.set(key, value) };
+  writeSavedChatScroll('chat-a', createBottomScrollSnapshot(900, 1), storage);
+  writeSavedChatScroll('chat-b', { ...createBottomScrollSnapshot(300, 2), isAtBottom: false, topMessageId: 'm4' }, storage);
+
+  assert.deepEqual([...store.keys()], [`${SCROLL_STORAGE_KEY_PREFIX}chat-a`, `${SCROLL_STORAGE_KEY_PREFIX}chat-b`]);
+  assert.equal(readSavedChatScroll('chat-a', storage).isAtBottom, true);
+  assert.equal(readSavedChatScroll('chat-b', storage).topMessageId, 'm4');
+
+  const messages = [{ id: '1', senderId: 'me' }, { id: '2', senderId: 'peer', read: true }, { id: '3', senderId: 'peer' }];
+  assert.equal(getFirstUnreadIndex(messages, undefined, 'me'), 2);
+  // Rendering the divider and landing on it: tests/scroll/chat-scroll.spec.mjs.
 });
 
 test('useSwipeGesture module exports useEdgeSwipeBack function', () => {
@@ -119,7 +126,6 @@ test('getReplyPreviewText formats media and text reply previews intuitively with
 });
 
 test('the live composer and MessageBubble use getReplyType and SVG icons for reply previews', () => {
-  assert.match(chatAreaCode, /<ChatComposer/);
   assert.match(composerCode, /getReplyType\(replyingTo\)/);
   assert.match(messageBubbleCode, /getReplyType\(replyMsg\)/);
   assert.match(composerCode, /reply-media-svg/);
@@ -251,7 +257,6 @@ test('Chat Instant Opening: IndexedDB caching, Stale-While-Revalidate seamless m
 
   // 2. Component contracts verification
   const useChatLoaderCode = await readFile(new URL('../src/context/chat/useChatLoader.js', import.meta.url), 'utf8');
-  const chatAreaCode = await readFile(new URL('../src/components/ChatArea.jsx', import.meta.url), 'utf8');
   const chatSkeletonCode = await readFile(new URL('../src/components/chat/ChatSkeleton.jsx', import.meta.url), 'utf8');
   const chatSkeletonCss = await readFile(new URL('../src/components/chat/ChatSkeleton.css', import.meta.url), 'utf8');
 
@@ -261,10 +266,8 @@ test('Chat Instant Opening: IndexedDB caching, Stale-While-Revalidate seamless m
   assert.match(useChatLoaderCode, /prewarmTopChats/, 'useChatLoader implements smart pre-warming of top chats');
   assert.match(useChatLoaderCode, /isChatLoading/, 'useChatLoader exposes isChatLoading state map');
 
-  // Verify ChatArea integrates ChatSkeleton
-  assert.match(chatAreaCode, /import ChatSkeleton/, 'ChatArea imports ChatSkeleton');
-  assert.match(chatAreaCode, /isInitialLoading\s*\?\s*\(\s*<ChatSkeleton/, 'ChatArea renders ChatSkeleton during initial cold load');
-  assert.match(chatAreaCode, /if\s*\(isInitialLoading\)\s*return/, 'useLayoutEffect defers scroll measurement until skeleton finishes');
+  // Skeleton during a cold load, then restored scroll once rows arrive:
+  // exercised in a browser by tests/ui/history-loading.spec.mjs.
 
   // Verify Telegram-style Shimmer Skeleton layout & animations
   assert.match(chatSkeletonCode, /skeleton-bubble/, 'ChatSkeleton defines bubble placeholders');

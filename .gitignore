@@ -46,3 +46,6 @@ dist-electron/
 .env.bak*
 dist-pages/
 .agents/
+
+# Local agent/release notes and scratch artifacts
+artifacts/

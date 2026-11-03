@@ -7,6 +7,7 @@ import {
   TENOR_CATEGORIES
 } from '../src/services/tenorService.js';
 import { TRENDING_GIFS, searchGifs } from '../src/components/chat/emojiData.js';
+import { getChatBodyStyle, isCustomWallpaper } from '../src/components/chat/chatAreaModel.ts';
 
 const useChatUiStateCode = await readFile(
   new URL('../src/context/chat/useChatUiState.js', import.meta.url),
@@ -22,10 +23,6 @@ const settingsModalCode = await readFile(
 );
 const tenorServiceCode = await readFile(
   new URL('../src/services/tenorService.js', import.meta.url),
-  'utf8'
-);
-const chatAreaCode = await readFile(
-  new URL('../src/components/ChatArea.jsx', import.meta.url),
   'utf8'
 );
 const appearanceTabCode = await readFile(
@@ -137,8 +134,10 @@ test('TRENDING_GIFS contains 50+ items across diverse categories', () => {
 });
 
 test('custom wallpaper is correctly applied and prioritized over themes', () => {
-  assert.match(chatAreaCode, /isCustomWallpaper\s*=\s*Boolean\(wallpaper\s*&&\s*wallpaper\s*!==\s*'classic'\s*&&\s*wallpaper\s*!==\s*'default'\)/);
-  assert.match(chatAreaCode, /className=\{`chat-body\s*\$\{isCustomWallpaper\s*\?\s*'has-custom-wallpaper'\s*:\s*''\}`\}/);
+  assert.equal(isCustomWallpaper('classic'), false);
+  assert.equal(isCustomWallpaper('default'), false);
+  assert.equal(isCustomWallpaper('https://cdn.test/wall.webp'), true);
+  assert.equal(getChatBodyStyle('https://cdn.test/wall.webp', null).backgroundSize, 'cover');
 
   assert.match(chatAreaCss, /\.chat-body\.has-custom-wallpaper[\s\S]*?background-size:\s*cover\s*!important/);
   assert.match(chatAreaCss, /\.chat-body\.has-custom-wallpaper::before[\s\S]*?display:\s*none\s*!important/);
@@ -156,11 +155,11 @@ test('SettingsModal initializes drafts once per opening and clears uploaded file
   assert.match(settingsModalCode, /finally \{ finishRequest\(field\); input\.value = '';/);
 });
 
-test('ChatArea does not bind wallpaper resolution to activeChat.id and safely resolves direct URLs', () => {
-  // useResolvedMedia for wallpaper passes null chatId to avoid re-downloads and flicker on chat switch
-  assert.match(chatAreaCode, /useResolvedMedia\(\s*isCustomWallpaper\s*\?\s*wallpaper\s*:\s*null,\s*null,\s*'image\/webp'\s*\)/);
-  assert.match(chatAreaCode, /isDirectWallpaper/);
-  assert.match(chatAreaCode, /url\("\$\{activeWallpaperUrl\}"\)/);
+test('wallpaper storage references are painted only once resolved; direct URLs paint immediately', () => {
+  const reference = 'storage://public-media/user/wall.webp';
+  assert.equal(getChatBodyStyle(reference, null).backgroundImage, 'none');
+  assert.equal(getChatBodyStyle(reference, 'blob:resolved').backgroundImage, 'url("blob:resolved")');
+  assert.equal(getChatBodyStyle('data:image/png;base64,AA', null).backgroundImage, 'url("data:image/png;base64,AA")');
 });
 
 test('AppearanceTab guards preview image against raw storage references and clears input on delete', () => {

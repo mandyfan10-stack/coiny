@@ -5,6 +5,7 @@ import {
   normalizeCachedMessage,
   denormalizeCachedMessage
 } from '../src/utils/indexedDbHelper.js';
+import { getFirstUnreadIndex } from '../src/components/chat/chatAreaModel.ts';
 
 const indexedDbHelperCode = await readFile(
   new URL('../src/utils/indexedDbHelper.js', import.meta.url),
@@ -40,10 +41,6 @@ const useResolvedMediaCode = await readFile(
 );
 const useOfflineSyncCode = await readFile(
   new URL('../src/context/chat/useOfflineSync.js', import.meta.url),
-  'utf8'
-);
-const chatAreaCode = await readFile(
-  new URL('../src/components/ChatArea.jsx', import.meta.url),
   'utf8'
 );
 const sidebarCode = await readFile(
@@ -173,7 +170,8 @@ test('message confirmation updates isOptimistic status in IndexedDB across actio
 });
 
 test('ChatArea and Sidebar calculate unread status and divider accurately', () => {
-  assert.match(chatAreaCode, /firstUnreadIndex/);
-  assert.match(chatAreaCode, /findIndex\(\(m\)\s*=>\s*m\.senderId\s*!==\s*currentUser\?\.id/);
+  const messages = [{ id: 'a', senderId: 'me' }, { id: 'b', senderId: 'peer' }, { id: 'c', senderId: 'peer' }];
+  assert.equal(getFirstUnreadIndex(messages, undefined, 'me'), 1, 'first unread incoming message');
+  assert.equal(getFirstUnreadIndex(messages, 1, 'me'), 2, 'server unread_count takes precedence');
   assert.match(sidebarCode, /typeof chat\.unread_count === 'number'/);
 });

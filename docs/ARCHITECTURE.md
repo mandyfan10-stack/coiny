@@ -40,7 +40,13 @@ flowchart TB
 ```
 src/
   components/          # screens & widgets
-    chat/              # ChatHeader, MessageBubble, mediaPlayers, …
+    ChatArea.jsx       # orchestrates the chat pane (composer state, menus)
+    chat/              # ChatHeader, MessageList, MessageBubble, mediaPlayers, …
+      chatScrollPolicy.ts  # pure scroll decisions (pin, anchors, pagination)
+      chatAreaModel.ts     # pure view-model (permissions, search, dividers, …)
+      useChatScroll.js     # scroll refs/effects driven by chatScrollPolicy
+      useChatSearch.js     # in-chat search + Ctrl/Cmd+F
+      useChatMediaUpload.js / useMediaRecorder.js / useChatSwipeBack.js
     settings/          # Profile / Appearance / Stickers / E2EE tabs
   context/
     AuthContext.jsx
@@ -159,7 +165,11 @@ Version single source: `package.json` → Vite `import.meta.env.APP_VERSION`.
 
 | Kind | Command / path |
 |------|----------------|
-| Crypto + unit | `npm test` |
+| Crypto + unit | `npm test` (`node:test`, includes `tests/e2eeCryptoRoundtrip.test.mjs`) |
+| Chat scroll policy | `tests/chatScrollRestoration.test.mjs`, `tests/scrollStability.test.mjs` |
+| Chat view-model | `tests/chatAreaModel.test.mjs` |
+| Scroll in a browser | `npm run test:scroll` |
+| UI (Chromium + WebKit) | `npm run test:ui` |
 | Typecheck | `npm run typecheck` |
 | Contracts | `tests/*Contracts*.test.mjs` |
 | Offline queue | `tests/offlineQueue.test.mjs` |
@@ -167,6 +177,14 @@ Version single source: `package.json` → Vite `import.meta.env.APP_VERSION`.
 | Live two-user | `npm run test:e2e` + `E2E_*` secrets |
 
 Details: [live-e2e.md](./live-e2e.md).
+
+Prefer tests that import and call the code under test. Logic inside React
+components cannot be imported by `node:test` (JSX), so extract decisions into
+plain `.ts` modules (see `chatScrollPolicy.ts`) and leave rendering to the
+Playwright suites, rather than matching component source text.
+
+Database schema: `supabase/migrations/` is the only source of truth (the old
+`supabase_schema.sql` snapshot was removed; see git history if needed).
 
 ---
 

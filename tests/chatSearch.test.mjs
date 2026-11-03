@@ -22,9 +22,6 @@ const chatSearchBarSource = fs.readFileSync(chatSearchBarPath, 'utf8');
 const chatHeaderPath = path.join(rootDir, 'src/components/chat/ChatHeader.jsx');
 const chatHeaderSource = fs.readFileSync(chatHeaderPath, 'utf8');
 
-const chatAreaPath = path.join(rootDir, 'src/components/ChatArea.jsx');
-const chatAreaSource = fs.readFileSync(chatAreaPath, 'utf8');
-
 const messageBubblePath = path.join(rootDir, 'src/components/chat/MessageBubble.jsx');
 const messageBubbleSource = fs.readFileSync(messageBubblePath, 'utf8');
 
@@ -129,20 +126,9 @@ test('ChatHeader component exposes search button and props', () => {
   assert.match(chatHeaderSource, /Search size=\{22\}/);
 });
 
-test('ChatArea component integrates in-chat search state, hotkeys and matching', () => {
-  assert.match(chatAreaSource, /import ChatSearchBar from '\.\/chat\/ChatSearchBar'/);
-  assert.match(chatAreaSource, /const \[isSearchOpen, setIsSearchOpen\] = useState\(false\)/);
-  assert.match(chatAreaSource, /const \[searchQuery, setSearchQuery\] = useState\(''\)/);
-  assert.match(chatAreaSource, /const \[currentMatchIndex, setCurrentMatchIndex\] = useState\(0\)/);
-  assert.match(chatAreaSource, /scrollToMatchedMessage/);
-  assert.match(chatAreaSource, /handleNextMatch/);
-  assert.match(chatAreaSource, /handlePrevMatch/);
-  assert.match(chatAreaSource, /handleToggleSearch/);
-  assert.match(chatAreaSource, /isSearchOpen=\{isSearchOpen\}/);
-  assert.match(chatAreaSource, /onToggleSearch=\{handleToggleSearch\}/);
-  assert.match(chatAreaSource, /<ChatSearchBar/);
-  assert.match(chatAreaSource, /isSearchMatchTarget=\{isSearchOpen && matchedMessages\[currentMatchIndex\]\?\.id === msg\.id\}/);
-});
+// In-chat search state (useChatSearch): matching, wrap-around navigation and
+// the Ctrl/Cmd+F shortcut are unit-tested in tests/chatAreaModel.test.mjs;
+// the full flow runs in a browser in tests/ui/chat-header.spec.mjs.
 
 test('MessageBubble component receives search props and applies search-match-target', () => {
   assert.match(messageBubbleSource, /searchQuery = ''/);

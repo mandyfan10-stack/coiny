@@ -6,6 +6,20 @@ interface GroupingMessage {
 }
 
 const GROUP_INTERVAL_MS = 10 * 60 * 1000;
+export const SENDER_COLOR_COUNT = 8;
+
+/**
+ * Stable per-sender name colour: one of the theme's `--sender-color-N`
+ * variables, chosen by hashing the sender id (or name).
+ */
+export function getSenderColor(idOrName?: string | null): string {
+  if (!idOrName) return 'var(--accent-color)';
+  let hash = 0;
+  for (let i = 0; i < idOrName.length; i++) {
+    hash = (hash * 31 + idOrName.charCodeAt(i)) >>> 0;
+  }
+  return `var(--sender-color-${hash % SENDER_COLOR_COUNT})`;
+}
 
 function areGrouped(current: GroupingMessage, neighbor?: GroupingMessage | null): boolean {
   if (!neighbor || current.timestamp == null || neighbor.timestamp == null) return false;

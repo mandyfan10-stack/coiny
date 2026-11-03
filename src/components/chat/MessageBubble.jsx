@@ -28,23 +28,12 @@ import {
 } from './mediaPlayers';
 import MobileActionSheet from './MobileActionSheet';
 import useMessageTouch from '../../hooks/useMessageTouch';
-import { getMessageGrouping } from '../../utils/messageGrouping';
+import { getMessageGrouping, getSenderColor } from '../../utils/messageGrouping';
 import { getMediaKindFromUrl } from '../../utils/mediaKindFromUrl';
 import { getReplyType } from '../../utils/mobileActionSheetUtils';
 import './Message.css';
 import { canEditMessage } from '../../utils/messageContent.ts';
 
-
-const SENDER_COLOR_COUNT = 8;
-
-function getSenderColor(idOrName) {
-  if (!idOrName) return 'var(--accent-color)';
-  let hash = 0;
-  for (let i = 0; i < idOrName.length; i++) {
-    hash = (hash * 31 + idOrName.charCodeAt(i)) >>> 0;
-  }
-  return `var(--sender-color-${hash % SENDER_COLOR_COUNT})`;
-}
 
 function getFormatTime(dateObj) {
   const d = new Date(dateObj);

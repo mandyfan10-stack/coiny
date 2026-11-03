@@ -1,16 +1,35 @@
+// @ts-check
 if (typeof window === 'undefined') {
-  globalThis.window = { crypto: globalThis.crypto };
+  // Node (unit tests): expose Web Crypto under the browser global used below.
+  /** @type {any} */ (globalThis).window = { crypto: globalThis.crypto };
 }
+
+/** @typedef {Error & { code?: string }} E2EEError */
+
+/**
+ * @typedef {object} Argon2idParameters
+ * @property {number} memorySize
+ * @property {number} iterations
+ * @property {number} parallelism
+ * @property {number} hashLength
+ */
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-// Helper to convert ArrayBuffer to Hex String
+/**
+ * @param {ArrayBuffer | Uint8Array} buffer
+ * @returns {string}
+ */
 function bufToHex(buffer) {
   return Array.prototype.map.call(new Uint8Array(buffer), x => ('00' + x.toString(16)).slice(-2)).join('');
 }
 
-// Helper to convert Hex String to Uint8Array
+/**
+ * Strict hex decoding: rejects odd lengths and non-hex characters.
+ * @param {unknown} hexString
+ * @returns {Uint8Array<ArrayBuffer>}
+ */
 function hexToBuf(hexString) {
   if (typeof hexString !== 'string' || hexString.length % 2 !== 0 || /[^0-9a-fA-F]/.test(hexString)) {
     throw new Error('Invalid hexadecimal crypto payload.');
@@ -22,7 +41,10 @@ function hexToBuf(hexString) {
   return result;
 }
 
-// 1. Generate ECDH Key Pair
+/**
+ * 1. Generate an ECDH P-256 key pair.
+ * @returns {Promise<CryptoKeyPair>}
+ */
 export async function generateE2EEKeyPair() {
   return await window.crypto.subtle.generateKey(
     {
@@ -34,12 +56,20 @@ export async function generateE2EEKeyPair() {
   );
 }
 
-// 2. Export / Import Public Key to JWK
+/**
+ * 2. Export / import a public key as a JWK string.
+ * @param {CryptoKey} key
+ * @returns {Promise<string>}
+ */
 export async function exportPublicKey(key) {
   const jwk = await window.crypto.subtle.exportKey('jwk', key);
   return JSON.stringify(jwk);
 }
 
+/**
+ * @param {string} jwkString
+ * @returns {Promise<CryptoKey>}
+ */
 export async function importPublicKey(jwkString) {
   const jwk = JSON.parse(jwkString);
   return await window.crypto.subtle.importKey(
@@ -54,12 +84,21 @@ export async function importPublicKey(jwkString) {
   );
 }
 
-// 3. Export / Import Private Key to JWK
+/**
+ * 3. Export / import a private key as a JWK string.
+ * @param {CryptoKey} key
+ * @returns {Promise<string>}
+ */
 export async function exportPrivateKey(key) {
   const jwk = await window.crypto.subtle.exportKey('jwk', key);
   return JSON.stringify(jwk);
 }
 
+/**
+ * @param {string} jwkString
+ * @param {boolean} [extractable=true]
+ * @returns {Promise<CryptoKey>}
+ */
 export async function importPrivateKey(jwkString, extractable = true) {
   const jwk = JSON.parse(jwkString);
   return await window.crypto.subtle.importKey(
@@ -74,7 +113,12 @@ export async function importPrivateKey(jwkString, extractable = true) {
   );
 }
 
-// 4. Derive AES-GCM Key from Password via PBKDF2
+/**
+ * 4. Derive an AES-GCM key from a password via PBKDF2 (legacy v1 backups).
+ * @param {string} password
+ * @param {Uint8Array<ArrayBuffer>} salt
+ * @returns {Promise<CryptoKey>}
+ */
 async function derivePasswordKey(password, salt) {
   const passwordKeyMaterial = await window.crypto.subtle.importKey(
     'raw',
@@ -101,6 +145,7 @@ async function derivePasswordKey(password, salt) {
   );
 }
 
+/** @type {Readonly<Argon2idParameters>} */
 const ARGON2ID_PARAMETERS = Object.freeze({
   memorySize: 65536,
   iterations: 3,
@@ -108,6 +153,14 @@ const ARGON2ID_PARAMETERS = Object.freeze({
   hashLength: 32
 });
 
+/**
+ * Argon2id key derivation with bounds-checked parameters (backups carry
+ * their own parameters, so untrusted values must not exhaust memory).
+ * @param {string} secret
+ * @param {Uint8Array} salt
+ * @param {Argon2idParameters} [parameters] runtime-validated; may come from a backup
+ * @returns {Promise<CryptoKey>}
+ */
 async function deriveArgon2idKey(secret, salt, parameters = ARGON2ID_PARAMETERS) {
   if (
     typeof secret !== 'string' || secret.length < 1 || secret.length > 1024
@@ -129,9 +182,15 @@ async function deriveArgon2idKey(secret, salt, parameters = ARGON2ID_PARAMETERS)
     hashLength: parameters.hashLength,
     outputType: 'binary'
   });
-  return window.crypto.subtle.importKey('raw', rawKey, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+  // hash-wasm returns a fresh, non-shared buffer.
+  const keyBytes = /** @type {Uint8Array<ArrayBuffer>} */ (rawKey);
+  return window.crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
 }
 
+/**
+ * @param {Uint8Array<ArrayBuffer>} rawJwk
+ * @param {string} secret
+ */
 async function createArgon2idEnvelope(rawJwk, secret) {
   const salt = window.crypto.getRandomValues(new Uint8Array(16));
   const iv = window.crypto.getRandomValues(new Uint8Array(12));
@@ -146,7 +205,10 @@ async function createArgon2idEnvelope(rawJwk, secret) {
   };
 }
 
-// 4.5 Generate 24-character Recovery Code
+/**
+ * 4.5 Generate a 24-character recovery code in groups of four.
+ * @returns {string}
+ */
 export function generateRecoveryCode() {
   const chars = 'ABCDEFGHJKMNPQRSTVWXYZ2345678901';
   const array = new Uint8Array(24);
@@ -162,7 +224,13 @@ export function generateRecoveryCode() {
   return result;
 }
 
-// 5. Encrypt Private Key (Cloud Backup)
+/**
+ * 5. Encrypt the private key for cloud backup (password + recovery code envelopes).
+ * @param {CryptoKey} privateKey
+ * @param {string} password
+ * @param {string} recoveryCode
+ * @returns {Promise<string>} backup JSON
+ */
 export async function backupPrivateKey(privateKey, password, recoveryCode) {
   const privateKeyJwk = await exportPrivateKey(privateKey);
   const rawJwk = encoder.encode(privateKeyJwk);
@@ -174,7 +242,13 @@ export async function backupPrivateKey(privateKey, password, recoveryCode) {
   });
 }
 
-// 6. Decrypt Private Key (Restore Backup)
+/**
+ * 6. Decrypt a private key backup (v2 Argon2id, or legacy PBKDF2 formats).
+ * @param {string} backupJsonString
+ * @param {string} secret password, or recovery code when `isRecovery`
+ * @param {boolean} [isRecovery=false]
+ * @returns {Promise<CryptoKey>}
+ */
 export async function restorePrivateKey(backupJsonString, secret, isRecovery = false) {
   if (typeof backupJsonString !== 'string' || backupJsonString.length > 1048576 || typeof secret !== 'string') {
     throw new Error('Invalid recovery backup input.');
@@ -244,7 +318,12 @@ export async function restorePrivateKey(backupJsonString, secret, isRecovery = f
   return await importPrivateKey(jwkString);
 }
 
-// 7. Derive Shared Symmetric Key (ECDH)
+/**
+ * 7. Derive the shared, non-extractable AES-GCM key (ECDH).
+ * @param {CryptoKey} privateKey
+ * @param {CryptoKey} otherPublicKey
+ * @returns {Promise<CryptoKey>}
+ */
 export async function deriveSymmetricKey(privateKey, otherPublicKey) {
   return await window.crypto.subtle.deriveKey(
     {
@@ -261,7 +340,12 @@ export async function deriveSymmetricKey(privateKey, otherPublicKey) {
   );
 }
 
-// 8. Encrypt Message using Derived AES-GCM Key
+/**
+ * 8. Encrypt a text message.
+ * @param {string} plaintext
+ * @param {CryptoKey} aesKey
+ * @returns {Promise<{ ciphertext: string, iv: string }>} hex-encoded
+ */
 export async function encryptMessage(plaintext, aesKey) {
   const iv = window.crypto.getRandomValues(new Uint8Array(12));
   const encryptedContent = await window.crypto.subtle.encrypt(
@@ -279,7 +363,13 @@ export async function encryptMessage(plaintext, aesKey) {
   };
 }
 
-// 9. Decrypt Message using Derived AES-GCM Key
+/**
+ * 9. Decrypt a text message.
+ * @param {string} ciphertextHex
+ * @param {string} ivHex
+ * @param {CryptoKey} aesKey
+ * @returns {Promise<string>}
+ */
 export async function decryptMessage(ciphertextHex, ivHex, aesKey) {
   const ciphertext = hexToBuf(ciphertextHex);
   const iv = hexToBuf(ivHex);
@@ -296,7 +386,12 @@ export async function decryptMessage(ciphertextHex, ivHex, aesKey) {
   return decoder.decode(decryptedContent);
 }
 
-// 10. Encrypt File Blob using AES-GCM Key
+/**
+ * 10. Encrypt a file; the 12-byte IV is prepended to the ciphertext.
+ * @param {Blob} fileBlob
+ * @param {CryptoKey} aesKey
+ * @returns {Promise<Blob>} `application/octet-stream`
+ */
 export async function encryptFile(fileBlob, aesKey) {
   const iv = window.crypto.getRandomValues(new Uint8Array(12));
   const arrayBuffer = await fileBlob.arrayBuffer();
@@ -313,8 +408,15 @@ export async function encryptFile(fileBlob, aesKey) {
   return new Blob([resultBuffer], { type: 'application/octet-stream' });
 }
 
+/**
+ * Upload guard: returns the key, or throws `E2EE_KEY_UNAVAILABLE` so callers
+ * can never fall back to uploading plaintext.
+ * @param {CryptoKey | null | undefined} aesKey
+ * @returns {CryptoKey}
+ */
 export function requireE2EEKey(aesKey) {
   if (!aesKey) {
+    /** @type {E2EEError} */
     const error = new Error('Ключ сквозного шифрования недоступен. Повторите попытку после синхронизации ключей.');
     error.code = 'E2EE_KEY_UNAVAILABLE';
     throw error;
@@ -322,18 +424,31 @@ export function requireE2EEKey(aesKey) {
   return aesKey;
 }
 
+/**
+ * Encrypt an attachment for upload; failures never fall back to plaintext.
+ * @param {Blob} fileBlob
+ * @param {CryptoKey | null | undefined} aesKey
+ * @returns {Promise<Blob>}
+ */
 export async function encryptFileForE2EE(fileBlob, aesKey) {
   try {
     return await encryptFile(fileBlob, requireE2EEKey(aesKey));
   } catch (cause) {
-    if (cause?.code === 'E2EE_KEY_UNAVAILABLE') throw cause;
+    if (/** @type {E2EEError} */ (cause)?.code === 'E2EE_KEY_UNAVAILABLE') throw cause;
+    /** @type {E2EEError} */
     const error = new Error('Не удалось зашифровать вложение. Файл не был загружен.', { cause });
     error.code = 'E2EE_ENCRYPTION_FAILED';
     throw error;
   }
 }
 
-// 11. Decrypt File Blob using AES-GCM Key
+/**
+ * 11. Decrypt a file produced by `encryptFile`.
+ * @param {Blob} encryptedBlob
+ * @param {CryptoKey} aesKey
+ * @param {string} [outputType] MIME type of the restored blob
+ * @returns {Promise<Blob>}
+ */
 export async function decryptFile(encryptedBlob, aesKey, outputType = '') {
   const arrayBuffer = await encryptedBlob.arrayBuffer();
   const iv = new Uint8Array(arrayBuffer, 0, 12);

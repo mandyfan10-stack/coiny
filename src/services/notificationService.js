@@ -1,3 +1,4 @@
+// @ts-check
 export function isNotificationSupported() {
   return typeof window !== 'undefined' && 'Notification' in window;
 }
@@ -47,7 +48,7 @@ export async function initNotificationService() {
  * @param {string} [options.icon] - Icon or avatar URL
  * @param {string} [options.tag] - Grouping tag (e.g. chatId)
  * @param {any} [options.data] - Arbitrary payload
- * @param {() => void} [options.onClick] - Click handler (brings chat into focus)
+ * @param {(() => void) | null} [options.onClick] - Click handler (brings chat into focus)
  */
 export async function showIncomingNotification({
   title,

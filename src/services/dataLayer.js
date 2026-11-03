@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Unified data access facade.
  * Domain logic lives in authService / chatService / messageService / mediaService.
@@ -45,10 +46,16 @@ export const dataService = {
   // Messages
   loadChatMessages: messageService.loadChatMessages,
   clearChatMessages: messageService.clearChatMessages,
+  /**
+   * Dispatches a v2 envelope object or the legacy positional v1 arguments.
+   * @param {...any} args
+   */
   sendMessage: (...args) => (
     args[0] && typeof args[0] === 'object'
       ? messageService.sendMessage(args[0])
-      : v1MessageCompatibilityAdapter.sendMessage(...args)
+      : v1MessageCompatibilityAdapter.sendMessage(
+        .../** @type {Parameters<typeof v1MessageCompatibilityAdapter.sendMessage>} */ (args)
+      )
   ),
   deleteMessage: messageService.deleteMessage,
   editMessage: messageService.editMessage,

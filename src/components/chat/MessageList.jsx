@@ -1,117 +1,66 @@
-import React, { useEffect, useState } from 'react';
-import { ArrowDown } from 'lucide-react';
+import React from 'react';
 import MessageBubble from './MessageBubble';
+import { formatDateDivider, getFirstUnreadIndex, needsDateDivider } from './chatAreaModel.ts';
 
-function formatDateDivider(timestamp) {
-  if (!timestamp) return null;
-  const date = new Date(timestamp);
-  if (Number.isNaN(date.getTime())) return null;
-  const today = new Date();
-  const yesterday = new Date();
-  yesterday.setDate(today.getDate() - 1);
-
-  if (date.toDateString() === today.toDateString()) {
-    return 'Сегодня';
-  }
-  if (date.toDateString() === yesterday.toDateString()) {
-    return 'Вчера';
-  }
-  const isThisYear = date.getFullYear() === today.getFullYear();
-  return date.toLocaleDateString('ru-RU', {
-    day: 'numeric',
-    month: 'long',
-    year: isThisYear ? undefined : 'numeric'
-  });
-}
+const UNREAD_DIVIDER_STYLE = { display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '14px 0', position: 'relative' };
+const UNREAD_LABEL_STYLE = { background: 'var(--accent-color, #2481cc)', color: '#fff', fontSize: '11px', padding: '3px 12px', borderRadius: '12px', fontWeight: '500', boxShadow: '0 2px 6px rgba(0,0,0,0.15)' };
 
 /**
- * Presentational messages window + scroll-to-bottom control.
- * Scroll pagination / auto-scroll policy stay owned by ChatArea.
+ * Message rows for the active chat with date and unread dividers plus the
+ * history load notices. Scroll ownership stays with `useChatScroll`.
+ * `bubbleProps` are forwarded unchanged to every MessageBubble.
  */
 export default function MessageList({
   activeChat,
   currentUser,
-  renderAvatar,
-  chatBodyRef,
+  historyStatus,
+  onRetryHistory,
   messagesEndRef,
-  chatBodyStyle,
-  handleScroll,
-  showScrollBottom,
-  onScrollToBottom,
-  showMsgActionsId,
-  setShowMsgActionsId,
-  retryMenuMsgId,
-  setRetryMenuMsgId,
-  setReplyingTo,
-  setOpenedImageUrl,
-  deleteMessage,
-  toggleReaction,
-  retrySendMessage,
-  deleteFailedMessage,
-  emojis
+  isSelected,
+  currentMatchId,
+  bubbleProps,
 }) {
-  const [hoveredMessageId, setHoveredMessageId] = useState(null);
-  useEffect(() => {
-    setHoveredMessageId(null);
-    setShowMsgActionsId(null);
-  }, [activeChat.id, setShowMsgActionsId]);
-  return (
-    <>
-      <div
-        className="chat-body"
-        ref={chatBodyRef}
-        onScroll={handleScroll}
-        style={chatBodyStyle}
-      >
-        <div className="messages-list">
-          {activeChat.messages.map((msg, index) => {
-            const prevMsg = activeChat.messages[index - 1];
-            const showDateDivider = !prevMsg || (
-              new Date(msg.timestamp).toDateString() !== new Date(prevMsg.timestamp).toDateString()
-            );
-            const dateDividerText = showDateDivider ? formatDateDivider(msg.timestamp) : null;
-            return (
-              <React.Fragment key={msg.id}>
-                {dateDividerText && (
-                  <div className="chat-date-divider">
-                    <span>{dateDividerText}</span>
-                  </div>
-                )}
-                <MessageBubble
-                  msg={msg}
-                  index={index}
-                  activeChat={activeChat}
-                  currentUser={currentUser}
-                  renderAvatar={renderAvatar}
-                  showMsgActionsId={showMsgActionsId}
-                  setShowMsgActionsId={setShowMsgActionsId}
-                  hoveredMessageId={hoveredMessageId}
-                  setHoveredMessageId={setHoveredMessageId}
-                  retryMenuMsgId={retryMenuMsgId}
-                  setRetryMenuMsgId={setRetryMenuMsgId}
-                  setReplyingTo={setReplyingTo}
-                  setOpenedImageUrl={setOpenedImageUrl}
-                  deleteMessage={deleteMessage}
-                  toggleReaction={toggleReaction}
-                  retrySendMessage={retrySendMessage}
-                  deleteFailedMessage={deleteFailedMessage}
-                  emojis={emojis}
-                />
-              </React.Fragment>
-            );
-          })}
-          <div ref={messagesEndRef} />
-        </div>
-      </div>
+  const messages = activeChat.messages;
+  const firstUnreadIndex = getFirstUnreadIndex(messages, activeChat.unread_count, currentUser?.id);
 
-      {showScrollBottom && (
-        <button
-          className="scroll-bottom-btn"
-          onClick={onScrollToBottom}
-        >
-          <ArrowDown size={18} />
-        </button>
+  return (
+    <div className="messages-list">
+      {historyStatus === 'error' && (
+        <div className="chat-history-notice" role="alert">
+          <span>Не удалось загрузить сообщения</span>
+          <button type="button" onClick={onRetryHistory}>Повторить</button>
+        </div>
       )}
-    </>
+      {messages.length === 0 && historyStatus === 'loaded' && (
+        <div className="chat-history-empty" role="status">Здесь пока нет сообщений</div>
+      )}
+      {messages.map((msg, index) => {
+        const dateDividerText = needsDateDivider(messages[index - 1], msg) ? formatDateDivider(msg.timestamp) : null;
+        return (
+          <React.Fragment key={msg.id}>
+            {dateDividerText && (
+              <div className="chat-date-divider">
+                <span>{dateDividerText}</span>
+              </div>
+            )}
+            {index === firstUnreadIndex && firstUnreadIndex >= 0 && (
+              <div className="unread-messages-divider" style={UNREAD_DIVIDER_STYLE}>
+                <span style={UNREAD_LABEL_STYLE}>Непрочитанные сообщения</span>
+              </div>
+            )}
+            <MessageBubble
+              {...bubbleProps}
+              msg={msg}
+              index={index}
+              activeChat={activeChat}
+              currentUser={currentUser}
+              selected={isSelected(msg.id)}
+              isSearchMatchTarget={currentMatchId === msg.id}
+            />
+          </React.Fragment>
+        );
+      })}
+      <div ref={messagesEndRef} />
+    </div>
   );
 }
