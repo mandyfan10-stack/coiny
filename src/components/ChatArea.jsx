@@ -31,6 +31,7 @@ import { isNetworkError } from '../services/offlineQueueCore';
 import useResolvedMedia from '../hooks/useResolvedMedia';
 import useEdgeSwipeBack from '../hooks/useSwipeGesture';
 import ChatSkeleton from './chat/ChatSkeleton';
+import { buildMessageListIndex } from '../utils/messageListIndex.ts';
 
 function findSavedScrollTarget(element, saved) {
   const rows = [...element.querySelectorAll('.message-row[data-message-id]')];
@@ -1645,6 +1646,11 @@ function formatDateDivider(timestamp) {
     touchStartRef.current = { x: 0, y: 0 };
   };
 
+  const { messagesById, firstUnreadIndex } = useMemo(
+    () => buildMessageListIndex(activeChat?.messages || [], currentUser?.id, activeChat?.unread_count || 0),
+    [activeChat?.messages, activeChat?.unread_count, currentUser?.id]
+  );
+
   if (!activeChat) {
     return (
       <main className="chat-area empty">
@@ -1866,9 +1872,6 @@ function formatDateDivider(timestamp) {
                 new Date(msg.timestamp).toDateString() !== new Date(prevMsg.timestamp).toDateString()
               );
               const dateDividerText = showDateDivider ? formatDateDivider(msg.timestamp) : null;
-              const firstUnreadIndex = (activeChat.unread_count > 0)
-                ? activeChat.messages.length - activeChat.unread_count
-                : activeChat.messages.findIndex((m) => m.senderId !== currentUser?.id && m.senderId !== 'current' && !m.read);
               const showUnreadDivider = index === firstUnreadIndex && firstUnreadIndex >= 0;
 
               return (
@@ -1887,6 +1890,7 @@ function formatDateDivider(timestamp) {
                   )}
                   <MessageBubble
                     msg={msg}
+                    messagesById={messagesById}
                     index={index}
                     activeChat={activeChat}
                     currentUser={currentUser}

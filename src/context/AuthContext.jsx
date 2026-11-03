@@ -3,6 +3,7 @@ import { supabase, authStorage } from '../supabaseClient';
 import { dataService } from '../services/dataLayer';
 import { getPasswordRecoverySnapshot, subscribePasswordRecovery } from '../utils/passwordRecovery.js';
 import { clearLocalAppData } from '../utils/localDataCleanup.js';
+import { webPushService } from '../services/webPushService.ts';
 
 export const AuthContext = createContext();
 
@@ -206,6 +207,8 @@ export const AuthProvider = ({ children }) => {
   const logOut = async () => {
     const activity = accountActivityRef.current;
     authGenerationRef.current += 1;
+    await webPushService.disable().catch(() => console.warn('Could not remove this device push subscription.'));
+    if (activity !== accountActivityRef.current) return { cancelled: true };
     await dataService.signOut();
     if (activity !== accountActivityRef.current) return { cancelled: true };
     try {

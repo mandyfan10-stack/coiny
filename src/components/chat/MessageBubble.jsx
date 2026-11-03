@@ -53,6 +53,7 @@ function getFormatTime(dateObj) {
 
 export default function MessageBubble({
   msg,
+  messagesById,
   index,
   activeChat,
   currentUser,
@@ -82,7 +83,9 @@ export default function MessageBubble({
   const editable = Boolean(onEdit && canEditMessage(msg, currentUser?.id));
   const forwardable = Boolean(onForward && msg.cryptoVersion !== 2 && !msg.isLocked && !msg.isPending && !msg.isOptimistic && !msg.isFailed && !msg.requiresUpdate);
   const isGroupOther = activeChat?.type === 'group' && !isMe;
-  const replyMsg = msg.replyTo ? activeChat.messages.find(m => m.id === msg.replyTo) : null;
+  const replyMsg = msg.replyTo
+    ? (messagesById ? messagesById.get(msg.replyTo) : activeChat.messages.find(m => m.id === msg.replyTo))
+    : null;
 
   const nextMsg = activeChat.messages[index + 1];
   const prevMsg = activeChat.messages[index - 1];

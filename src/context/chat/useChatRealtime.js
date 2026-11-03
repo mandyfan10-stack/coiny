@@ -185,7 +185,8 @@ export function useChatRealtime({
                   showIncomingNotification({
                     title: chat.type === 'personal' ? senderName : `${senderName} (${chat.name})`,
                     body: formattedMsg.text || (formattedMsg.media ? 'Вложение' : 'Новое сообщение'),
-                    tag: chat.id,
+                    tag: `coiny:${currentUser.id}:${chat.id}`,
+                    data: { chatId: chat.id, ownerId: currentUser.id, messageId: newMsg.id },
                     onClick: () => {
                       if (typeof setActiveChatId === 'function') {
                         setActiveChatId(chat.id);

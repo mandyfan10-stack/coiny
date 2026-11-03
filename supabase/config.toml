@@ -433,3 +433,7 @@ verify_jwt = true
 # attempts on the server. A signed-in JWT cannot be required before login.
 [functions.username-login]
 verify_jwt = false
+
+[functions.send-web-push]
+# Authenticated by the dedicated webhook secret, never a browser-supplied user ID.
+verify_jwt = false
